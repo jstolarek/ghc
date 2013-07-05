@@ -202,6 +202,7 @@ data DumpFlag
    | Opt_D_dump_cmm_split
    | Opt_D_dump_cmm_info
    | Opt_D_dump_cmm_cps
+   | Opt_D_dump_cmm_loopify
    -- end cmm subflags
    | Opt_D_dump_asm
    | Opt_D_dump_asm_native
@@ -302,6 +303,7 @@ data GeneralFlag
    | Opt_LlvmTBAA                       -- Use LLVM TBAA infastructure for improving AA (hidden flag)
    | Opt_IrrefutableTuples
    | Opt_CmmSink
+   | Opt_CmmLoopify
    | Opt_CmmElimCommonBlocks
    | Opt_OmitYields
    | Opt_SimpleListLiterals
@@ -2186,6 +2188,7 @@ dynamic_flags = [
   , Flag "ddump-cmm-split"         (setDumpFlag Opt_D_dump_cmm_split)
   , Flag "ddump-cmm-info"          (setDumpFlag Opt_D_dump_cmm_info)
   , Flag "ddump-cmm-cps"           (setDumpFlag Opt_D_dump_cmm_cps)
+  , Flag "ddump-cmm-loopify"       (setDumpFlag Opt_D_dump_cmm_loopify)
   , Flag "ddump-core-stats"        (setDumpFlag Opt_D_dump_core_stats)
   , Flag "ddump-asm"               (setDumpFlag Opt_D_dump_asm)
   , Flag "ddump-asm-native"        (setDumpFlag Opt_D_dump_asm_native)
@@ -2536,6 +2539,7 @@ fFlags = [
   ( "llvm-tbaa",                        Opt_LlvmTBAA, nop), -- hidden flag
   ( "irrefutable-tuples",               Opt_IrrefutableTuples, nop ),
   ( "cmm-sink",                         Opt_CmmSink, nop ),
+  ( "cmm-loopify",                      Opt_CmmLoopify, nop ),
   ( "cmm-elim-common-blocks",           Opt_CmmElimCommonBlocks, nop ),
   ( "omit-yields",                      Opt_OmitYields, nop ),
   ( "simple-list-literals",             Opt_SimpleListLiterals, nop ),
@@ -2833,6 +2837,7 @@ optLevelFlags
 --    , ([2],     Opt_RegsGraph)
     , ([0,1,2], Opt_LlvmTBAA)
     , ([1,2],   Opt_CmmSink)
+    , ([1,2],   Opt_CmmLoopify)
     , ([1,2],   Opt_CmmElimCommonBlocks)
 
 --     , ([2],     Opt_StaticArgumentTransformation)
