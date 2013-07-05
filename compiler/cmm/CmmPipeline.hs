@@ -17,6 +17,7 @@ import CmmProcPoint
 import CmmContFlowOpt
 import CmmLayoutStack
 import CmmSink
+import CmmLoopify
 import Hoopl
 
 import UniqSupply
@@ -88,6 +89,11 @@ cpsTop hsc_env proc =
        when (not (setNull noncall_pps) && dopt Opt_D_dump_cmm dflags) $
          pprTrace "Non-call proc points: " (ppr noncall_pps) $ return ()
 
+       ----------- Loopify tail calls before sinking ---------------------------
+       g <- {-# SCC "loopify" #-}
+            condPass Opt_CmmLoopify (cmmLoopify (CmmProc h l v g)) g
+                     Opt_D_dump_cmm_loopify "Loopify tail calls"
+
        ----------- Sink and inline assignments *before* stack layout -----------
        {-  Maybe enable this later
        g <- {-# SCC "sink1" #-}
@@ -102,6 +108,7 @@ cpsTop hsc_env proc =
                then runUniqSM $ cmmLayoutStack dflags proc_points entry_off g
                else return (g, mapEmpty)
        dump Opt_D_dump_cmm_sp "Layout Stack" g
+
 
        ----------- Sink and inline assignments *after* stack layout ------------
        g <- {-# SCC "sink2" #-}
@@ -259,4 +266,3 @@ dumpWith dflags flag txt g = do
    dumpIfSet_dyn dflags flag txt (ppr g)
    when (not (dopt flag dflags)) $
       dumpIfSet_dyn dflags Opt_D_dump_cmm txt (ppr g)
-
