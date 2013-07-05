@@ -182,6 +182,7 @@ Library
         CmmProcPoint
         CmmRewriteAssignments
         CmmSink
+        CmmLoopify
         CmmType
         CmmUtils
         CmmLayoutStack
