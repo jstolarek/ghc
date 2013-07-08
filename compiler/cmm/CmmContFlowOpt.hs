@@ -121,10 +121,29 @@ blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
                   -> (BlockEnv CmmBlock, BlockEnv BlockId)
                   -> (BlockEnv CmmBlock, BlockEnv BlockId)
      maybe_concat block (blocks, shortcut_map)
+        -- if the block ends with an unconditional jump (a goto) and it is OK to
+        -- duplicate the target block (e.g. because that block is empty) then we
+        -- apend the target block at the end of the current one
         | CmmBranch b' <- last
         , Just blk' <- mapLookup b' blocks
-        , shouldConcatWith b' blk'
+        , okToDuplicate blk'
         = (mapInsert bid (splice head blk') blocks, shortcut_map)
+
+        -- if the block ends with a goto and the target block has only one
+        -- predecessor (namely: the block we are analysing right now) then
+        -- blocks can be concatenated together. This is true, provided that some
+        -- other transformation did not map jumps to the target block. This
+        -- must be checked separately, because these mappings are not applied
+        -- immediately but are instead maintained in a separate map. When these
+        -- two conditions are met we can append the target block at the end of
+        -- the current one and we remove the target block, because by
+        -- concatenating it we also removed the only jump that pointed to it.
+        | CmmBranch b' <- last
+        , Just blk' <- mapLookup b' blocks
+        , hasOnePredecessor b'
+        , hasNotBeenMappedTo b' shortcut_map
+        = let bid' = entryLabel blk'
+          in (mapDelete bid' $ mapInsert bid (splice head blk') blocks, shortcut_map)
 
         -- calls: if we can shortcut the continuation label, then
         -- we must *also* remember to substitute for the label in the
@@ -173,12 +192,22 @@ blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
             = shortcut_last
 
 
-     shouldConcatWith b block
-       | okToDuplicate block = True  -- short enough to duplicate
-       | numPreds b == 1     = True  -- only one predecessor: go for it
-       | otherwise           = False
-
      numPreds bid = mapLookup bid backEdges `orElse` 0
+
+     hasOnePredecessor b = numPreds b == 1
+
+     hasNotBeenMappedTo :: BlockId -> BlockEnv BlockId -> Bool
+     hasNotBeenMappedTo b successor_map = mapMember b successor_map
+
+     okToDuplicate :: CmmBlock -> Bool
+     okToDuplicate block
+         = case blockSplit block of
+             (_, m, CmmBranch _) -> isEmptyBlock m
+             -- cheap and cheerful; we might expand this in the future to
+             -- e.g. spot blocks that represent a single instruction or two.
+             -- Be careful: a CmmCall can be more than one instruction, it
+             -- has a CmmExpr inside it.
+             _otherwise -> False
 
      canShortcut :: CmmBlock -> Maybe BlockId
      canShortcut block
@@ -200,17 +229,6 @@ callContinuation_maybe :: CmmNode O C -> Maybe BlockId
 callContinuation_maybe (CmmCall { cml_cont = Just b }) = Just b
 callContinuation_maybe (CmmForeignCall { succ = b })   = Just b
 callContinuation_maybe _ = Nothing
-
-okToDuplicate :: CmmBlock -> Bool
-okToDuplicate block
-  = case blockSplit block of
-      (_, m, CmmBranch _) -> isEmptyBlock m
-      -- cheap and cheerful; we might expand this in the future to
-      -- e.g. spot blocks that represent a single instruction or two.
-      -- Be careful: a CmmCall can be more than one instruction, it
-      -- has a CmmExpr inside it.
-      _otherwise -> False
-
 
 {-  Note [shortcut call returns]
 
