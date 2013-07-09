@@ -25,11 +25,17 @@ import Prelude hiding (succ, unzip, zip)
 -----------------------------------------------------------------------------
 
 cmmCfgOpts :: Bool -> CmmGraph -> CmmGraph
-cmmCfgOpts split g = fst (blockConcat split g)
+cmmCfgOpts split g = case blockConcat split g of
+                       (graph, _, _) -> graph
 
 cmmCfgOptsProc :: Bool -> CmmDecl -> CmmDecl
-cmmCfgOptsProc split (CmmProc info lbl live g) = CmmProc info' lbl live g'
-    where (g', env) = blockConcat split g
+cmmCfgOptsProc split decl = case cmmCfgOptsProcWorker split decl of
+                                (decl', SomeChange) -> cmmCfgOptsProc split decl'
+                                (decl', NoChange  ) -> decl'
+
+cmmCfgOptsProcWorker :: Bool -> CmmDecl -> (CmmDecl, ChangeFlag)
+cmmCfgOptsProcWorker split (CmmProc info lbl live g) = (CmmProc info' lbl live g', changeFlag)
+    where (g', env, changeFlag) = blockConcat split g
           info' = info{ info_tbls = new_info_tbls }
           new_info_tbls = mapFromList (map upd_info (mapToList (info_tbls info)))
 
@@ -44,7 +50,7 @@ cmmCfgOptsProc split (CmmProc info lbl live g) = CmmProc info' lbl live g'
              | otherwise
              = (k,info)
 
-cmmCfgOptsProc _ top = top
+cmmCfgOptsProcWorker _ top = (top, NoChange)
 
 
 -----------------------------------------------------------------------------
@@ -95,9 +101,9 @@ cmmCfgOptsProc _ top = top
 -- which labels we have renamed and apply the mapping at the end
 -- with replaceLabels.
 
-blockConcat :: Bool -> CmmGraph -> (CmmGraph, BlockEnv BlockId)
+blockConcat :: Bool -> CmmGraph -> (CmmGraph, BlockEnv BlockId, ChangeFlag)
 blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
-  = (replaceLabels shortcut_map $ ofBlockMap new_entry new_blocks, shortcut_map')
+  = (replaceLabels shortcut_map $ ofBlockMap new_entry new_blocks, shortcut_map', changeFlag)
   where
      -- we might be able to shortcut the entry BlockId itself.
      -- remember to update the shortcut_map', since we also have to
@@ -114,20 +120,20 @@ blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
       -- the initial blockmap is constructed from the postorderDfs result,
       -- so that we automatically throw away unreachable blocks.
 
-     (new_blocks, shortcut_map) =
-           foldr maybe_concat (blockmap, mapEmpty) blocks
+     (new_blocks, shortcut_map, changeFlag) =
+           foldr maybe_concat (blockmap, mapEmpty, NoChange) blocks
 
      maybe_concat :: CmmBlock
-                  -> (BlockEnv CmmBlock, BlockEnv BlockId)
-                  -> (BlockEnv CmmBlock, BlockEnv BlockId)
-     maybe_concat block (blocks, shortcut_map)
+                  -> (BlockEnv CmmBlock, BlockEnv BlockId, ChangeFlag)
+                  -> (BlockEnv CmmBlock, BlockEnv BlockId, ChangeFlag)
+     maybe_concat block (blocks, shortcut_map, changeFlag)
         -- if the block ends with an unconditional jump (a goto) and it is OK to
         -- duplicate the target block (e.g. because that block is empty) then we
         -- apend the target block at the end of the current one
         | CmmBranch b' <- last
         , Just blk' <- mapLookup b' blocks
         , okToDuplicate blk'
-        = (mapInsert bid (splice head blk') blocks, shortcut_map)
+        = (mapInsert bid (splice head blk') blocks, shortcut_map, SomeChange)
 
         -- if the block ends with a goto and the target block has only one
         -- predecessor (namely: the block we are analysing right now) then
@@ -143,7 +149,7 @@ blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
         , hasOnePredecessor b'
         , hasNotBeenMappedTo b' shortcut_map
         = let bid' = entryLabel blk'
-          in (mapDelete bid' $ mapInsert bid (splice head blk') blocks, shortcut_map)
+          in (mapDelete bid' $ mapInsert bid (splice head blk') blocks, shortcut_map, SomeChange)
 
         -- calls: if we can shortcut the continuation label, then
         -- we must *also* remember to substitute for the label in the
@@ -152,17 +158,17 @@ blockConcat splitting_procs g@CmmGraph { g_entry = entry_id }
         , Just b'   <- callContinuation_maybe last
         , Just blk' <- mapLookup b' blocks
         , Just dest <- canShortcut blk'
-        = (blocks, mapInsert b' dest shortcut_map)
+        = (blocks, mapInsert b' dest shortcut_map, SomeChange)
            -- replaceLabels will substitute dest for b' everywhere, later
 
         -- non-calls: see if we can shortcut any of the successors,
         -- and check whether we should invert the conditional
         | Nothing <- callContinuation_maybe last
         = ( mapInsert bid (blockJoinTail head swapcond_last) blocks
-          , shortcut_map )
+          , shortcut_map, changeFlag)
 
         | otherwise
-        = (blocks, shortcut_map)
+        = (blocks, shortcut_map, changeFlag)
         where
           (head, last) = blockSplitTail block
           bid = entryLabel block
