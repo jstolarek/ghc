@@ -91,6 +91,7 @@ cpsTop hsc_env proc =
 
        ----------- Loopify tail calls before sinking ---------------------------
        g <- {-# SCC "loopify" #-}
+            -- See Note [Pre-CPS Loopification] in CmmLoopify.hs
             condPass Opt_CmmLoopify (cmmLoopify (CmmProc h l v g)) g
                      Opt_D_dump_cmm_loopify "Loopify tail calls"
 
