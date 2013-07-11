@@ -99,7 +99,7 @@ cpsTop hsc_env proc =
        {-  Maybe enable this later
        g <- {-# SCC "sink1" #-}
             condPass Opt_CmmSink (cmmSink dflags) g
-                     Opt_D_dump_cmm_rewrite "Sink assignments (1)"
+                     Opt_D_dump_cmm_sink "Sink assignments (1)"
        -}
 
        ----------- Layout the stack and manifest Sp ----------------------------
@@ -110,11 +110,10 @@ cpsTop hsc_env proc =
                else return (g, mapEmpty)
        dump Opt_D_dump_cmm_sp "Layout Stack" g
 
-
        ----------- Sink and inline assignments *after* stack layout ------------
        g <- {-# SCC "sink2" #-}
             condPass Opt_CmmSink (cmmSink dflags) g
-                     Opt_D_dump_cmm_rewrite "Sink assignments (2)"
+                     Opt_D_dump_cmm_sink "Sink assignments (2)"
 
        ------------- CAF analysis ----------------------------------------------
        let cafEnv = {-# SCC "cafAnal" #-} cafAnal g
