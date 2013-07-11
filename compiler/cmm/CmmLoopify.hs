@@ -23,6 +23,34 @@ import Hoopl
 --       stack into registers. By copying that code to the end of loop we
 --       might have an opportunity for further optimisations, e.g. we may be
 --       able to avoid using the stack by keeping all variables in registers
+--
+-- This pass converts this:
+--
+-- f.info_table {
+--   L1: x = R1;
+--       goto L2;
+--   L2: if (x != 0) goto L3; else goto L4;
+--   L3: ...
+--      R1 = x;
+--      tail_call.f()
+--   L4: ...
+-- }
+--
+-- to this:
+--
+-- f.info_table {
+--   L1: x = R1;
+--       goto L2;
+--   L2: if (x != 0) goto L3; else goto L4;
+--   L3: ...
+--      R1 = x;
+--      x = R1;
+--      goto L2;
+--   L4: ...
+-- }
+--
+-- Obviously, the pair of assignments R1 = x; x = R1; is a no-op and can be
+-- optimized away in later passes.
 
 cmmLoopify :: CmmDecl -> CmmGraph -> CmmGraph
 cmmLoopify proc graph
