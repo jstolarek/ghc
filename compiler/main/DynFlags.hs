@@ -196,7 +196,7 @@ data DumpFlag
    | Opt_D_dump_cmm_cfg
    | Opt_D_dump_cmm_cbe
    | Opt_D_dump_cmm_proc
-   | Opt_D_dump_cmm_rewrite
+   | Opt_D_dump_cmm_copy_prop
    | Opt_D_dump_cmm_sink
    | Opt_D_dump_cmm_sp
    | Opt_D_dump_cmm_procmap
@@ -306,6 +306,7 @@ data GeneralFlag
    | Opt_IrrefutableTuples
    | Opt_CmmSink
    | Opt_CmmLoopify
+   | Opt_CmmCopyPropagation
    | Opt_CmmElimCommonBlocks
    | Opt_OmitYields
    | Opt_SimpleListLiterals
@@ -2196,7 +2197,7 @@ dynamic_flags = [
   , Flag "ddump-cmm-cfg"           (setDumpFlag Opt_D_dump_cmm_cfg)
   , Flag "ddump-cmm-cbe"           (setDumpFlag Opt_D_dump_cmm_cbe)
   , Flag "ddump-cmm-proc"          (setDumpFlag Opt_D_dump_cmm_proc)
-  , Flag "ddump-cmm-rewrite"       (setDumpFlag Opt_D_dump_cmm_rewrite)
+  , Flag "ddump-cmm-copy-prop"     (setDumpFlag Opt_D_dump_cmm_copy_prop)
   , Flag "ddump-cmm-sink"          (setDumpFlag Opt_D_dump_cmm_sink)
   , Flag "ddump-cmm-sp"            (setDumpFlag Opt_D_dump_cmm_sp)
   , Flag "ddump-cmm-procmap"       (setDumpFlag Opt_D_dump_cmm_procmap)
@@ -2562,6 +2563,7 @@ fFlags = [
   ( "irrefutable-tuples",               Opt_IrrefutableTuples, nop ),
   ( "cmm-sink",                         Opt_CmmSink, nop ),
   ( "cmm-loopify",                      Opt_CmmLoopify, nop ),
+  ( "cmm-copy-propagation",             Opt_CmmCopyPropagation, nop ),
   ( "cmm-elim-common-blocks",           Opt_CmmElimCommonBlocks, nop ),
   ( "omit-yields",                      Opt_OmitYields, nop ),
   ( "simple-list-literals",             Opt_SimpleListLiterals, nop ),
@@ -2863,6 +2865,7 @@ optLevelFlags
     , ([0,1,2], Opt_LlvmTBAA)
     , ([1,2],   Opt_CmmSink)
     , ([1,2],   Opt_CmmLoopify)
+    , ([1,2],   Opt_CmmCopyPropagation)
     , ([1,2],   Opt_CmmElimCommonBlocks)
 
 --     , ([2],     Opt_StaticArgumentTransformation)
