@@ -170,11 +170,13 @@ Library
         CmmCallConv
         CmmCommonBlockElim
         CmmContFlowOpt
+        CmmCopyPropagation
         CmmExpr
         CmmInfo
         CmmLex
         CmmLint
         CmmLive
+        CmmLoopify
         CmmMachOp
         CmmNode
         CmmOpt
@@ -182,7 +184,6 @@ Library
         CmmProcPoint
         CmmRewriteAssignments
         CmmSink
-        CmmLoopify
         CmmType
         CmmUtils
         CmmLayoutStack
