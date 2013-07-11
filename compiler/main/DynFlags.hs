@@ -197,6 +197,7 @@ data DumpFlag
    | Opt_D_dump_cmm_cbe
    | Opt_D_dump_cmm_proc
    | Opt_D_dump_cmm_rewrite
+   | Opt_D_dump_cmm_sink
    | Opt_D_dump_cmm_sp
    | Opt_D_dump_cmm_procmap
    | Opt_D_dump_cmm_split
@@ -515,7 +516,7 @@ data ExtensionFlag
    | Opt_PolyKinds                -- Kind polymorphism
    | Opt_DataKinds                -- Datatype promotion
    | Opt_InstanceSigs
- 
+
    | Opt_StandaloneDeriving
    | Opt_DeriveDataTypeable
    | Opt_AutoDeriveTypeable       -- Automatic derivation of Typeable
@@ -1673,7 +1674,7 @@ setObjectDir, setHiDir, setStubDir, setDumpDir, setOutputDir,
          setDylibInstallName,
          setObjectSuf, setHiSuf, setHcSuf, parseDynLibLoaderMode,
          setPgmP, addOptl, addOptc, addOptP,
-         addCmdlineFramework, addHaddockOpts, addGhciScript, 
+         addCmdlineFramework, addHaddockOpts, addGhciScript,
          setInteractivePrint
    :: String -> DynFlags -> DynFlags
 setOutputFile, setDynOutputFile, setOutputHi, setDumpPrefixForce
@@ -1958,7 +1959,7 @@ safeFlagCheck cmdl dflags =
 
         apFix f = if safeInferOn dflags then id else f
 
-        safeFailure loc str 
+        safeFailure loc str
            = [L loc $ str ++ " is not allowed in Safe Haskell; ignoring " ++ str]
 
 {- **********************************************************************
@@ -2183,6 +2184,7 @@ dynamic_flags = [
   , Flag "ddump-cmm-cbe"           (setDumpFlag Opt_D_dump_cmm_cbe)
   , Flag "ddump-cmm-proc"          (setDumpFlag Opt_D_dump_cmm_proc)
   , Flag "ddump-cmm-rewrite"       (setDumpFlag Opt_D_dump_cmm_rewrite)
+  , Flag "ddump-cmm-sink"          (setDumpFlag Opt_D_dump_cmm_sink)
   , Flag "ddump-cmm-sp"            (setDumpFlag Opt_D_dump_cmm_sp)
   , Flag "ddump-cmm-procmap"       (setDumpFlag Opt_D_dump_cmm_procmap)
   , Flag "ddump-cmm-split"         (setDumpFlag Opt_D_dump_cmm_split)
@@ -2570,7 +2572,7 @@ fFlags = [
 fLangFlags :: [FlagSpec ExtensionFlag]
 fLangFlags = [
   ( "th",                               Opt_TemplateHaskell,
-    \on -> deprecatedForExtension "TemplateHaskell" on 
+    \on -> deprecatedForExtension "TemplateHaskell" on
         >> checkTemplateHaskellOk on ),
   ( "fi",                               Opt_ForeignFunctionInterface,
     deprecatedForExtension "ForeignFunctionInterface" ),
@@ -2662,7 +2664,7 @@ xFlags = [
   ( "TypeOperators",                    Opt_TypeOperators, nop ),
   ( "ExplicitNamespaces",               Opt_ExplicitNamespaces, nop ),
   ( "RecursiveDo",                      Opt_RecursiveDo, nop ),  -- Enables 'mdo' and 'rec'
-  ( "DoRec",                            Opt_RecursiveDo, 
+  ( "DoRec",                            Opt_RecursiveDo,
      deprecatedForExtension "RecursiveDo" ),
   ( "Arrows",                           Opt_Arrows, nop ),
   ( "ParallelArrays",                   Opt_ParallelArrays, nop ),
