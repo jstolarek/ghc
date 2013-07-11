@@ -18,6 +18,7 @@ import CmmContFlowOpt
 import CmmLayoutStack
 import CmmSink
 import CmmLoopify
+import CmmCopyPropagation
 import Hoopl
 
 import UniqSupply
@@ -89,11 +90,16 @@ cpsTop hsc_env proc =
        when (not (setNull noncall_pps) && dopt Opt_D_dump_cmm dflags) $
          pprTrace "Non-call proc points: " (ppr noncall_pps) $ return ()
 
-       ----------- Loopify tail calls before sinking ---------------------------
+       ------------------ Loopify tail calls before sinking --------------------
        g <- {-# SCC "loopify" #-}
             -- See Note [Pre-CPS Loopification] in CmmLoopify.hs
             condPass Opt_CmmLoopify (cmmLoopify (CmmProc h l v g)) g
                      Opt_D_dump_cmm_loopify "Loopify tail calls"
+
+       ------------------ Copy propagation -------------------------------------
+       g <- {-# SCC "copyPropagation" #-}
+            condPass Opt_CmmCopyPropagation cmmCopyPropagation g
+                     Opt_D_dump_cmm_copy_prop "Copy propagation"
 
        ----------- Sink and inline assignments *before* stack layout -----------
        {-  Maybe enable this later
