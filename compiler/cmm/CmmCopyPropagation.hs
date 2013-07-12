@@ -4,16 +4,21 @@ module CmmCopyPropagation (
  ) where
 
 import Cmm
+import CmmUtils
+import Control.Arrow      as CA
 import qualified Data.Map as M
 import Hoopl
 import UniqSupply
 
-cmmCopyPropagation :: CmmGraph -> CmmGraph
-cmmCopyPropagation g = g
-
+-- I'm not sure about []. Perhaps I should pass sth?
+cmmCopyPropagation :: CmmGraph -> UniqSM CmmGraph
+cmmCopyPropagation graph = do
+     g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer cpRewrite
+     return . fst $ g'
 
 type RegLocation         = CmmReg
 type MemLocation         = (CmmReg, Int)
+type CmmFactValue        = CmmExpr
 -- Bottom - we know nothing, we have not yet analyzed this part of the graph
 -- Info - hey, we know sth! If element is in the map we know its value. If it
 --        is not then we know we now nothing (Top!)
@@ -25,14 +30,8 @@ type CopyPropagationFact = (MemAssignmentFacts, RegAssignmentFacts)
 
 --todo: use cmmMachOpFold from CmmOpt to do constant folding after rewriting
 
-cpFwdPass :: FwdPass UniqSM CmmNode CopyPropagationFact
-cpFwdPass = FwdPass cpLattice cpTransfer cpRewrite
-
 cpLattice :: DataflowLattice CopyPropagationFact
-cpLattice = DataflowLattice "copy propagation" cpBottom cpJoin
-
-cpBottom :: CopyPropagationFact
-cpBottom = (Bottom, Bottom)
+cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
 
 cpJoin :: JoinFun CopyPropagationFact
 cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
@@ -49,9 +48,9 @@ intersectFacts :: Ord v
                => AssignmentFacts v
                -> AssignmentFacts v
                -> (ChangeFlag, AssignmentFacts v)
-intersectFacts facts  Bottom         = (NoChange  , facts )  -- really NoChange?
-intersectFacts Bottom facts          = (SomeChange, facts )
-intersectFacts (Info old) (Info new) = (flag, Info facts)
+intersectFacts facts  Bottom         = (NoChange  ,      facts)  -- really NoChange?
+intersectFacts Bottom facts          = (SomeChange,      facts)
+intersectFacts (Info old) (Info new) = (flag      , Info facts)
   where
     (flag, facts) = M.foldrWithKey add (NoChange, M.empty) new
     add k new_v (ch, joinmap) =
@@ -80,17 +79,21 @@ cpTransferFirst _ fact = fact
 -- lets just focus on assignments to registers. CmmLit will deal with literals,
 -- CmmReg will deal with registers. I'm y
 cpTransferMiddle :: CmmNode O O -> CopyPropagationFact -> CopyPropagationFact
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Bottom) =
-    (memFact, Info $ M.singleton lhs rhs)
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Bottom) =
-    (memFact, Info $ M.singleton lhs rhs)
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Info regFact) =
-    (memFact, Info $ M.insert lhs rhs regFact)
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Info regFact) =
-    (memFact, Info $ M.insert lhs rhs regFact)
---cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) (memAsgn, regAsgn) =
---    (M.insert (lhs, off) rhs memAsgn, regAsgn)
-cpTransferMiddle _ fact = fact
+
+cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _))     = addRegFact lhs rhs
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _))     = addRegFact lhs rhs
+cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) = addMemFact (lhs, off) rhs
+cpTransferMiddle _                                  = id
+
+addRegFact :: RegLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
+addRegFact k v = CA.second $ addFact k v
+
+addMemFact :: MemLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
+addMemFact k v = CA.first $ addFact k v
+
+addFact :: Ord a => a -> CmmFactValue -> AssignmentFacts a -> AssignmentFacts a
+addFact k v Bottom       = Info $ M.singleton k v
+addFact k v (Info facts) = Info $ M.insert    k v facts
 
 cpTransferLast :: CmmNode O C -> CopyPropagationFact -> FactBase CopyPropagationFact
 cpTransferLast = distributeFact
@@ -109,8 +112,12 @@ cpRewriteMiddle :: Monad m
                 => CmmNode O O
                 -> CopyPropagationFact
                 -> m (Maybe (Graph CmmNode O O))
-cpRewriteMiddle (CmmAssign lhs (CmmReg rhs)) (memFact, Info regFact) =
+cpRewriteMiddle (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
     return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup rhs regFact -- is this comprehensible?
+
+cpRewriteMiddle (CmmAssign lhs (CmmRegOff reg off)) (Info memFact, _) =
+    return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup (reg, off) memFact
+
 cpRewriteMiddle _ _ = return Nothing
 --cpRewriteMiddle (CmmStore  lhs rhs) fact = undefined
 
