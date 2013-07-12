@@ -5,7 +5,7 @@ module CmmCopyPropagation (
 
 import Cmm
 import CmmUtils
-import Control.Arrow
+import Control.Arrow      as CA
 import qualified Data.Map as M
 import Hoopl
 import UniqSupply
@@ -86,15 +86,14 @@ cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) = addMemFact (lhs, off) rhs
 cpTransferMiddle _                                  = id
 
 addRegFact :: RegLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
-addRegFact k v = second $ addFact k v
+addRegFact k v = CA.second $ addFact k v
 
 addMemFact :: MemLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
-addMemFact k v = first $ addFact k v
+addMemFact k v = CA.first $ addFact k v
 
 addFact :: Ord a => a -> CmmFactValue -> AssignmentFacts a -> AssignmentFacts a
 addFact k v Bottom       = Info $ M.singleton k v
 addFact k v (Info facts) = Info $ M.insert    k v facts
-
 
 cpTransferLast :: CmmNode O C -> CopyPropagationFact -> FactBase CopyPropagationFact
 cpTransferLast = distributeFact
