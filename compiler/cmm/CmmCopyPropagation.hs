@@ -5,10 +5,12 @@ module CmmCopyPropagation (
 
 import Cmm
 import CmmUtils
+import Control.Arrow
 import qualified Data.Map as M
 import Hoopl
 import UniqSupply
 
+-- I'm not sure about []. Perhaps I should pass sth?
 cmmCopyPropagation :: CmmGraph -> UniqSM CmmGraph
 cmmCopyPropagation graph = do
      g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer cpRewrite
@@ -16,6 +18,7 @@ cmmCopyPropagation graph = do
 
 type RegLocation         = CmmReg
 type MemLocation         = (CmmReg, Int)
+type CmmFactValue        = CmmExpr
 -- Bottom - we know nothing, we have not yet analyzed this part of the graph
 -- Info - hey, we know sth! If element is in the map we know its value. If it
 --        is not then we know we now nothing (Top!)
@@ -76,21 +79,22 @@ cpTransferFirst _ fact = fact
 -- lets just focus on assignments to registers. CmmLit will deal with literals,
 -- CmmReg will deal with registers. I'm y
 cpTransferMiddle :: CmmNode O O -> CopyPropagationFact -> CopyPropagationFact
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Bottom) =
-    (memFact, Info $ M.singleton lhs rhs)
 
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Bottom) =
-    (memFact, Info $ M.singleton lhs rhs)
+cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _))     = addRegFact lhs rhs
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _))     = addRegFact lhs rhs
+cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) = addMemFact (lhs, off) rhs
+cpTransferMiddle _                                  = id
 
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Info regFact) =
-    (memFact, Info $ M.insert lhs rhs regFact)
+addRegFact :: RegLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
+addRegFact k v = second $ addFact k v
 
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Info regFact) =
-    (memFact, Info $ M.insert lhs rhs regFact)
+addMemFact :: MemLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
+addMemFact k v = first $ addFact k v
 
---cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) (memAsgn, regAsgn) =
---    (M.insert (lhs, off) rhs memAsgn, regAsgn)
-cpTransferMiddle _ fact = fact
+addFact :: Ord a => a -> CmmFactValue -> AssignmentFacts a -> AssignmentFacts a
+addFact k v Bottom       = Info $ M.singleton k v
+addFact k v (Info facts) = Info $ M.insert    k v facts
+
 
 cpTransferLast :: CmmNode O C -> CopyPropagationFact -> FactBase CopyPropagationFact
 cpTransferLast = distributeFact
@@ -109,8 +113,12 @@ cpRewriteMiddle :: Monad m
                 => CmmNode O O
                 -> CopyPropagationFact
                 -> m (Maybe (Graph CmmNode O O))
-cpRewriteMiddle (CmmAssign lhs (CmmReg rhs)) (memFact, Info regFact) =
+cpRewriteMiddle (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
     return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup rhs regFact -- is this comprehensible?
+
+cpRewriteMiddle (CmmAssign lhs (CmmRegOff reg off)) (Info memFact, _) =
+    return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup (reg, off) memFact
+
 cpRewriteMiddle _ _ = return Nothing
 --cpRewriteMiddle (CmmStore  lhs rhs) fact = undefined
 
