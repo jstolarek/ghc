@@ -4,13 +4,15 @@ module CmmCopyPropagation (
  ) where
 
 import Cmm
+import CmmUtils
 import qualified Data.Map as M
 import Hoopl
 import UniqSupply
 
-cmmCopyPropagation :: CmmGraph -> CmmGraph
-cmmCopyPropagation g = g
-
+cmmCopyPropagation :: CmmGraph -> UniqSM CmmGraph
+cmmCopyPropagation graph = do
+     g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer cpRewrite
+     return . fst $ g'
 
 type RegLocation         = CmmReg
 type MemLocation         = (CmmReg, Int)
@@ -25,14 +27,8 @@ type CopyPropagationFact = (MemAssignmentFacts, RegAssignmentFacts)
 
 --todo: use cmmMachOpFold from CmmOpt to do constant folding after rewriting
 
-cpFwdPass :: FwdPass UniqSM CmmNode CopyPropagationFact
-cpFwdPass = FwdPass cpLattice cpTransfer cpRewrite
-
 cpLattice :: DataflowLattice CopyPropagationFact
-cpLattice = DataflowLattice "copy propagation" cpBottom cpJoin
-
-cpBottom :: CopyPropagationFact
-cpBottom = (Bottom, Bottom)
+cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
 
 cpJoin :: JoinFun CopyPropagationFact
 cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
@@ -49,9 +45,9 @@ intersectFacts :: Ord v
                => AssignmentFacts v
                -> AssignmentFacts v
                -> (ChangeFlag, AssignmentFacts v)
-intersectFacts facts  Bottom         = (NoChange  , facts )  -- really NoChange?
-intersectFacts Bottom facts          = (SomeChange, facts )
-intersectFacts (Info old) (Info new) = (flag, Info facts)
+intersectFacts facts  Bottom         = (NoChange  ,      facts)  -- really NoChange?
+intersectFacts Bottom facts          = (SomeChange,      facts)
+intersectFacts (Info old) (Info new) = (flag      , Info facts)
   where
     (flag, facts) = M.foldrWithKey add (NoChange, M.empty) new
     add k new_v (ch, joinmap) =
@@ -82,12 +78,16 @@ cpTransferFirst _ fact = fact
 cpTransferMiddle :: CmmNode O O -> CopyPropagationFact -> CopyPropagationFact
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Bottom) =
     (memFact, Info $ M.singleton lhs rhs)
+
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Bottom) =
     (memFact, Info $ M.singleton lhs rhs)
+
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) (memFact, Info regFact) =
     (memFact, Info $ M.insert lhs rhs regFact)
+
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) (memFact, Info regFact) =
     (memFact, Info $ M.insert lhs rhs regFact)
+
 --cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) (memAsgn, regAsgn) =
 --    (M.insert (lhs, off) rhs memAsgn, regAsgn)
 cpTransferMiddle _ fact = fact

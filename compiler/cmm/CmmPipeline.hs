@@ -98,8 +98,8 @@ cpsTop hsc_env proc =
 
        ------------------ Copy propagation -------------------------------------
        g <- {-# SCC "copyPropagation" #-}
-            condPass Opt_CmmCopyPropagation cmmCopyPropagation g
-                     Opt_D_dump_cmm_copy_prop "Copy propagation"
+            condPassSM Opt_CmmCopyPropagation cmmCopyPropagation g
+                       Opt_D_dump_cmm_copy_prop "Copy propagation"
 
        ----------- Sink and inline assignments *before* stack layout -----------
        {-  Maybe enable this later
@@ -184,6 +184,15 @@ cpsTop hsc_env proc =
             if gopt flag dflags
                then do
                     g <- return $ pass g
+                    dump dumpflag dumpname g
+                    return g
+               else return g
+
+
+        condPassSM flag pass g dumpflag dumpname =
+            if gopt flag dflags
+               then do
+                    g <- runUniqSM $ pass g
                     dump dumpflag dumpname g
                     return g
                else return g
