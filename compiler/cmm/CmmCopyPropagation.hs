@@ -5,15 +5,17 @@ module CmmCopyPropagation (
 
 import Cmm
 import CmmUtils
-import Control.Arrow      as CA
-import qualified Data.Map as M
+import DynFlags
 import Hoopl
 import UniqSupply
 
+import Control.Arrow      as CA
+import qualified Data.Map as M
+
 -- I'm not sure about []. Perhaps I should pass sth?
-cmmCopyPropagation :: CmmGraph -> UniqSM CmmGraph
-cmmCopyPropagation graph = do
-     g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer cpRewrite
+cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
+cmmCopyPropagation dflags graph = do
+     g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
 type RegLocation         = CmmReg
@@ -80,16 +82,23 @@ cpTransferFirst _ fact = fact
 -- CmmReg will deal with registers. I'm y
 cpTransferMiddle :: CmmNode O O -> CopyPropagationFact -> CopyPropagationFact
 
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _))     = addRegFact lhs rhs
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _))     = addRegFact lhs rhs
-cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs) = addMemFact (lhs, off) rhs
-cpTransferMiddle _                                  = id
-
-addRegFact :: RegLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
-addRegFact k v = CA.second $ addFact k v
+cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
+    addRegFact lhs rhs
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
+    addRegFact lhs rhs
+cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs@(CmmLit _)) =
+    addMemFact (lhs, off) rhs
+cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs@(CmmReg _)) =
+    addMemFact (lhs, off) rhs
+--cpTransferMiddle (CmmStore (CmmLoad lhs off) rhs@(CmmReg _)) =
+--    addMemFact (lhs, off) rhs
+cpTransferMiddle _ = id
 
 addMemFact :: MemLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
 addMemFact k v = CA.first $ addFact k v
+
+addRegFact :: RegLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
+addRegFact k v = CA.second $ addFact k v
 
 addFact :: Ord a => a -> CmmFactValue -> AssignmentFacts a -> AssignmentFacts a
 addFact k v Bottom       = Info $ M.singleton k v
@@ -99,30 +108,41 @@ cpTransferLast :: CmmNode O C -> CopyPropagationFact -> FactBase CopyPropagation
 cpTransferLast = distributeFact
 
 -- why do I need UniqSM monad? Hoopl uses either m or FuelMonad m
-cpRewrite :: FwdRewrite UniqSM CmmNode CopyPropagationFact
-cpRewrite = mkFRewrite3 cpRewriteFirst cpRewriteMiddle cpRewriteLast
+cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CopyPropagationFact
+cpRewrite dflags = mkFRewrite3 cpRwFirst (cpRewriteMiddle dflags) cpRwLast
+    where cpRwFirst _ _ = return Nothing
+          cpRwLast  _ _ = return Nothing
 
-cpRewriteFirst :: Monad m
-               => CmmNode C O
-               -> CopyPropagationFact
-               -> m (Maybe (Graph CmmNode C O))
-cpRewriteFirst _ _ = return Nothing
-
-cpRewriteMiddle :: Monad m
-                => CmmNode O O
+cpRewriteMiddle :: DynFlags
+                -> CmmNode O O
                 -> CopyPropagationFact
-                -> m (Maybe (Graph CmmNode O O))
-cpRewriteMiddle (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
+                -> UniqSM (Maybe (Graph CmmNode O O))
+-- R2 = R1    =====>    R2 = R1
+-- R3 = R2              R3 = R1
+cpRewriteMiddle _ (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
     return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup rhs regFact -- is this comprehensible?
-
-cpRewriteMiddle (CmmAssign lhs (CmmRegOff reg off)) (Info memFact, _) =
+-- R2 = R1         ======>    R2 = R1
+-- I32[Sp] = R2               I32[Sp] = R1
+cpRewriteMiddle _ (CmmStore lhs (CmmReg rhs)) (_, Info regFact) =
+    return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup rhs regFact
+-- I32[Sp] = R1              ====>  I32[Sp] = R1
+-- I32[Sp + 4] = I32[Sp]            I32[Sp + 4] = R1
+cpRewriteMiddle _ (CmmStore lhs (CmmRegOff reg off)) (Info memFact, _) =
+    return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup (reg, off) memFact
+-- I32[Sp] = 7    ====> I32[Sp]
+cpRewriteMiddle _ (CmmStore _ (CmmLit _)) _ = return Nothing
+--  I32[Sp] = expr  ====> Rx = expr
+--                        I32[Sp] = Rx
+cpRewriteMiddle dflags (CmmStore lhs rhs) _ = do
+  u <- getUniqueUs
+  let regSize      = cmmExprType dflags rhs
+      newReg       = CmmLocal $ LocalReg u regSize
+      newRegAssign = CmmAssign newReg rhs
+      newMemAssign = CmmStore lhs (CmmReg newReg)
+  return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
+-- I32[Sp] = expr  =====> I32[Sp] = expr
+-- R1 = I32[Sp]           R1 = expr
+cpRewriteMiddle _ (CmmAssign lhs (CmmRegOff reg off)) (Info memFact, _) =
     return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup (reg, off) memFact
+cpRewriteMiddle _ _ _ = return Nothing
 
-cpRewriteMiddle _ _ = return Nothing
---cpRewriteMiddle (CmmStore  lhs rhs) fact = undefined
-
-cpRewriteLast :: Monad m
-              => CmmNode O C
-              -> CopyPropagationFact
-              -> m (Maybe (Graph CmmNode O C))
-cpRewriteLast _ _ = return Nothing

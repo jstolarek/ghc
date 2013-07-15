@@ -98,7 +98,7 @@ cpsTop hsc_env proc =
 
        ------------------ Copy propagation -------------------------------------
        g <- {-# SCC "copyPropagation" #-}
-            condPassSM Opt_CmmCopyPropagation cmmCopyPropagation g
+            condPassSM Opt_CmmCopyPropagation (cmmCopyPropagation dflags) g
                        Opt_D_dump_cmm_copy_prop "Copy propagation"
 
        ----------- Sink and inline assignments *before* stack layout -----------
