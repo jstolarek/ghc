@@ -9,8 +9,12 @@ import DynFlags
 import Hoopl
 import UniqSupply
 
+import Control.Applicative
 import Control.Arrow      as CA
 import qualified Data.Map as M
+import Data.Maybe
+
+import System.IO.Unsafe
 
 -- I'm not sure about []. Perhaps I should pass sth?
 cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
@@ -18,8 +22,9 @@ cmmCopyPropagation dflags graph = do
      g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
+-- plural and singular names (Facts vs. Fact) are confusing
 type RegLocation         = CmmReg
-type MemLocation         = (CmmReg, Int)
+type MemLocation         = (Area, Int)
 type CmmFactValue        = CmmExpr
 -- Bottom - we know nothing, we have not yet analyzed this part of the graph
 -- Info - hey, we know sth! If element is in the map we know its value. If it
@@ -68,30 +73,25 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle cpTransferLast
 cpTransferFirst :: CmmNode C O -> CopyPropagationFact -> CopyPropagationFact
 cpTransferFirst _ fact = fact
 
--- For now I'm supposed to only focus on simple assignments that contain a register
--- or a memory location. This is probably the place to do it by limiting pattern
--- matching on rhs. I'm not yet sure on what I should pattern match.
--- CmmReg and CmmLit maybe?
---
 -- I think that here I don't need to use gen and kill sets, because at any given
 -- time there is at most one fact about assignment to any given location. If we
 -- are assigning to a location which is already in the list of facts, the old
 -- fact will be replaced by the new one
 
--- lets just focus on assignments to registers. CmmLit will deal with literals,
--- CmmReg will deal with registers. I'm y
 cpTransferMiddle :: CmmNode O O -> CopyPropagationFact -> CopyPropagationFact
 
+-- _regA::T = 7
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
     addRegFact lhs rhs
+-- _regA::T = _regB::T
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
     addRegFact lhs rhs
-cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs@(CmmLit _)) =
+-- T[(old + 8)] = 7
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
     addMemFact (lhs, off) rhs
-cpTransferMiddle (CmmStore (CmmRegOff lhs off) rhs@(CmmReg _)) =
+-- T[(old + 8)] = _regA::T
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
     addMemFact (lhs, off) rhs
---cpTransferMiddle (CmmStore (CmmLoad lhs off) rhs@(CmmReg _)) =
---    addMemFact (lhs, off) rhs
 cpTransferMiddle _ = id
 
 addMemFact :: MemLocation -> CmmFactValue -> CopyPropagationFact -> CopyPropagationFact
@@ -107,42 +107,142 @@ addFact k v (Info facts) = Info $ M.insert    k v facts
 cpTransferLast :: CmmNode O C -> CopyPropagationFact -> FactBase CopyPropagationFact
 cpTransferLast = distributeFact
 
--- why do I need UniqSM monad? Hoopl uses either m or FuelMonad m
 cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CopyPropagationFact
-cpRewrite dflags = mkFRewrite3 cpRwFirst (cpRewriteMiddle dflags) cpRwLast
+cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
     where cpRwFirst _ _ = return Nothing
-          cpRwLast  _ _ = return Nothing
 
-cpRewriteMiddle :: DynFlags
-                -> CmmNode O O
-                -> CopyPropagationFact
-                -> UniqSM (Maybe (Graph CmmNode O O))
--- R2 = R1    =====>    R2 = R1
--- R3 = R2              R3 = R1
-cpRewriteMiddle _ (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
-    return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup rhs regFact -- is this comprehensible?
+cpRwMiddle :: DynFlags
+           -> CmmNode O O
+           -> CopyPropagationFact
+           -> UniqSM (Maybe (Graph CmmNode O O))
+
 -- R2 = R1         ======>    R2 = R1
--- I32[Sp] = R2               I32[Sp] = R1
-cpRewriteMiddle _ (CmmStore lhs (CmmReg rhs)) (_, Info regFact) =
+-- I32[old] = R2              I32[old] = R1
+cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) (_, Info regFact) =
     return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup rhs regFact
--- I32[Sp] = R1              ====>  I32[Sp] = R1
--- I32[Sp + 4] = I32[Sp]            I32[Sp + 4] = R1
-cpRewriteMiddle _ (CmmStore lhs (CmmRegOff reg off)) (Info memFact, _) =
+
+-- I32[old] = R1              ====>  I32[old] = R1
+-- I32[old + 4] = I32[old]           I32[old + 4] = R1
+cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) (Info memFact, _) =
     return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup (reg, off) memFact
+
 -- I32[Sp] = 7    ====> I32[Sp]
-cpRewriteMiddle _ (CmmStore _ (CmmLit _)) _ = return Nothing
+cpRwMiddle _ (CmmStore _ (CmmLit _)) _ = return Nothing
+
 --  I32[Sp] = expr  ====> Rx = expr
 --                        I32[Sp] = Rx
-cpRewriteMiddle dflags (CmmStore lhs rhs) _ = do
+cpRwMiddle dflags (CmmStore lhs rhs) _ = do
   u <- getUniqueUs
   let regSize      = cmmExprType dflags rhs
       newReg       = CmmLocal $ LocalReg u regSize
       newRegAssign = CmmAssign newReg rhs
       newMemAssign = CmmStore lhs (CmmReg newReg)
   return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
+
+-- R2 = R1    =====>    R2 = R1
+-- R3 = R2              R3 = R1
+cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
+    return $ (GUnit . BMiddle . CmmAssign lhs) <$> M.lookup rhs regFact -- is this comprehensible?
+
 -- I32[Sp] = expr  =====> I32[Sp] = expr
 -- R1 = I32[Sp]           R1 = expr
-cpRewriteMiddle _ (CmmAssign lhs (CmmRegOff reg off)) (Info memFact, _) =
-    return $ (GUnit . BMiddle . CmmAssign lhs) `fmap` M.lookup (reg, off) memFact
-cpRewriteMiddle _ _ _ = return Nothing
+cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) (Info memFact, _) =
+    return $ (GUnit . BMiddle . CmmAssign lhs) <$> M.lookup (reg, off) memFact
 
+cpRwMiddle _ (CmmAssign lhs rhs) facts = return $ GUnit . BMiddle . CmmAssign lhs <$> cmmRwExpr rhs facts
+
+{- This one is a nightmare -}
+cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) facts@(_, regFacts) =
+    if isSomeChange [f1, f2, f3]
+    then return . Just . GUnit . BMiddle . CmmUnsafeForeignCall tgt' res' $ args'
+    else return Nothing
+        where
+          (f1, tgt')  = rwForeignCallTarget facts    tgt
+          (f2, res')  = rwResults           regFacts res
+          (f3, args') = rwActual            facts    args
+
+cpRwMiddle _ _ _ = return Nothing
+
+rwForeignCallTarget :: CopyPropagationFact -> ForeignTarget -> (ChangeFlag, ForeignTarget)
+rwForeignCallTarget facts (ForeignTarget expr conv) =
+    (\e -> ForeignTarget e conv) <$> cmmMaybeRwWithDefault expr (flip cmmRwExpr $ facts)
+rwForeignCallTarget _ target = (NoChange, target)
+
+-- results or formal args?
+rwResults :: RegAssignmentFacts -> [CmmFormal] -> (ChangeFlag, [CmmFormal])
+rwResults regFacts results =
+    case cmmRwRegs (wrapLocalReg results) regFacts of
+      Nothing  -> (NoChange  , results           )
+      Just res -> (SomeChange, unwrapCmmLocal res)
+    where
+      wrapLocalReg = map CmmLocal
+      unwrapCmmLocal []                    = []
+      unwrapCmmLocal (CmmLocal reg : regs) = reg : unwrapCmmLocal regs
+      unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
+
+-- actual or arguments?
+rwActual :: CopyPropagationFact -> [CmmActual] -> (ChangeFlag, [CmmActual])
+rwActual facts arguments =
+    cmmMaybeRwWithDefault arguments (flip cmmRwExprs $ facts)
+
+cmmMaybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
+cmmMaybeRwWithDefault def f =
+    case f def of
+      Nothing  -> (NoChange  , def)
+      Just res -> (SomeChange, res)
+
+cpRwLast :: CmmNode O C
+         -> CopyPropagationFact
+         -> UniqSM (Maybe (Graph CmmNode O C))
+cpRwLast (CmmCondBranch pred t f) facts = return $ gUnitOC . (BlockOC BNil) . (\p -> CmmCondBranch p t f) <$> cmmRwExpr pred facts
+cpRwLast (CmmSwitch scrut labels) facts = return $ gUnitOC . (BlockOC BNil) . (\s -> CmmSwitch s labels) <$> cmmRwExpr scrut facts
+cpRwLast call@(CmmCall { cml_target = target }) facts = return $ gUnitOC . (BlockOC BNil) . (\t -> call {cml_target = t}) <$> cmmRwExpr target facts
+cpRwLast (CmmForeignCall tgt res args succ updfr intrbl) facts@(_, regFacts) =
+    if isSomeChange [f1, f2, f3]
+    then return . Just . gUnitOC . (BlockOC BNil) . CmmForeignCall tgt' res' args' succ updfr $ intrbl
+    else return Nothing
+        where
+          (f1, tgt')  = rwForeignCallTarget facts    tgt
+          (f2, res')  = rwResults           regFacts res
+          (f3, args') = rwActual            facts    args
+
+cpRwLast _ _ = return Nothing
+
+-- move to some utility module!
+isSomeChange :: [ChangeFlag] -> Bool
+isSomeChange []                = False
+isSomeChange (SomeChange : xs) = True
+isSomeChange (_          : xs) = isSomeChange xs
+
+
+cmmRwExpr :: CmmExpr -> CopyPropagationFact -> Maybe CmmExpr
+cmmRwExpr (CmmLoad expr ty) facts = (\e -> CmmLoad e ty) <$> cmmRwExpr expr facts
+cmmRwExpr (CmmReg reg) (_, Info regFact) = M.lookup reg regFact
+cmmRwExpr (CmmMachOp machOp params) facts = CmmMachOp machOp <$> cmmRwExprs params facts
+cmmRwExpr (CmmStackSlot area off) (Info facts, _) = M.lookup (area, off) facts
+cmmRwExpr (CmmRegOff reg off) (_, facts) =
+    (\r -> CmmRegOff r off) <$> cmmRwReg reg facts
+cmmRwExpr _ _ = Nothing
+
+cmmRwReg :: CmmReg -> RegAssignmentFacts -> Maybe CmmReg
+cmmRwReg reg (Info fact) =  -- pattern matching within a loop, would be good to float outside
+    case M.lookup reg fact of
+      Just (CmmReg reg') -> Just reg'
+      _                  -> Nothing
+cmmRwReg _ _ = Nothing
+
+cmmRwExprs :: [CmmExpr] -> CopyPropagationFact -> Maybe [CmmExpr]
+cmmRwExprs = cmmRwList cmmRwExpr
+
+cmmRwRegs :: [CmmReg] -> RegAssignmentFacts -> Maybe [CmmReg]
+cmmRwRegs = cmmRwList cmmRwReg
+
+cmmRwList :: (a -> f -> Maybe a) -> [a] -> f -> Maybe [a]
+cmmRwList f xs facts =
+    case foldr rw (NoChange, []) xs of
+      (NoChange  , _  ) -> Nothing
+      (SomeChange, xs') -> Just xs'
+    where rw x (flag, xs) =
+              case f x facts of
+                Nothing -> (flag      , x : xs)
+                Just x' -> (SomeChange, x': xs)
