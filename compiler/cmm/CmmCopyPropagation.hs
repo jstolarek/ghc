@@ -22,14 +22,14 @@ cmmCopyPropagation dflags graph = do
      g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
-type AssignLocation    = CmmReg
-type StoreLocation     = (Area, Int)
+type RegisterLocation  = CmmReg
+type StackLocation     = (Area, Int)
 type CmmFact           = CmmExpr
 data AssignmentFacts a = Bottom  -- ADD NOTE HERE
                        | Info (M.Map a CmmExpr)
-type AssignFacts       = AssignmentFacts AssignLocation
-type StoreFacts        = AssignmentFacts StoreLocation
-type CPFacts           = (StoreFacts, AssignFacts)
+type RegisterFacts       = AssignmentFacts RegisterLocation
+type StackFacts        = AssignmentFacts StackLocation
+type CPFacts           = (StackFacts, RegisterFacts)
 
 -- Bottom - we know nothing, we have not yet analyzed this part of the graph
 -- Info - hey, we know sth! If element is in the map we know its value. If it
@@ -74,30 +74,40 @@ cpTransferMiddle :: CmmNode O O -> CPFacts -> CPFacts
 
 -- _regA::T = 7
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
-    addRegFact lhs rhs
+    addRegisterFact lhs rhs
 -- _regA::T = _regB::T
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
-    addRegFact lhs rhs
+    addRegisterFact lhs rhs
 -- T[(old + 8)] = 7
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
-    addMemFact (lhs, off) rhs
+    addStackFact (lhs, off) rhs
 -- T[(old + 8)] = _regA::T
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
-    addMemFact (lhs, off) rhs
+    addStackFact (lhs, off) rhs
 cpTransferMiddle _ = id
 
 
 -- utility functions for transfer functions
 
-addMemFact :: StoreLocation -> CmmFact -> CPFacts -> CPFacts
-addMemFact k v = CA.first $ addFact k v
+addStackFact :: StackLocation -> CmmFact -> CPFacts -> CPFacts
+addStackFact k v = CA.first $ addFact k v
 
-addRegFact :: AssignLocation -> CmmFact -> CPFacts -> CPFacts
-addRegFact k v = CA.second $ addFact k v
+addRegisterFact :: RegisterLocation -> CmmFact -> CPFacts -> CPFacts
+addRegisterFact k v = CA.second $ addFact k v
 
 addFact :: Ord a => a -> CmmFact -> AssignmentFacts a -> AssignmentFacts a
 addFact k v Bottom       = Info $ M.singleton k v
 addFact k v (Info facts) = Info $ M.insert    k v facts
+
+lookupStackFact :: StackLocation -> CPFacts -> Maybe CmmFact
+lookupStackFact k = lookupAssignmentFact k . fst
+
+lookupRegisterFact :: RegisterLocation -> CPFacts -> Maybe CmmFact
+lookupRegisterFact k = lookupAssignmentFact k . snd
+
+lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CmmFact
+lookupAssignmentFact k Bottom       = Nothing
+lookupAssignmentFact k (Info facts) = M.lookup k facts
 
 -- rewrite functions
 
@@ -181,7 +191,7 @@ rwForeignCallTarget facts (ForeignTarget expr conv) =
 rwForeignCallTarget _ target = (NoChange, target)
 
 -- results or formal args?
-rwResults :: AssignFacts -> [CmmFormal] -> (ChangeFlag, [CmmFormal])
+rwResults :: RegisterFacts -> [CmmFormal] -> (ChangeFlag, [CmmFormal])
 rwResults regFacts results =
     case cmmRwRegs (wrapLocalReg results) regFacts of
       Nothing  -> (NoChange  , results           )
@@ -204,15 +214,14 @@ cmmMaybeRwWithDefault def f =
       Just res -> (SomeChange, res)
 
 cmmRwExpr :: CmmExpr -> CPFacts -> Maybe CmmExpr
-cmmRwExpr (CmmLoad expr ty        ) facts = (\e -> CmmLoad e ty) <$> cmmRwExpr expr facts
-cmmRwExpr (CmmReg reg             ) (_, Info regFact) = M.lookup reg regFact
-cmmRwExpr (CmmMachOp machOp params) facts = CmmMachOp machOp <$> cmmRwExprs params facts
-cmmRwExpr (CmmStackSlot area off  ) (Info facts, _) = M.lookup (area, off) facts
-cmmRwExpr (CmmRegOff reg off      ) (_, facts) =
-    (\r -> CmmRegOff r off) <$> cmmRwReg reg facts
-cmmRwExpr _ _ = Nothing
+cmmRwExpr (CmmReg reg             ) = lookupRegisterFact reg
+cmmRwExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
+cmmRwExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . cmmRwExprs params
+cmmRwExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . cmmRwExpr expr
+cmmRwExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . cmmRwReg reg . snd
+cmmRwExpr _ = const Nothing
 
-cmmRwReg :: CmmReg -> AssignFacts -> Maybe CmmReg
+cmmRwReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
 cmmRwReg reg (Info fact) =
     case M.lookup reg fact of
       Just (CmmReg reg') -> Just reg'
@@ -222,7 +231,7 @@ cmmRwReg _ _ = Nothing
 cmmRwExprs :: [CmmExpr] -> CPFacts -> Maybe [CmmExpr]
 cmmRwExprs = cmmRwList cmmRwExpr
 
-cmmRwRegs :: [CmmReg] -> AssignFacts -> Maybe [CmmReg]
+cmmRwRegs :: [CmmReg] -> RegisterFacts -> Maybe [CmmReg]
 cmmRwRegs = cmmRwList cmmRwReg
 
 cmmRwList :: (a -> f -> Maybe a) -> [a] -> f -> Maybe [a]
@@ -231,9 +240,9 @@ cmmRwList f xs facts =
       (NoChange  , _  ) -> Nothing
       (SomeChange, xs') -> Just xs'
     where rw x (flag, xs) =
-          case f x facts of
-            Nothing -> (flag      , x : xs)
-            Just x' -> (SomeChange, x': xs)
+              case f x facts of
+                Nothing -> (flag      , x : xs)
+                Just x' -> (SomeChange, x': xs)
 
 -- other utility functions. This should probably go in some utility module
 addChanges :: [ChangeFlag] -> ChangeFlag
