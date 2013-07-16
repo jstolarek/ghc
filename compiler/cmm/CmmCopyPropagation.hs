@@ -9,7 +9,6 @@ import DynFlags
 import Hoopl
 import UniqSupply
 
-import Control.Applicative
 import Control.Arrow      as CA
 import qualified Data.Map as M
 
@@ -175,13 +174,41 @@ cpRwLast _ = const $ return Nothing
 
 -- rewrite utility functions
 
+rwFunctionCall :: ForeignTarget
+               -> [CmmFormal]
+               -> [CmmActual]
+               -> (ForeignTarget -> [CmmFormal] -> [CmmActual] -> Graph CmmNode e x)
+               -> CPFacts
+               -> UniqSM (Maybe (Graph CmmNode e x))
 rwFunctionCall tgt res args fun facts@(_, regFacts) =
-     let (f1, tgt')  = rwForeignCallTarget facts    tgt
-         (f2, res')  = rwResults           regFacts res
-         (f3, args') = rwActual            facts    args
+     let (f1, tgt')  = rwForeignCallTarget tgt  facts
+         (f2, res')  = rwResults           res  regFacts
+         (f3, args') = rwActual            args facts
      in case sumChanges [f1, f2, f3] of
       SomeChange -> return . Just $ (fun tgt' res' args')
       NoChange   -> return Nothing
+
+rwForeignCallTarget :: ForeignTarget
+                    -> (CPFacts -> (ChangeFlag, ForeignTarget))
+rwForeignCallTarget (ForeignTarget expr conv) =
+    fmap (\e -> ForeignTarget e conv) . cmmMaybeRwWithDefault expr . flip cmmRwExpr
+rwForeignCallTarget target = const (NoChange, target)
+
+-- results or formal args?
+rwResults :: [CmmFormal] -> RegisterFacts -> (ChangeFlag, [CmmFormal])
+rwResults results regFacts =
+    case cmmRwRegs (wrapLocalReg results) regFacts of
+      Nothing  -> (NoChange  , results           )
+      Just res -> (SomeChange, unwrapCmmLocal res)
+    where
+      wrapLocalReg = map CmmLocal
+      unwrapCmmLocal []                    = []
+      unwrapCmmLocal (CmmLocal reg : regs) = reg : unwrapCmmLocal regs
+      unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs -- add panic here
+
+-- actual or arguments?
+rwActual :: [CmmActual] -> CPFacts -> (ChangeFlag, [CmmActual])
+rwActual arguments = cmmMaybeRwWithDefault arguments . flip cmmRwExprs
 
 -- takes a function to lookup facts, a function that wraps rewritten
 -- expression into a node, a set of facts and maybe returns a rewriten graph
@@ -198,28 +225,6 @@ rwCmmExprToGraphOC :: CmmExpr
                    -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O C)))
 rwCmmExprToGraphOC expr exprToNode =
     return . fmap (gUnitOC . (BlockOC BNil) . exprToNode) . cmmRwExpr expr
-
-rwForeignCallTarget :: CPFacts -> ForeignTarget -> (ChangeFlag, ForeignTarget)
-rwForeignCallTarget facts (ForeignTarget expr conv) =
-    (\e -> ForeignTarget e conv) <$> cmmMaybeRwWithDefault expr (flip cmmRwExpr $ facts)
-rwForeignCallTarget _ target = (NoChange, target)
-
--- results or formal args?
-rwResults :: RegisterFacts -> [CmmFormal] -> (ChangeFlag, [CmmFormal])
-rwResults regFacts results =
-    case cmmRwRegs (wrapLocalReg results) regFacts of
-      Nothing  -> (NoChange  , results           )
-      Just res -> (SomeChange, unwrapCmmLocal res)
-    where
-      wrapLocalReg = map CmmLocal
-      unwrapCmmLocal []                    = []
-      unwrapCmmLocal (CmmLocal reg : regs) = reg : unwrapCmmLocal regs
-      unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
-
--- actual or arguments?
-rwActual :: CPFacts -> [CmmActual] -> (ChangeFlag, [CmmActual])
-rwActual facts arguments =
-    cmmMaybeRwWithDefault arguments (flip cmmRwExprs $ facts)
 
 cmmMaybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
 cmmMaybeRwWithDefault def f =
@@ -262,5 +267,5 @@ cmmRwList f xs facts =
 -- other utility functions. This should probably go in some utility module
 sumChanges :: [ChangeFlag] -> ChangeFlag
 sumChanges []                = NoChange
-sumChanges (SomeChange : xs) = SomeChange
+sumChanges (SomeChange : _ ) = SomeChange
 sumChanges (_          : xs) = sumChanges xs
