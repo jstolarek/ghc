@@ -42,7 +42,13 @@ cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
               (changeFlag, (joinMem, joinReg))
     where (memChange, joinMem) = intersectFacts oldMem newMem
           (regChange, joinReg) = intersectFacts oldReg newReg
-          changeFlag           = addChanges [memChange, regChange]
+          changeFlag           = sumChanges [memChange, regChange]
+
+cpTransfer :: FwdTransfer CmmNode CPFacts
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
+    where cpTransferFirst _ fact = fact
+
+-- utility functions for lattice definition
 
 intersectFacts :: Ord v
                => AssignmentFacts v
@@ -59,10 +65,6 @@ intersectFacts (Info old) (Info new) = (flag      , Info facts)
         Just old_v -> if old_v == new_v
                       then (ch, M.insert k new_v joinmap)
                       else (SomeChange, joinmap)
-
-cpTransfer :: FwdTransfer CmmNode CPFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
-    where cpTransferFirst _ fact = fact
 
 -- I think that here I don't need to use gen and kill sets, because at any given
 -- time there is at most one fact about assignment to any given location. If we
@@ -118,7 +120,6 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CPFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
-
 -- R2 = R1         ======>    R2 = R1
 -- I32[old] = R2              I32[old] = R1
 cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
@@ -156,13 +157,8 @@ cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (cmmRwExpr rhs) (CmmAssign lhs)
 
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
-    (\facts@(_, regFacts) ->
-     let (f1, tgt')  = rwForeignCallTarget facts    tgt
-         (f2, res')  = rwResults           regFacts res
-         (f3, args') = rwActual            facts    args
-     in case addChanges [f1, f2, f3] of
-      SomeChange -> return . Just . GUnit . BMiddle . CmmUnsafeForeignCall tgt' res' $ args'
-      NoChange   -> return Nothing )
+    rwFunctionCall tgt res args (\t r a ->
+      GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
 
 cpRwMiddle _ _ = const $ return Nothing
 
@@ -173,18 +169,23 @@ cpRwLast      (CmmCondBranch pred  t f        ) = rwCmmExprToGraphOC pred   (\p 
 cpRwLast      (CmmSwitch     scrut labels     ) = rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
 cpRwLast call@(CmmCall { cml_target = target }) = rwCmmExprToGraphOC target (\t -> call {cml_target = t})
 cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
-    (\facts@(_, regFacts) ->
-    let (f1, tgt')  = rwForeignCallTarget facts    tgt
-        (f2, res')  = rwResults           regFacts res
-        (f3, args') = rwActual            facts    args
-    in case addChanges [f1, f2, f3] of
-         SomeChange -> return . Just . gUnitOC . (BlockOC BNil) . CmmForeignCall tgt' res' args' succ updfr $ intrbl
-         NoChange   -> return Nothing )
+    rwFunctionCall tgt res args (\t r a ->
+      gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
 cpRwLast _ = const $ return Nothing
 
 -- rewrite utility functions
 
-rwCmmExprToGraphOO :: (CPFacts -> Maybe CmmFact)
+rwFunctionCall tgt res args fun facts@(_, regFacts) =
+     let (f1, tgt')  = rwForeignCallTarget facts    tgt
+         (f2, res')  = rwResults           regFacts res
+         (f3, args') = rwActual            facts    args
+     in case sumChanges [f1, f2, f3] of
+      SomeChange -> return . Just $ (fun tgt' res' args')
+      NoChange   -> return Nothing
+
+-- takes a function to lookup facts, a function that wraps rewritten
+-- expression into a node, a set of facts and maybe returns a rewriten graph
+rwCmmExprToGraphOO :: (CPFacts -> Maybe CmmExpr)
                    -> (CmmExpr -> CmmNode O O)
                    -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O O)))
 rwCmmExprToGraphOO factLookup exprToNode =
@@ -259,7 +260,7 @@ cmmRwList f xs facts =
             Just x' -> (SomeChange, x': xs)
 
 -- other utility functions. This should probably go in some utility module
-addChanges :: [ChangeFlag] -> ChangeFlag
-addChanges []                = NoChange
-addChanges (SomeChange : xs) = SomeChange
-addChanges (_          : xs) = addChanges xs
+sumChanges :: [ChangeFlag] -> ChangeFlag
+sumChanges []                = NoChange
+sumChanges (SomeChange : xs) = SomeChange
+sumChanges (_          : xs) = sumChanges xs
