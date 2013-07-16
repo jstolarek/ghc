@@ -169,21 +169,26 @@ cpRwMiddle _ _ _ = return Nothing
 cpRwLast :: CmmNode O C
          -> CPFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast (CmmCondBranch pred t f) facts = return $ gUnitOC . (BlockOC BNil) . (\p -> CmmCondBranch p t f) <$> cmmRwExpr pred facts
-cpRwLast (CmmSwitch scrut labels) facts = return $ gUnitOC . (BlockOC BNil) . (\s -> CmmSwitch s labels) <$> cmmRwExpr scrut facts
-cpRwLast call@(CmmCall { cml_target = target }) facts = return $ gUnitOC . (BlockOC BNil) . (\t -> call {cml_target = t}) <$> cmmRwExpr target facts
-cpRwLast (CmmForeignCall tgt res args succ updfr intrbl) facts@(_, regFacts) =
-    case addChanges [f1, f2, f3] of
-      SomeChange -> return . Just . gUnitOC . (BlockOC BNil) . CmmForeignCall tgt' res' args' succ updfr $ intrbl
-      NoChange   -> return Nothing
-    where
-      (f1, tgt')  = rwForeignCallTarget facts    tgt
-      (f2, res')  = rwResults           regFacts res
-      (f3, args') = rwActual            facts    args
-
-cpRwLast _ _ = return Nothing
+cpRwLast      (CmmCondBranch pred  t f        ) = rwCmmExprToGraph pred   (\p -> CmmCondBranch p t f  )
+cpRwLast      (CmmSwitch     scrut labels     ) = rwCmmExprToGraph scrut  (\s -> CmmSwitch s labels   )
+cpRwLast call@(CmmCall { cml_target = target }) = rwCmmExprToGraph target (\t -> call {cml_target = t})
+cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
+    (\facts@(_, regFacts) ->
+    let (f1, tgt')  = rwForeignCallTarget facts    tgt
+        (f2, res')  = rwResults           regFacts res
+        (f3, args') = rwActual            facts    args
+    in case addChanges [f1, f2, f3] of
+         SomeChange -> return . Just . gUnitOC . (BlockOC BNil) . CmmForeignCall tgt' res' args' succ updfr $ intrbl
+         NoChange   -> return Nothing  )
+cpRwLast _ = const $ return Nothing
 
 -- rewrite utility functions
+
+rwCmmExprToGraph :: CmmExpr
+                 -> (CmmExpr -> CmmNode O C)
+                 -> CPFacts
+                 -> UniqSM (Maybe (Graph CmmNode O C))
+rwCmmExprToGraph expr rwFun = return . fmap (gUnitOC . (BlockOC BNil) . rwFun) . cmmRwExpr expr
 
 rwForeignCallTarget :: CPFacts -> ForeignTarget -> (ChangeFlag, ForeignTarget)
 rwForeignCallTarget facts (ForeignTarget expr conv) =
@@ -219,7 +224,7 @@ cmmRwExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
 cmmRwExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . cmmRwExprs params
 cmmRwExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . cmmRwExpr expr
 cmmRwExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . cmmRwReg reg . snd
-cmmRwExpr _ = const Nothing
+cmmRwExpr _                         = const Nothing
 
 cmmRwReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
 cmmRwReg reg (Info fact) =
@@ -239,10 +244,11 @@ cmmRwList f xs facts =
     case foldr rw (NoChange, []) xs of
       (NoChange  , _  ) -> Nothing
       (SomeChange, xs') -> Just xs'
-    where rw x (flag, xs) =
-              case f x facts of
-                Nothing -> (flag      , x : xs)
-                Just x' -> (SomeChange, x': xs)
+    where
+      rw x (flag, xs) =
+          case f x facts of
+            Nothing -> (flag      , x : xs)
+            Just x' -> (SomeChange, x': xs)
 
 -- other utility functions. This should probably go in some utility module
 addChanges :: [ChangeFlag] -> ChangeFlag
