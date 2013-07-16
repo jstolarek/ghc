@@ -12,13 +12,21 @@ import UniqSupply
 import Control.Arrow      as CA
 import qualified Data.Map as M
 
---todo: use cmmMachOpFold from CmmOpt to do constant folding after rewriting
+-----------------------------------------------------------------------------
+--                           Copy propagation pass
+-----------------------------------------------------------------------------
+
+-- todo: use cmmMachOpFold from CmmOpt to do constant folding after rewriting
 
 -- I'm not sure about []. Perhaps I should pass sth?
 cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
 cmmCopyPropagation dflags graph = do
      g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
+
+-----------------------------------------------------------------------------
+--                        Data types used as facts
+-----------------------------------------------------------------------------
 
 type RegisterLocation  = CmmReg
 type StackLocation     = (Area, Int)
@@ -33,6 +41,11 @@ type CPFacts           = (StackFacts, RegisterFacts)
 -- Info - hey, we know sth! If element is in the map we know its value. If it
 --        is not then we know we now nothing (Top!)
 
+-----------------------------------------------------------------------------
+--                              Lattice
+-----------------------------------------------------------------------------
+
+
 cpLattice :: DataflowLattice CPFacts
 cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
 
@@ -43,32 +56,19 @@ cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
           (regChange, joinReg) = intersectFacts oldReg newReg
           changeFlag           = sumChanges [memChange, regChange]
 
-cpTransfer :: FwdTransfer CmmNode CPFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
-    where cpTransferFirst _ fact = fact
-
--- utility functions for lattice definition
-
-intersectFacts :: Ord v
-               => AssignmentFacts v
-               -> AssignmentFacts v
-               -> (ChangeFlag, AssignmentFacts v)
-intersectFacts facts  Bottom         = (NoChange  ,      facts)
-intersectFacts Bottom facts          = (SomeChange,      facts)
-intersectFacts (Info old) (Info new) = (flag      , Info facts)
-  where
-    (flag, facts) = M.foldrWithKey add (NoChange, M.empty) new
-    add k new_v (ch, joinmap) =
-      case M.lookup k old of
-        Nothing    -> (SomeChange, joinmap)
-        Just old_v -> if old_v == new_v
-                      then (ch, M.insert k new_v joinmap)
-                      else (SomeChange, joinmap)
-
+-- convert this to note!!
 -- I think that here I don't need to use gen and kill sets, because at any given
 -- time there is at most one fact about assignment to any given location. If we
 -- are assigning to a location which is already in the list of facts, the old
 -- fact will be replaced by the new one
+
+-----------------------------------------------------------------------------
+--                          Transfer function
+-----------------------------------------------------------------------------
+
+cpTransfer :: FwdTransfer CmmNode CPFacts
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
+    where cpTransferFirst _ fact = fact
 
 cpTransferMiddle :: CmmNode O O -> CPFacts -> CPFacts
 
@@ -86,8 +86,9 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
     addStackFact (lhs, off) rhs
 cpTransferMiddle _ = id
 
-
--- utility functions for transfer functions
+-----------------------------------------------------------------------------
+--             Utility functions for adding and finding facts
+-----------------------------------------------------------------------------
 
 addStackFact :: StackLocation -> CmmFact -> CPFacts -> CPFacts
 addStackFact k v = CA.first $ addFact k v
@@ -109,7 +110,25 @@ lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CmmFact
 lookupAssignmentFact _ Bottom       = Nothing
 lookupAssignmentFact k (Info facts) = M.lookup k facts
 
--- rewrite functions
+intersectFacts :: Ord v
+               => AssignmentFacts v
+               -> AssignmentFacts v
+               -> (ChangeFlag, AssignmentFacts v)
+intersectFacts facts  Bottom         = (NoChange  ,      facts)
+intersectFacts Bottom facts          = (SomeChange,      facts)
+intersectFacts (Info old) (Info new) = (flag      , Info facts)
+  where
+    (flag, facts) = M.foldrWithKey add (NoChange, M.empty) new
+    add k new_v (ch, joinmap) =
+      case M.lookup k old of
+        Nothing    -> (SomeChange, joinmap)
+        Just old_v -> if old_v == new_v
+                      then (ch, M.insert k new_v joinmap)
+                      else (SomeChange, joinmap)
+
+-----------------------------------------------------------------------------
+--                     Node rewriting functions
+-----------------------------------------------------------------------------
 
 cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CPFacts
 cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
@@ -172,7 +191,9 @@ cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
 cpRwLast _ = const $ return Nothing
 
--- rewrite utility functions
+-----------------------------------------------------------------------------
+--                 Utility functions for node rewriting
+-----------------------------------------------------------------------------
 
 rwFunctionCall :: ForeignTarget
                -> [CmmFormal]
@@ -264,7 +285,10 @@ cmmRwList f xs facts =
             Nothing -> (flag      , x : xs)
             Just x' -> (SomeChange, x': xs)
 
--- other utility functions. This should probably go in some utility module
+-----------------------------------------------------------------------------
+--                        Other utility function
+-----------------------------------------------------------------------------
+
 sumChanges :: [ChangeFlag] -> ChangeFlag
 sumChanges []                = NoChange
 sumChanges (SomeChange : _ ) = SomeChange
