@@ -23,8 +23,7 @@ import qualified Data.Map as M
 --    related: [Rewriting function calls]
 --  * last equation of unwrapCmmLocal should cause compiler panic, because
 --    it should never be reached
-
-
+--  * move sumChanges to some utility module
 
 -----------------------------------------------------------------------------
 --                           Copy propagation pass
@@ -308,7 +307,7 @@ cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
     rwCmmExprToGraphOO (lookupStackFact (reg, off)) (CmmAssign lhs)
 
 cpRwMiddle _ (CmmAssign lhs rhs) =
-    rwCmmExprToGraphOO (cmmRwExpr rhs) (CmmAssign lhs)
+    rwCmmExprToGraphOO (rwCmmExpr rhs) (CmmAssign lhs)
 
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
@@ -318,13 +317,16 @@ cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
 cpRwLast :: CmmNode O C
          -> CPFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast      (CmmCondBranch pred  t f        ) = rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
-cpRwLast      (CmmSwitch     scrut labels     ) = rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
-cpRwLast call@(CmmCall { cml_target = target }) = rwCmmExprToGraphOC target (\t -> call {cml_target = t})
+cpRwLast _ = const $ return Nothing
+cpRwLast      (CmmCondBranch pred  t f        ) =
+    rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
+cpRwLast      (CmmSwitch     scrut labels     ) =
+    rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
+cpRwLast call@(CmmCall { cml_target = target }) =
+    rwCmmExprToGraphOC target (\t -> call {cml_target = t})
 cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
-cpRwLast _ = const $ return Nothing
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -366,12 +368,12 @@ rwForeignCall tgt res args fun facts@(_, regFacts) =
 rwForeignCallTarget :: ForeignTarget
                     -> (CPFacts -> (ChangeFlag, ForeignTarget))
 rwForeignCallTarget (ForeignTarget expr conv) =
-    fmap (\e -> ForeignTarget e conv) . cmmMaybeRwWithDefault expr . flip cmmRwExpr
+    fmap (\e -> ForeignTarget e conv) . cmmMaybeRwWithDefault expr . flip rwCmmExpr
 rwForeignCallTarget target = const (NoChange, target)
 
 rwForeignCallResults :: [CmmFormal] -> RegisterFacts -> (ChangeFlag, [CmmFormal])
 rwForeignCallResults results regFacts =
-    case cmmRwRegs (wrapLocalReg results) regFacts of
+    case rwCmmRegs (wrapLocalReg results) regFacts of
       Nothing  -> (NoChange  , results           )
       Just res -> (SomeChange, unwrapCmmLocal res)
     where
@@ -381,7 +383,7 @@ rwForeignCallResults results regFacts =
       unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
 
 rwForeignCallActual :: [CmmActual] -> CPFacts -> (ChangeFlag, [CmmActual])
-rwForeignCallActual arguments = cmmMaybeRwWithDefault arguments . flip cmmRwExprs
+rwForeignCallActual arguments = cmmMaybeRwWithDefault arguments . flip rwCmmExprs
 
 cmmMaybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
 cmmMaybeRwWithDefault def f =
@@ -411,40 +413,40 @@ rwCmmExprToGraphOC :: CmmExpr
                    -> (CmmExpr -> CmmNode O C)
                    -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O C)))
 rwCmmExprToGraphOC expr exprToNode =
-    return . fmap (gUnitOC . (BlockOC BNil) . exprToNode) . cmmRwExpr expr
+    return . fmap (gUnitOC . (BlockOC BNil) . exprToNode) . rwCmmExpr expr
 
--- cmmRwExpr takes a Cmm expression and a set of facts and attempts to
+-- rwCmmExpr takes a Cmm expression and a set of facts and attempts to
 -- recursively rewrite that expression. First two equations attempt to
 -- rewrite based on facts about a register of a stack area. Remaining
 -- equations recurse on Cmm expressions stored within other data
 -- constructors.
-cmmRwExpr :: CmmExpr -> CPFacts -> Maybe CmmExpr
-cmmRwExpr (CmmReg reg             ) = lookupRegisterFact reg
-cmmRwExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
-cmmRwExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . cmmRwExprs params
-cmmRwExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . cmmRwExpr expr
-cmmRwExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . cmmRwReg reg . snd
-cmmRwExpr _                         = const Nothing
+rwCmmExpr :: CmmExpr -> CPFacts -> Maybe CmmExpr
+rwCmmExpr (CmmReg reg             ) = lookupRegisterFact reg
+rwCmmExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
+rwCmmExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . rwCmmExprs params
+rwCmmExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . rwCmmExpr expr
+rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg reg . snd
+rwCmmExpr _                         = const Nothing
 
-cmmRwReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
-cmmRwReg reg (Info fact) =
+rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
+rwCmmReg reg (Info fact) =
     case M.lookup reg fact of
       Just (CmmReg reg') -> Just reg'
       _                  -> Nothing
-cmmRwReg _ _ = Nothing
+rwCmmReg _ _ = Nothing
 
-cmmRwExprs :: [CmmExpr] -> CPFacts -> Maybe [CmmExpr]
-cmmRwExprs = cmmRwList cmmRwExpr
+rwCmmExprs :: [CmmExpr] -> CPFacts -> Maybe [CmmExpr]
+rwCmmExprs = rwCmmList rwCmmExpr
 
-cmmRwRegs :: [CmmReg] -> RegisterFacts -> Maybe [CmmReg]
-cmmRwRegs = cmmRwList cmmRwReg
+rwCmmRegs :: [CmmReg] -> RegisterFacts -> Maybe [CmmReg]
+rwCmmRegs = rwCmmList rwCmmReg
 
--- cmmRwList takes a rewriting function and lifts it to a list. If at least
+-- rwCmmList takes a rewriting function and lifts it to a list. If at least
 -- one element of a list was rewritten then the result is a list containing
 -- both the rewritten elements and the not-rewritten ones. If none of the
 -- elements in the list was rewritten the result is Nothing.
-cmmRwList :: (a -> f -> Maybe a) -> [a] -> f -> Maybe [a]
-cmmRwList f xs facts =
+rwCmmList :: (a -> f -> Maybe a) -> [a] -> f -> Maybe [a]
+rwCmmList f xs facts =
     case foldr rw (NoChange, []) xs of
       (NoChange  , _  ) -> Nothing
       (SomeChange, xs') -> Just xs'
