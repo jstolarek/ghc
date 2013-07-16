@@ -12,7 +12,6 @@ import UniqSupply
 import Control.Applicative
 import Control.Arrow      as CA
 import qualified Data.Map as M
-import Data.Maybe
 
 --todo: use cmmMachOpFold from CmmOpt to do constant folding after rewriting
 
@@ -106,7 +105,7 @@ lookupRegisterFact :: RegisterLocation -> CPFacts -> Maybe CmmFact
 lookupRegisterFact k = lookupAssignmentFact k . snd
 
 lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CmmFact
-lookupAssignmentFact k Bottom       = Nothing
+lookupAssignmentFact _ Bottom       = Nothing
 lookupAssignmentFact k (Info facts) = M.lookup k facts
 
 -- rewrite functions
@@ -122,20 +121,20 @@ cpRwMiddle :: DynFlags
 
 -- R2 = R1         ======>    R2 = R1
 -- I32[old] = R2              I32[old] = R1
-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) (_, Info regFact) =
-    return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup rhs regFact
+cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+    rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmStore lhs)
 
 -- I32[old] = R1              ====>  I32[old] = R1
 -- I32[old + 4] = I32[old]           I32[old + 4] = R1
-cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) (Info memFact, _) =
-    return $ (GUnit . BMiddle . CmmStore lhs) `fmap` M.lookup (reg, off) memFact
+cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) =
+    rwCmmExprToGraphOO (lookupStackFact (reg, off)) (CmmStore lhs)
 
 -- I32[Sp] = 7    ====> I32[Sp]
-cpRwMiddle _ (CmmStore _ (CmmLit _)) _ = return Nothing
+cpRwMiddle _ (CmmStore _ (CmmLit _)) = const $ return Nothing
 
 --  I32[Sp] = expr  ====> Rx = expr
 --                        I32[Sp] = Rx
-cpRwMiddle dflags (CmmStore lhs rhs) _ = do
+cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
   u <- getUniqueUs
   let regSize      = cmmExprType dflags rhs
       newReg       = CmmLocal $ LocalReg u regSize
@@ -145,33 +144,34 @@ cpRwMiddle dflags (CmmStore lhs rhs) _ = do
 
 -- R2 = R1    =====>    R2 = R1
 -- R3 = R2              R3 = R1
-cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) (_, Info regFact) =
-    return $ (GUnit . BMiddle . CmmAssign lhs) <$> M.lookup rhs regFact
+cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
+    rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmAssign lhs)
 
 -- I32[Sp] = expr  =====> I32[Sp] = expr
 -- R1 = I32[Sp]           R1 = expr
-cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) (Info memFact, _) =
-    return $ (GUnit . BMiddle . CmmAssign lhs) <$> M.lookup (reg, off) memFact
+cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
+    rwCmmExprToGraphOO (lookupStackFact (reg, off)) (CmmAssign lhs)
 
-cpRwMiddle _ (CmmAssign lhs rhs) facts = return $ GUnit . BMiddle . CmmAssign lhs <$> cmmRwExpr rhs facts
+cpRwMiddle _ (CmmAssign lhs rhs) =
+    rwCmmExprToGraphOO (cmmRwExpr rhs) (CmmAssign lhs)
 
-cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) facts@(_, regFacts) =
-    case addChanges [f1, f2, f3] of
+cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
+    (\facts@(_, regFacts) ->
+     let (f1, tgt')  = rwForeignCallTarget facts    tgt
+         (f2, res')  = rwResults           regFacts res
+         (f3, args') = rwActual            facts    args
+     in case addChanges [f1, f2, f3] of
       SomeChange -> return . Just . GUnit . BMiddle . CmmUnsafeForeignCall tgt' res' $ args'
-      NoChange   -> return Nothing
-    where
-      (f1, tgt')  = rwForeignCallTarget facts    tgt
-      (f2, res')  = rwResults           regFacts res
-      (f3, args') = rwActual            facts    args
+      NoChange   -> return Nothing )
 
-cpRwMiddle _ _ _ = return Nothing
+cpRwMiddle _ _ = const $ return Nothing
 
 cpRwLast :: CmmNode O C
          -> CPFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast      (CmmCondBranch pred  t f        ) = rwCmmExprToGraph pred   (\p -> CmmCondBranch p t f  )
-cpRwLast      (CmmSwitch     scrut labels     ) = rwCmmExprToGraph scrut  (\s -> CmmSwitch s labels   )
-cpRwLast call@(CmmCall { cml_target = target }) = rwCmmExprToGraph target (\t -> call {cml_target = t})
+cpRwLast      (CmmCondBranch pred  t f        ) = rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
+cpRwLast      (CmmSwitch     scrut labels     ) = rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
+cpRwLast call@(CmmCall { cml_target = target }) = rwCmmExprToGraphOC target (\t -> call {cml_target = t})
 cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
     (\facts@(_, regFacts) ->
     let (f1, tgt')  = rwForeignCallTarget facts    tgt
@@ -179,16 +179,24 @@ cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
         (f3, args') = rwActual            facts    args
     in case addChanges [f1, f2, f3] of
          SomeChange -> return . Just . gUnitOC . (BlockOC BNil) . CmmForeignCall tgt' res' args' succ updfr $ intrbl
-         NoChange   -> return Nothing  )
+         NoChange   -> return Nothing )
 cpRwLast _ = const $ return Nothing
 
 -- rewrite utility functions
 
-rwCmmExprToGraph :: CmmExpr
-                 -> (CmmExpr -> CmmNode O C)
-                 -> CPFacts
-                 -> UniqSM (Maybe (Graph CmmNode O C))
-rwCmmExprToGraph expr rwFun = return . fmap (gUnitOC . (BlockOC BNil) . rwFun) . cmmRwExpr expr
+rwCmmExprToGraphOO :: (CPFacts -> Maybe CmmFact)
+                   -> (CmmExpr -> CmmNode O O)
+                   -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O O)))
+rwCmmExprToGraphOO factLookup exprToNode =
+    return . fmap (GUnit . BMiddle . exprToNode) . factLookup
+
+-- this function takes an expression to rewrite, a function that wraps rewritten
+-- expression into a node, a set of facts and maybe returns a rewriten graph
+rwCmmExprToGraphOC :: CmmExpr
+                   -> (CmmExpr -> CmmNode O C)
+                   -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O C)))
+rwCmmExprToGraphOC expr exprToNode =
+    return . fmap (gUnitOC . (BlockOC BNil) . exprToNode) . cmmRwExpr expr
 
 rwForeignCallTarget :: CPFacts -> ForeignTarget -> (ChangeFlag, ForeignTarget)
 rwForeignCallTarget facts (ForeignTarget expr conv) =
