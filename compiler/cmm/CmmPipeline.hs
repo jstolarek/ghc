@@ -97,11 +97,11 @@ cpsTop hsc_env proc =
                      Opt_D_dump_cmm_loopify "Loopify tail calls"
 
        ------------------ Copy propagation -------------------------------------
-       {-  Maybe enable this later
        g <- {-# SCC "copyPropagation" #-}
             condPassSM Opt_CmmCopyPropagation (cmmCopyPropagation dflags) g
                        Opt_D_dump_cmm_copy_prop "Copy propagation"
 
+       {-  Maybe enable this later
        ----------- Sink and inline assignments *before* stack layout -----------
        g <- {-# SCC "sink1" #-}
             condPass Opt_CmmSink (cmmSink dflags) g

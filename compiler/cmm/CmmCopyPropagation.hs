@@ -142,14 +142,15 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 cpTransferMiddle :: CmmNode O O -> CPFacts -> CPFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
     addRegisterFact lhs rhs
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =  -- HERE!
     addRegisterFact lhs rhs
+cpTransferMiddle _ = id
+{-
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
     addStackFact (lhs, off) rhs
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
     addStackFact (lhs, off) rhs
-cpTransferMiddle _ = id
-
+-}
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
 -----------------------------------------------------------------------------
@@ -161,17 +162,18 @@ cpTransferMiddle _ = id
 -- (old facts) are simply replaced by new ones. `first` and `second` functions
 -- are taken from Control.Arrows and help to avoid boilerplate related to
 -- handling values inside a tuple (remember that CPFacts is a tuple).
-
 addStackFact :: StackLocation -> CmmFact -> CPFacts -> CPFacts
 addStackFact k v = CA.first $ addFact k v
 
 addRegisterFact :: RegisterLocation -> CmmFact -> CPFacts -> CPFacts
-addRegisterFact k v = CA.second $ addFact k v
+--addRegisterFact k v = CA.second $ addFact k v
+addRegisterFact k v (m, fact) = (m, addFact k v fact)
 
 addFact :: Ord a => a -> CmmFact -> AssignmentFacts a -> AssignmentFacts a
 addFact k v Bottom       = Info $ M.singleton k v
 addFact k v (Info facts) = Info $ M.insert    k v facts
 
+{-
 lookupStackFact :: StackLocation -> CPFacts -> Maybe CmmFact
 lookupStackFact k = lookupAssignmentFact k . fst
 
@@ -181,7 +183,7 @@ lookupRegisterFact k = lookupAssignmentFact k . snd
 lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CmmFact
 lookupAssignmentFact _ Bottom       = Nothing
 lookupAssignmentFact k (Info facts) = M.lookup k facts
-
+-}
 -- See Note [Join operation for copy propagation]
 intersectFacts :: Ord v
                => AssignmentFacts v
@@ -284,7 +286,7 @@ cpRwMiddle :: DynFlags
            -> CPFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
 cpRwMiddle _ _ = const $ return Nothing
-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+{-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmStore lhs)
 
 cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) =
@@ -312,13 +314,13 @@ cpRwMiddle _ (CmmAssign lhs rhs) =
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
-
+-}
 
 cpRwLast :: CmmNode O C
          -> CPFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
 cpRwLast _ = const $ return Nothing
-cpRwLast      (CmmCondBranch pred  t f        ) =
+{-cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
 cpRwLast      (CmmSwitch     scrut labels     ) =
     rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
@@ -368,7 +370,7 @@ rwForeignCall tgt res args fun facts@(_, regFacts) =
 rwForeignCallTarget :: ForeignTarget
                     -> (CPFacts -> (ChangeFlag, ForeignTarget))
 rwForeignCallTarget (ForeignTarget expr conv) =
-    fmap (\e -> ForeignTarget e conv) . cmmMaybeRwWithDefault expr . flip rwCmmExpr
+    fmap (\e -> ForeignTarget e conv) . maybeRwWithDefault expr . flip rwCmmExpr
 rwForeignCallTarget target = const (NoChange, target)
 
 rwForeignCallResults :: [CmmFormal] -> RegisterFacts -> (ChangeFlag, [CmmFormal])
@@ -383,10 +385,10 @@ rwForeignCallResults results regFacts =
       unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
 
 rwForeignCallActual :: [CmmActual] -> CPFacts -> (ChangeFlag, [CmmActual])
-rwForeignCallActual arguments = cmmMaybeRwWithDefault arguments . flip rwCmmExprs
+rwForeignCallActual arguments = maybeRwWithDefault arguments . flip rwCmmExprs
 
-cmmMaybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
-cmmMaybeRwWithDefault def f =
+maybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
+maybeRwWithDefault def f =
     case f def of
       Nothing  -> (NoChange  , def)
       Just res -> (SomeChange, res)
@@ -460,6 +462,7 @@ rwCmmList f xs facts =
 --                        Other utility function
 -----------------------------------------------------------------------------
 
+-}
 -- Returns SomeChange if at least one element in the list is SomeChange.
 -- Otherwise returns NoChange.
 sumChanges :: [ChangeFlag] -> ChangeFlag
