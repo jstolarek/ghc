@@ -40,12 +40,13 @@ cmmCopyPropagation dflags graph = do
 
 type RegisterLocation  = CmmReg
 type StackLocation     = (Area, Int)
-type CmmFact           = CmmExpr
-data AssignmentFacts a = Bottom  -- See Note [Assignment facts lattice]
-                       | Info (M.Map a CmmExpr)
+data CpFact            = CpTop -- See Note [Assignment facts lattice]
+                       | Info CmmExpr
+                         deriving (Eq)
+type AssignmentFacts a = M.Map a CpFact
 type RegisterFacts     = AssignmentFacts RegisterLocation
 type StackFacts        = AssignmentFacts StackLocation
-type CPFacts           = (StackFacts, RegisterFacts)
+type CpFacts           = (StackFacts, RegisterFacts)
 
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,14 +78,14 @@ type CPFacts           = (StackFacts, RegisterFacts)
 --                              Lattice
 -----------------------------------------------------------------------------
 
-cpLattice :: DataflowLattice CPFacts
-cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
+cpLattice :: DataflowLattice CpFacts
+cpLattice = DataflowLattice "copy propagation" (M.empty, M.empty) cpJoin
 
-cpJoin :: JoinFun CPFacts
+cpJoin :: JoinFun CpFacts
 cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
               (changeFlag, (joinMem, joinReg))
-    where (memChange, joinMem) = intersectFacts oldMem newMem
-          (regChange, joinReg) = intersectFacts oldReg newReg
+    where (memChange, joinMem) = joinCpFacts oldMem newMem
+          (regChange, joinReg) = joinCpFacts oldReg newReg
           changeFlag           = sumChanges [memChange, regChange]
 
 -- Note [Join operation for copy propagation]
@@ -121,7 +122,7 @@ cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
 --                          Transfer function
 -----------------------------------------------------------------------------
 
-cpTransfer :: FwdTransfer CmmNode CPFacts
+cpTransfer :: FwdTransfer CmmNode CpFacts
 cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
     where cpTransferFirst _ fact = fact
 
@@ -139,10 +140,10 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 -- assignments don't appear in labels (entry nodes) and jumps, branches and
 -- function calls (exit nodes).
 
-cpTransferMiddle :: CmmNode O O -> CPFacts -> CPFacts
+cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
     addRegisterFact lhs rhs
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =  -- HERE!
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
     addRegisterFact lhs rhs
 cpTransferMiddle _ = id
 {-
@@ -161,51 +162,49 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
 -- We add new facts by inserting values into the map. In this way old values
 -- (old facts) are simply replaced by new ones. `first` and `second` functions
 -- are taken from Control.Arrows and help to avoid boilerplate related to
--- handling values inside a tuple (remember that CPFacts is a tuple).
-addStackFact :: StackLocation -> CmmFact -> CPFacts -> CPFacts
-addStackFact k v = CA.first $ addFact k v
+-- handling values inside a tuple (remember that CpFacts is a tuple).
+addStackFact :: StackLocation -> CmmExpr -> CpFacts -> CpFacts
+addStackFact k v = CA.first $ M.insertWith sumFacts k (Info v)
 
-addRegisterFact :: RegisterLocation -> CmmFact -> CPFacts -> CPFacts
---addRegisterFact k v = CA.second $ addFact k v
-addRegisterFact k v (m, fact) = (m, addFact k v fact)
+addRegisterFact :: RegisterLocation -> CmmExpr -> CpFacts -> CpFacts
+addRegisterFact k v = CA.second $ M.insertWith sumFacts k (Info v)
 
-addFact :: Ord a => a -> CmmFact -> AssignmentFacts a -> AssignmentFacts a
-addFact k v Bottom       = Info $ M.singleton k v
-addFact k v (Info facts) = Info $ M.insert    k v facts
+sumFacts :: CpFact -> CpFact -> CpFact
+sumFacts CpTop     _     = CpTop
+sumFacts _         CpTop = CpTop
+sumFacts (Info e1) (Info e2) | e1 == e2  = Info e1
+                             | otherwise = CpTop
 
 {-
-lookupStackFact :: StackLocation -> CPFacts -> Maybe CmmFact
+lookupStackFact :: StackLocation -> CpFacts -> Maybe CpFact
 lookupStackFact k = lookupAssignmentFact k . fst
 
-lookupRegisterFact :: RegisterLocation -> CPFacts -> Maybe CmmFact
+lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CpFact
 lookupRegisterFact k = lookupAssignmentFact k . snd
 
-lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CmmFact
+lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CpFact
 lookupAssignmentFact _ Bottom       = Nothing
 lookupAssignmentFact k (Info facts) = M.lookup k facts
 -}
 -- See Note [Join operation for copy propagation]
-intersectFacts :: Ord v
-               => AssignmentFacts v
-               -> AssignmentFacts v
-               -> (ChangeFlag, AssignmentFacts v)
-intersectFacts facts  Bottom         = (NoChange  ,      facts)
-intersectFacts Bottom facts          = (SomeChange,      facts)
-intersectFacts (Info old) (Info new) = (flag      , Info facts)
+joinCpFacts :: Ord v
+          => AssignmentFacts v
+          -> AssignmentFacts v
+          -> (ChangeFlag, AssignmentFacts v)
+joinCpFacts old new = M.foldrWithKey add (NoChange, M.empty) new
   where
-    (flag, facts) = M.foldrWithKey add (NoChange, M.empty) new
     add k new_v (ch, joinmap) =
       case M.lookup k old of
-        Nothing    -> (SomeChange, joinmap)
+        Nothing    -> (SomeChange, M.insert k new_v joinmap)
         Just old_v -> if old_v == new_v
-                      then (ch, M.insert k new_v joinmap)
-                      else (SomeChange, joinmap)
+                      then (ch        , M.insert k new_v joinmap)
+                      else (SomeChange, M.insert k CpTop joinmap)
 
 -----------------------------------------------------------------------------
 --                     Node rewriting functions
 -----------------------------------------------------------------------------
 
-cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CPFacts
+cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CpFacts
 cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
     where cpRwFirst _ _ = return Nothing
 
@@ -283,7 +282,7 @@ cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
 
 cpRwMiddle :: DynFlags
            -> CmmNode O O
-           -> CPFacts
+           -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
 cpRwMiddle _ _ = const $ return Nothing
 {-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
@@ -317,7 +316,7 @@ cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
 -}
 
 cpRwLast :: CmmNode O C
-         -> CPFacts
+         -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
 cpRwLast _ = const $ return Nothing
 {-cpRwLast      (CmmCondBranch pred  t f        ) =
@@ -357,7 +356,7 @@ rwForeignCall :: ForeignTarget
               -> [CmmFormal]
               -> [CmmActual]
               -> (ForeignTarget -> [CmmFormal] -> [CmmActual] -> Graph CmmNode e x)
-              -> CPFacts
+              -> CpFacts
               -> UniqSM (Maybe (Graph CmmNode e x))
 rwForeignCall tgt res args fun facts@(_, regFacts) =
      let (f1, tgt')  = rwForeignCallTarget  tgt  facts
@@ -368,7 +367,7 @@ rwForeignCall tgt res args fun facts@(_, regFacts) =
       NoChange   -> return Nothing
 
 rwForeignCallTarget :: ForeignTarget
-                    -> (CPFacts -> (ChangeFlag, ForeignTarget))
+                    -> (CpFacts -> (ChangeFlag, ForeignTarget))
 rwForeignCallTarget (ForeignTarget expr conv) =
     fmap (\e -> ForeignTarget e conv) . maybeRwWithDefault expr . flip rwCmmExpr
 rwForeignCallTarget target = const (NoChange, target)
@@ -384,7 +383,7 @@ rwForeignCallResults results regFacts =
       unwrapCmmLocal (CmmLocal reg : regs) = reg : unwrapCmmLocal regs
       unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
 
-rwForeignCallActual :: [CmmActual] -> CPFacts -> (ChangeFlag, [CmmActual])
+rwForeignCallActual :: [CmmActual] -> CpFacts -> (ChangeFlag, [CmmActual])
 rwForeignCallActual arguments = maybeRwWithDefault arguments . flip rwCmmExprs
 
 maybeRwWithDefault :: a -> (a -> Maybe a) -> (ChangeFlag, a)
@@ -394,26 +393,26 @@ maybeRwWithDefault def f =
       Just res -> (SomeChange, res)
 
 -- rwCmmExprToGraphOO function takes two functions as parameters:
---   * first function takes CPFacts and maybe rewrites a node based on
+--   * first function takes CpFacts and maybe rewrites a node based on
 --     those facts
 --   * second function that knows how to convert a rewritten expression
 --     into a CmmNode
--- rwCmmExprToGraphOO returns a function that accepts CPFacts and maybe
+-- rwCmmExprToGraphOO returns a function that accepts CpFacts and maybe
 -- returns a rewritten graph. This function is heavily used by cpRwMiddle.
-rwCmmExprToGraphOO :: (CPFacts -> Maybe CmmExpr)
+rwCmmExprToGraphOO :: (CpFacts -> Maybe CmmExpr)
                    -> (CmmExpr -> CmmNode O O)
-                   -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O O)))
+                   -> (CpFacts -> UniqSM (Maybe (Graph CmmNode O O)))
 rwCmmExprToGraphOO factLookup exprToNode =
     return . fmap (GUnit . BMiddle . exprToNode) . factLookup
 
 -- rwCmmExprToGraphOC function takes two parameters:
 --   * expression to rewrite
 --   * function that knows how to convert a rewritten expression into a CmmNode
--- rwCmmExprToGraphOC returns a function that accepts CPFacts and maybe
+-- rwCmmExprToGraphOC returns a function that accepts CpFacts and maybe
 -- returns a rewritten graph. This function is heavily used by cpRwLast.
 rwCmmExprToGraphOC :: CmmExpr
                    -> (CmmExpr -> CmmNode O C)
-                   -> (CPFacts -> UniqSM (Maybe (Graph CmmNode O C)))
+                   -> (CpFacts -> UniqSM (Maybe (Graph CmmNode O C)))
 rwCmmExprToGraphOC expr exprToNode =
     return . fmap (gUnitOC . (BlockOC BNil) . exprToNode) . rwCmmExpr expr
 
@@ -422,7 +421,7 @@ rwCmmExprToGraphOC expr exprToNode =
 -- rewrite based on facts about a register of a stack area. Remaining
 -- equations recurse on Cmm expressions stored within other data
 -- constructors.
-rwCmmExpr :: CmmExpr -> CPFacts -> Maybe CmmExpr
+rwCmmExpr :: CmmExpr -> CpFacts -> Maybe CmmExpr
 rwCmmExpr (CmmReg reg             ) = lookupRegisterFact reg
 rwCmmExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
 rwCmmExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . rwCmmExprs params
@@ -437,7 +436,7 @@ rwCmmReg reg (Info fact) =
       _                  -> Nothing
 rwCmmReg _ _ = Nothing
 
-rwCmmExprs :: [CmmExpr] -> CPFacts -> Maybe [CmmExpr]
+rwCmmExprs :: [CmmExpr] -> CpFacts -> Maybe [CmmExpr]
 rwCmmExprs = rwCmmList rwCmmExpr
 
 rwCmmRegs :: [CmmReg] -> RegisterFacts -> Maybe [CmmReg]
