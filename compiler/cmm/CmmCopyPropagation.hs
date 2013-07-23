@@ -7,9 +7,11 @@ import Cmm
 import CmmUtils
 import DynFlags
 import Hoopl
+import Panic
 import UniqSupply
 
 import Control.Arrow      as CA
+import Control.Monad
 import qualified Data.Map as M
 
 -- A TODO and FIXME list for this module:
@@ -21,8 +23,6 @@ import qualified Data.Map as M
 --    arguments. Which name is better to use? related: rwActual and some notes
 --    There is a similar problem witg results vs. formals (see rwResults).
 --    related: [Rewriting function calls]
---  * last equation of unwrapCmmLocal should cause compiler panic, because
---    it should never be reached
 --  * move sumChanges to some utility module
 
 -----------------------------------------------------------------------------
@@ -50,6 +50,7 @@ type CpFacts           = (StackFacts, RegisterFacts)
 
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
 -- We distinguish two kinds of facts. First are the assignments to registers,
 -- which are refered to by a value of CmmReg. Second are the assignments to
 -- stack locations, which are represented by a tuple (Area, Int). Since this
@@ -142,16 +143,19 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 
 cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit _)) =
-    addRegisterFact lhs rhs
+    addRegisterFact lhs (Info rhs)
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg _)) =
-    addRegisterFact lhs rhs
-cpTransferMiddle _ = id
-{-
+    addRegisterFact lhs (Info rhs)
+cpTransferMiddle (CmmAssign lhs _             ) =
+    addRegisterFact lhs CpTop
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
-    addStackFact (lhs, off) rhs
+    addStackFact (lhs, off) (Info rhs)
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
-    addStackFact (lhs, off) rhs
--}
+    addStackFact (lhs, off) (Info rhs)
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) =
+    addStackFact (lhs, off) CpTop
+cpTransferMiddle _ = id
+
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
 -----------------------------------------------------------------------------
@@ -163,11 +167,11 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
 -- (old facts) are simply replaced by new ones. `first` and `second` functions
 -- are taken from Control.Arrows and help to avoid boilerplate related to
 -- handling values inside a tuple (remember that CpFacts is a tuple).
-addStackFact :: StackLocation -> CmmExpr -> CpFacts -> CpFacts
-addStackFact k v = CA.first $ M.insertWith sumFacts k (Info v)
+addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
+addStackFact k = CA.first . M.insertWith sumFacts k
 
-addRegisterFact :: RegisterLocation -> CmmExpr -> CpFacts -> CpFacts
-addRegisterFact k v = CA.second $ M.insertWith sumFacts k (Info v)
+addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
+addRegisterFact k = CA.second . M.insertWith sumFacts k
 
 sumFacts :: CpFact -> CpFact -> CpFact
 sumFacts CpTop     _     = CpTop
@@ -175,23 +179,22 @@ sumFacts _         CpTop = CpTop
 sumFacts (Info e1) (Info e2) | e1 == e2  = Info e1
                              | otherwise = CpTop
 
-{-
-lookupStackFact :: StackLocation -> CpFacts -> Maybe CpFact
-lookupStackFact k = lookupAssignmentFact k . fst
+lookupStackFact :: StackLocation -> CpFacts -> Maybe CmmExpr
+lookupStackFact k = maybeCmmExpr <=< M.lookup k . fst
 
-lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CpFact
-lookupRegisterFact k = lookupAssignmentFact k . snd
+lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CmmExpr
+lookupRegisterFact k = maybeCmmExpr <=< M.lookup k . snd
 
-lookupAssignmentFact :: Ord a => a -> AssignmentFacts a -> Maybe CpFact
-lookupAssignmentFact _ Bottom       = Nothing
-lookupAssignmentFact k (Info facts) = M.lookup k facts
--}
+maybeCmmExpr :: CpFact -> Maybe CmmExpr
+maybeCmmExpr CpTop       = Nothing
+maybeCmmExpr (Info fact) = Just fact
+
 -- See Note [Join operation for copy propagation]
 joinCpFacts :: Ord v
-          => AssignmentFacts v
-          -> AssignmentFacts v
-          -> (ChangeFlag, AssignmentFacts v)
-joinCpFacts old new = M.foldrWithKey add (NoChange, M.empty) new
+            => AssignmentFacts v
+            -> AssignmentFacts v
+            -> (ChangeFlag, AssignmentFacts v)
+joinCpFacts old new = M.foldrWithKey add (NoChange, old) new
   where
     add k new_v (ch, joinmap) =
       case M.lookup k old of
@@ -284,8 +287,7 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
-cpRwMiddle _ _ = const $ return Nothing
-{-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmStore lhs)
 
 cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) =
@@ -301,7 +303,7 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
       newMemAssign = CmmStore lhs (CmmReg newReg)
   return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
 
-cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
+cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =   --  <--- Bootstraping freeze
     rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmAssign lhs)
 
 cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
@@ -310,24 +312,31 @@ cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (rwCmmExpr rhs) (CmmAssign lhs)
 
+
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
--}
+
+cpRwMiddle _ _ = const $ return Nothing
+
 
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast _ = const $ return Nothing
-{-cpRwLast      (CmmCondBranch pred  t f        ) =
+cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
+
 cpRwLast      (CmmSwitch     scrut labels     ) =
     rwCmmExprToGraphOC scrut  (\s -> CmmSwitch s labels   )
+
 cpRwLast call@(CmmCall { cml_target = target }) =
     rwCmmExprToGraphOC target (\t -> call {cml_target = t})
+
 cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
+
+cpRwLast _ = const $ return Nothing
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -363,8 +372,8 @@ rwForeignCall tgt res args fun facts@(_, regFacts) =
          (f2, res')  = rwForeignCallResults res  regFacts
          (f3, args') = rwForeignCallActual  args facts
      in case sumChanges [f1, f2, f3] of
-      SomeChange -> return . Just $ (fun tgt' res' args')
-      NoChange   -> return Nothing
+          SomeChange -> return . Just $ (fun tgt' res' args')
+          NoChange   -> return Nothing
 
 rwForeignCallTarget :: ForeignTarget
                     -> (CpFacts -> (ChangeFlag, ForeignTarget))
@@ -372,6 +381,8 @@ rwForeignCallTarget (ForeignTarget expr conv) =
     fmap (\e -> ForeignTarget e conv) . maybeRwWithDefault expr . flip rwCmmExpr
 rwForeignCallTarget target = const (NoChange, target)
 
+-- CmmFormal is a synonym to LocalReg. This means we need to wrap it in CmmLocal
+-- consstructor to rewrite it. After rewriting we unwrap the CmmLocal constructor.
 rwForeignCallResults :: [CmmFormal] -> RegisterFacts -> (ChangeFlag, [CmmFormal])
 rwForeignCallResults results regFacts =
     case rwCmmRegs (wrapLocalReg results) regFacts of
@@ -381,7 +392,7 @@ rwForeignCallResults results regFacts =
       wrapLocalReg = map CmmLocal
       unwrapCmmLocal []                    = []
       unwrapCmmLocal (CmmLocal reg : regs) = reg : unwrapCmmLocal regs
-      unwrapCmmLocal (_            : regs) =       unwrapCmmLocal regs
+      unwrapCmmLocal _                     = panic "Call result in global register"
 
 rwForeignCallActual :: [CmmActual] -> CpFacts -> (ChangeFlag, [CmmActual])
 rwForeignCallActual arguments = maybeRwWithDefault arguments . flip rwCmmExprs
@@ -430,11 +441,10 @@ rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg re
 rwCmmExpr _                         = const Nothing
 
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
-rwCmmReg reg (Info fact) =
+rwCmmReg reg fact =
     case M.lookup reg fact of
-      Just (CmmReg reg') -> Just reg'
-      _                  -> Nothing
-rwCmmReg _ _ = Nothing
+      Just (Info (CmmReg reg')) -> Just reg'
+      _                         -> Nothing
 
 rwCmmExprs :: [CmmExpr] -> CpFacts -> Maybe [CmmExpr]
 rwCmmExprs = rwCmmList rwCmmExpr
@@ -461,7 +471,6 @@ rwCmmList f xs facts =
 --                        Other utility function
 -----------------------------------------------------------------------------
 
--}
 -- Returns SomeChange if at least one element in the list is SomeChange.
 -- Otherwise returns NoChange.
 sumChanges :: [ChangeFlag] -> ChangeFlag
