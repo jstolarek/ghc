@@ -31,8 +31,10 @@ import qualified Data.Map as M
 
 cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
 cmmCopyPropagation dflags graph = do
-     g' <- dataflowPassFwd graph [] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
-     return . fst $ g'
+    let entry_blk = g_entry graph
+    g' <- dataflowPassFwd graph [(entry_blk, (TopMinus M.empty, TopMinus M.empty))] $
+            analRewFwd cpLattice cpTransfer (cpRewrite dflags)
+    return . fst $ g'
 
 -----------------------------------------------------------------------------
 --                        Data types used as facts
@@ -43,10 +45,16 @@ type StackLocation     = (Area, Int)
 data CpFact            = CpTop -- See Note [Assignment facts lattice]
                        | Info CmmExpr
                          deriving (Eq)
-type AssignmentFacts a = M.Map a CpFact
+type AssignmentFact  a = M.Map a CpFact
+data AssignmentFacts a = TopMinus   (AssignmentFact a)
+                       | BottomPlus (AssignmentFact a)
 type RegisterFacts     = AssignmentFacts RegisterLocation
 type StackFacts        = AssignmentFacts StackLocation
 type CpFacts           = (StackFacts, RegisterFacts)
+
+unwrapAFs :: AssignmentFacts a -> AssignmentFact a
+unwrapAFs (TopMinus   af) = af
+unwrapAFs (BottomPlus af) = af
 
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -80,7 +88,8 @@ type CpFacts           = (StackFacts, RegisterFacts)
 -----------------------------------------------------------------------------
 
 cpLattice :: DataflowLattice CpFacts
-cpLattice = DataflowLattice "copy propagation" (M.empty, M.empty) cpJoin
+cpLattice = DataflowLattice "copy propagation"
+                            (BottomPlus M.empty, BottomPlus M.empty) cpJoin
 
 cpJoin :: JoinFun CpFacts
 cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
@@ -168,22 +177,40 @@ cpTransferMiddle _ = id
 -- are taken from Control.Arrows and help to avoid boilerplate related to
 -- handling values inside a tuple (remember that CpFacts is a tuple).
 addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
-addStackFact k = CA.first . M.insertWith sumFacts k
+addStackFact k v = CA.first (addFact k v)
 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
-addRegisterFact k = CA.second . M.insertWith sumFacts k
+addRegisterFact k v = CA.second (addFact k v)
+
+addFact :: Ord a => a -> CpFact -> AssignmentFacts a -> AssignmentFacts a
+addFact k v (TopMinus   m) = TopMinus   (insertToTopMinus      k v m)
+addFact k v (BottomPlus m) = BottomPlus (M.insertWith sumFacts k v m)
 
 sumFacts :: CpFact -> CpFact -> CpFact
-sumFacts CpTop     _     = CpTop
-sumFacts _         CpTop = CpTop
-sumFacts (Info e1) (Info e2) | e1 == e2  = Info e1
-                             | otherwise = CpTop
+sumFacts f1 f2 | sumToTop f1 f2 = CpTop
+               | otherwise      = f1
+
+sumToTop :: CpFact -> CpFact -> Bool
+sumToTop CpTop     _         = True
+sumToTop _         CpTop     = True
+sumToTop (Info e1) (Info e2) = e1 /= e2
+
+-- if we try to insert CpTop fact into TopMinus set of facts, we need tp
+-- remove fact under the corresponding key
+insertToTopMinus :: Ord a => a -> CpFact -> AssignmentFact a -> AssignmentFact a
+insertToTopMinus k CpTop m = M.delete k m
+insertToTopMinus k v m =
+    case M.lookup k m of
+      Nothing -> M.insert k v m
+      Just v' -> if sumToTop v v'
+                 then M.delete k m
+                 else m -- v' and v are the same, no change
 
 lookupStackFact :: StackLocation -> CpFacts -> Maybe CmmExpr
-lookupStackFact k = maybeCmmExpr <=< M.lookup k . fst
+lookupStackFact k = maybeCmmExpr <=< M.lookup k . unwrapAFs . fst
 
 lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CmmExpr
-lookupRegisterFact k = maybeCmmExpr <=< M.lookup k . snd
+lookupRegisterFact k = maybeCmmExpr <=< M.lookup k . unwrapAFs . snd
 
 maybeCmmExpr :: CpFact -> Maybe CmmExpr
 maybeCmmExpr CpTop       = Nothing
@@ -194,14 +221,47 @@ joinCpFacts :: Ord v
             => AssignmentFacts v
             -> AssignmentFacts v
             -> (ChangeFlag, AssignmentFacts v)
-joinCpFacts old new = M.foldrWithKey add (NoChange, old) new
-  where
-    add k new_v (ch, joinmap) =
-      case M.lookup k old of
-        Nothing    -> (SomeChange, M.insert k new_v joinmap)
-        Just old_v -> if old_v == new_v
-                      then (ch        , M.insert k new_v joinmap)
-                      else (SomeChange, M.insert k CpTop joinmap)
+joinCpFacts (TopMinus   old) (TopMinus   new) =
+    TopMinus   `fmap` M.foldrWithKey add (NoChange, M.empty) new
+        where
+          add k new_v (ch, joinmap) =
+              case M.lookup k old of
+                Nothing    -> (SomeChange, joinmap)
+                Just old_v -> if old_v == new_v
+                              then (ch        , M.insert k new_v joinmap)
+                              else (SomeChange,                  joinmap)
+
+joinCpFacts (TopMinus   old) (BottomPlus new) =
+    TopMinus   `fmap` M.foldrWithKey add (NoChange, old) new
+        where
+          add k new_v (ch, joinmap) =
+              case M.lookup k old of
+                Nothing    -> case new_v of -- mark new element as top
+                                CpTop -> (NoChange  , joinmap) -- if new element is top there is no change in facts
+                                _     -> (SomeChange, joinmap) -- if it was Info there is a change because now it is Top
+                Just old_v -> if old_v == new_v
+                              then (ch        , joinmap) -- no need to insert, already in the map
+                              else (SomeChange, M.delete k joinmap) -- mark k as Top by removing it from map
+
+joinCpFacts (BottomPlus old) (TopMinus   new) =
+    TopMinus   `fmap` M.foldrWithKey add (NoChange, M.empty) new
+        where
+          add k new_v (ch, joinmap) =
+              case M.lookup k old of
+                Nothing    -> (SomeChange, M.insert k new_v joinmap)
+                Just old_v -> if old_v == new_v
+                              then (ch        , M.insert k new_v joinmap)
+                              else (SomeChange,                  joinmap)
+
+joinCpFacts (BottomPlus old) (BottomPlus new) =
+    BottomPlus `fmap` M.foldrWithKey add (NoChange, old) new
+        where
+          add k new_v (ch, joinmap) =
+              case M.lookup k old of
+                Nothing    -> (SomeChange, M.insert k new_v joinmap)
+                Just old_v -> if old_v == new_v
+                              then (ch        , M.insert k new_v joinmap)
+                              else (SomeChange, M.insert k CpTop joinmap)
 
 -----------------------------------------------------------------------------
 --                     Node rewriting functions
@@ -287,6 +347,7 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
+cpRwMiddle _ _ = const $ return Nothing
 cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (lookupRegisterFact rhs) (CmmStore lhs)
 
@@ -312,17 +373,16 @@ cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (rwCmmExpr rhs) (CmmAssign lhs)
 
-
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
-
-cpRwMiddle _ _ = const $ return Nothing
 
 
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
+cpRwLast _ = const $ return Nothing
+
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC pred   (\p -> CmmCondBranch p t f  )
 
@@ -336,7 +396,6 @@ cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
 
-cpRwLast _ = const $ return Nothing
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -442,7 +501,7 @@ rwCmmExpr _                         = const Nothing
 
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
 rwCmmReg reg fact =
-    case M.lookup reg fact of
+    case M.lookup reg (unwrapAFs fact) of
       Just (Info (CmmReg reg')) -> Just reg'
       _                         -> Nothing
 
