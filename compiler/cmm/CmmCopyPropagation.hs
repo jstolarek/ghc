@@ -325,15 +325,15 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
 cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (CmmAssign lhs) (lookupRegisterFact rhs)
 
-cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
-    rwCmmExprToGraphOO (CmmAssign lhs) (lookupStackFact (reg, off))
+--cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
+--    rwCmmExprToGraphOO (CmmAssign lhs) (lookupStackFact (reg, off))
 
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
 
-cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
-    rwForeignCall tgt res args (\t r a ->
-    GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
+--cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
+--    rwForeignCall tgt res args (\t r a ->
+--    GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
 
 cpRwMiddle _ _ = const $ return Nothing
 
@@ -349,9 +349,9 @@ cpRwLast      (CmmSwitch     scrut labels     ) =
 cpRwLast call@(CmmCall { cml_target = target }) =
     rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
 
-cpRwLast      (CmmForeignCall tgt res args succ updfr intrbl) =
+cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
-      gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ updfr $ intrbl)
+      gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ ret_args ret_off $ intrbl)
 
 cpRwLast _ = const $ return Nothing
 
