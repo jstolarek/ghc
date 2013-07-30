@@ -35,11 +35,12 @@ import qualified Data.Set as S
 cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
 cmmCopyPropagation dflags graph = do
      let entry_blk      = g_entry graph
-         liveness       = cmmGlobalLiveness dflags $ graph
+       {-  liveness       = cmmGlobalLiveness dflags $ graph
          entryLiveness  = expectJust "entry to copy propagation" $ mapLookup entry_blk liveness
          liveGlobalRegs = map (\r -> (CmmGlobal r, CpTop)) . S.toList $ entryLiveness
-         entryRegFacts  = M.fromList liveGlobalRegs
-     g' <- dataflowPassFwd graph [(entry_blk, (M.empty, entryRegFacts))] $ analRewFwd cpLattice cpTransfer (cpRewrite dflags)
+         entryRegFacts  = M.fromList liveGlobalRegs-}
+     g' <- dataflowPassFwd graph [(entry_blk, (Const M.empty, Const M.empty))] $
+           analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
 -----------------------------------------------------------------------------
@@ -48,12 +49,12 @@ cmmCopyPropagation dflags graph = do
 
 type RegisterLocation  = CmmReg
 type StackLocation     = (Area, Int)
-data CpFact            = CpTop -- See Note [Assignment facts lattice]
-                       | CpInfo CmmExpr
-                         deriving (Eq)
-type AssignmentFacts a = M.Map a CpFact
-type RegisterFacts     = AssignmentFacts RegisterLocation
-type StackFacts        = AssignmentFacts StackLocation
+type CpFact            = CmmExpr -- See Note [Assignment facts lattice]
+type AssignmentFact  a = M.Map a CpFact
+data AssignmentFactBot a = Bottom
+                         | Const (AssignmentFact a)
+type RegisterFacts     = AssignmentFactBot RegisterLocation
+type StackFacts        = AssignmentFactBot StackLocation
 type CpFacts           = (StackFacts, RegisterFacts)
 
 -- Note [Copy propagation facts]
@@ -88,7 +89,7 @@ type CpFacts           = (StackFacts, RegisterFacts)
 -----------------------------------------------------------------------------
 
 cpLattice :: DataflowLattice CpFacts
-cpLattice = DataflowLattice "copy propagation" (M.empty, M.empty) cpJoin
+cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
 
 cpJoin :: JoinFun CpFacts
 cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
@@ -151,19 +152,19 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 
 cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit   _)) =
-    addRegisterFact lhs (CpInfo rhs)
+    addRegisterFact lhs rhs
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) = (\facts ->
     if lhs /= reg  -- if we register facts like R1 = R1 then rewriting will go into an infinite loop
-    then addRegisterFact lhs (CpInfo rhs) facts
+    then addRegisterFact lhs rhs facts
     else facts)
 cpTransferMiddle (CmmAssign lhs               _ ) =
-    addRegisterFact lhs CpTop
--- cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
---     addStackFact (lhs, off) (CpInfo rhs)
--- cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
---     addStackFact (lhs, off) (CpInfo rhs)
--- cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) =
---     addStackFact (lhs, off) CpTop
+    dropRegisterFact lhs
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
+    addStackFact (lhs, off) rhs
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
+    addStackFact (lhs, off) rhs
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) =
+    dropStackFact (lhs, off)
 cpTransferMiddle _ = id
 
 -----------------------------------------------------------------------------
@@ -177,42 +178,90 @@ cpTransferMiddle _ = id
 -- (old facts) are simply replaced by new ones. `first` and `second` functions
 -- are taken from Control.Arrows and help to avoid boilerplate related to
 -- handling values inside a tuple (remember that CpFacts is a tuple).
+
 addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
-addStackFact k = CA.first . M.insertWith sumFacts k
+addStackFact _   _   (Bottom,     _) = panic "Adding stack facts to Bottom"
+addStackFact lhs rhs fs@(Const stkFs, regFs) =
+    case lookupStackFact lhs fs of
+      Nothing -> (Const $ M.insert lhs rhs stkFs, regFs) -- previous fact about lhs was NAC, but now lhs ia constant
+      Just fact -> if fact == rhs
+                   then fs -- we already know that fact, nothing happens
+                   else (Const $ M.delete lhs stkFs, regFs) -- we learned sth inconsistent with previous knowledge, set lhs = NAC
 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
-addRegisterFact k = CA.second . M.insertWith sumFacts k
+addRegisterFact lhs rhs fs@(Const stkFs, Const regFs) =
+    case lookupRegisterFact lhs fs of
+      Nothing   -> (Const stkFs, Const $ M.insert lhs rhs regFs) -- previous fact about lhs was NAC, but now lhs ia constant
+      Just fact -> if fact == rhs
+                   then fs -- we already know that fact, nothing happens
+                   else let (stkFs', regFs') = killDefs lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
+                        in (Const stkFs', Const $ M.insert lhs rhs regFs') -- and add new fact about register
+addRegisterFact _   _   _ = panic "Adding register facts to Bottom"
 
+killDefs :: (Ord a, Ord b)
+         => RegisterLocation
+         -> (AssignmentFact a, AssignmentFact b)
+         -> (AssignmentFact a, AssignmentFact b)
+killDefs reg (stkFs, regFs) = (stkFs', regFs')
+    where expr   = CmmReg reg
+          stkFs' = M.foldrWithKey add M.empty stkFs
+          regFs' = M.foldrWithKey add M.empty regFs
+          add :: Ord a => a -> CpFact -> AssignmentFact a -> AssignmentFact a
+          add k f acc = if f == expr
+                        then acc
+                        else M.insert k f acc
+
+dropStackFact :: StackLocation -> CpFacts -> CpFacts
+dropStackFact lhs = CA.first (dropFact lhs)
+
+dropRegisterFact :: RegisterLocation -> CpFacts -> CpFacts
+dropRegisterFact lhs (Const stkFs, Const regFs) = (Const stkFs', Const regFs')
+    where (stkFs', regFs') = killDefs lhs (stkFs, regFs)
+dropRegisterFact _ _ = panic "Dropping facts from bottom"
+
+dropFact :: Ord a => a -> AssignmentFactBot a -> AssignmentFactBot a
+dropFact k (Const m) = Const (M.delete k m)
+dropFact _  Bottom   = panic "Removing facts from Bottom"
+
+lookupStackFact :: StackLocation -> CpFacts -> Maybe CpFact
+lookupStackFact k = lookupCpFact k . fst
+
+lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CpFact
+lookupRegisterFact k = lookupCpFact k . snd
+
+lookupCpFact :: Ord a => a -> AssignmentFactBot a -> Maybe CpFact
+lookupCpFact k (Const m) = M.lookup k m
+lookupCpFact _  Bottom   = panic "Looking for facts in bottom"
+
+{-
 sumFacts :: CpFact -> CpFact -> CpFact
 sumFacts CpTop        _     = CpTop
 sumFacts _            CpTop = CpTop
 sumFacts (CpInfo e1) (CpInfo e2) | e1 == e2  = CpInfo e1
                                  | otherwise = CpTop
 
-lookupStackFact :: StackLocation -> CpFacts -> Maybe CmmExpr
-lookupStackFact k = maybeCmmExpr <=< M.lookup k . fst
-
-lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CmmExpr
-lookupRegisterFact k = maybeCmmExpr <=< M.lookup k . snd
-
 maybeCmmExpr :: CpFact -> Maybe CmmExpr
 maybeCmmExpr  CpTop        = Nothing
 maybeCmmExpr (CpInfo fact) = Just fact
+-}
 
 -- See Note [Join operation for copy propagation]
 joinCpFacts :: Ord v
-            => AssignmentFacts v
-            -> AssignmentFacts v
-            -> (ChangeFlag, AssignmentFacts v)
-joinCpFacts old new = M.foldrWithKey add (NoChange, old) new
+            => AssignmentFactBot v
+            -> AssignmentFactBot v
+            -> (ChangeFlag, AssignmentFactBot v)
+joinCpFacts        old   Bottom     = (NoChange, old)
+joinCpFacts (Const old) (Const new) =
+    CA.second Const $ M.foldrWithKey add (NoChange, M.empty) old
   where
-    add k new_f (ch, joinmap) =
-      case M.lookup k old of
-        Nothing    -> (SomeChange, M.insert k new_f joinmap)
-        Just old_f -> let sum_f = sumFacts old_f new_f
-                      in if old_f == sum_f
-                         then (ch        ,                  joinmap)
-                         else (SomeChange, M.insert k sum_f joinmap)
+    add k old_f (ch, joinmap) =
+      case M.lookup k new of
+        Nothing    -> (SomeChange, joinmap)
+        Just new_f -> if old_f == new_f
+                      then (ch        , M.insert k old_f joinmap)
+                      else (SomeChange,                  joinmap)
+joinCpFacts Bottom Bottom    = panic "Joining bottom with bottom"
+joinCpFacts Bottom (Const _) = panic "Joining bottom with const"
 
 -----------------------------------------------------------------------------
 --                     Node rewriting functions
@@ -298,9 +347,39 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
+-- if we store a register, attempt to rewrite it
 cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
 
+-- otherwise we create a new register, assign previously stored expression to that
+-- new register, and store the new register
+{-
+-- this causes out of memory errors (inifinite loop?)
+cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
+  u <- getUniqueUs
+  let regSize      = cmmExprType dflags rhs
+      newReg       = CmmLocal $ LocalReg u regSize
+      newRegAssign = CmmAssign newReg rhs
+      newMemAssign = CmmStore lhs (CmmReg newReg)
+  return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
+-}
+cpRwMiddle _ (CmmAssign lhs rhs) =
+    rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
+
+cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
+    rwForeignCall tgt res args (\t r a ->
+      GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
+
+cpRwMiddle _ _ = const $ return Nothing
+
+-- these two are not needed - rwCmmExpr does that
+--cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
+--    rwCmmExprToGraphOO (CmmAssign lhs) (lookupRegisterFact rhs)
+
+--cpRwMiddle _ (CmmStore lhs rhs) =
+--    rwCmmExprToGraphOO (CmmStore lhs) (rwCmmExpr rhs)
+--cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
+--    rwCmmExprToGraphOO (CmmAssign lhs) (lookupStackFact (reg, off))
 --cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) =
 --    rwCmmExprToGraphOO (CmmStore lhs) (lookupStackFact (reg, off))
 
@@ -312,30 +391,6 @@ cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
 
 --cpRwMiddle _ (CmmStore (CmmRegOff _ _) _) = const $ return Nothing
 
-{-
-cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
-  u <- getUniqueUs
-  let regSize      = cmmExprType dflags rhs
-      newReg       = CmmLocal $ LocalReg u regSize
-      newRegAssign = CmmAssign newReg rhs
-      newMemAssign = CmmStore lhs (CmmReg newReg)
-  return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
--}
-
-cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
-    rwCmmExprToGraphOO (CmmAssign lhs) (lookupRegisterFact rhs)
-
---cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
---    rwCmmExprToGraphOO (CmmAssign lhs) (lookupStackFact (reg, off))
-
-cpRwMiddle _ (CmmAssign lhs rhs) =
-    rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
-
---cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
---    rwForeignCall tgt res args (\t r a ->
---    GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
-
-cpRwMiddle _ _ = const $ return Nothing
 
 cpRwLast :: CmmNode O C
          -> CpFacts
@@ -458,10 +513,11 @@ rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg re
 rwCmmExpr _                         = const Nothing
 
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
-rwCmmReg reg fact =
+rwCmmReg reg (Const fact) =
     case M.lookup reg fact of
-      Just (CpInfo (CmmReg reg')) -> Just reg'
-      _                           -> Nothing
+      Just (CmmReg reg') -> Just reg'
+      _                  -> Nothing
+rwCmmReg _ _ = panic "Looking for register facts in bottom"
 
 rwCmmExprs :: [CmmExpr] -> CpFacts -> Maybe [CmmExpr]
 rwCmmExprs = rwCmmList rwCmmExpr
