@@ -2837,8 +2837,8 @@ optLevelFlags
 --    , ([2],     Opt_RegsGraph)
     , ([0,1,2], Opt_LlvmTBAA)
     , ([1,2],   Opt_CmmSink)
-    , ([1,2],   Opt_CmmLoopify)
-    , ([1,2],   Opt_CmmCopyPropagation)
+--    , ([1,2],   Opt_CmmLoopify)
+--    , ([1,2],   Opt_CmmCopyPropagation)
     , ([1,2],   Opt_CmmElimCommonBlocks)
 
 --     , ([2],     Opt_StaticArgumentTransformation)
