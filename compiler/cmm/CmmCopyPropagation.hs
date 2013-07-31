@@ -17,6 +17,9 @@ import Control.Monad
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+import Outputable
+import Debug.Trace
+
 -- A TODO and FIXME list for this module:
 --  * use cmmMachOpFold from CmmOpt to do constant folding after rewriting
 --  * I'm not sure about passing [] to dataFlowPassFwd. Perhaps I should pass
@@ -57,6 +60,25 @@ type RegisterFacts     = AssignmentFactBot RegisterLocation
 type StackFacts        = AssignmentFactBot StackLocation
 type CpFacts           = (StackFacts, RegisterFacts)
 
+
+instance Show CmmExpr where
+    show f = showSDocDebug (unsafeGlobalDynFlags) (ppr f)
+
+instance Show CmmReg where
+    show f = showSDocDebug (unsafeGlobalDynFlags) (ppr (CmmReg f))
+
+instance Show Area where
+    show Old = "Old"
+    show (Young b) = "Young " ++ show b
+
+instance Show ChangeFlag where
+    show NoChange   = "NoChange"
+    show SomeChange = "SomeChange"
+
+instance (Show a) => Show (AssignmentFactBot a) where
+    show Bottom    = "Bottom"
+    show (Const m) = "Const " ++ show m
+
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
@@ -92,10 +114,10 @@ cpLattice :: DataflowLattice CpFacts
 cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
 
 cpJoin :: JoinFun CpFacts
-cpJoin _ (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
+cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
               (changeFlag, (joinMem, joinReg))
-    where (memChange, joinMem) = joinCpFacts oldMem newMem
-          (regChange, joinReg) = joinCpFacts oldReg newReg
+    where (memChange, joinMem) = joinCpFacts lbl oldMem newMem
+          (regChange, joinReg) = joinCpFacts lbl oldReg newReg
           changeFlag           = sumChanges [memChange, regChange]
 
 -- Note [Join operation for copy propagation]
@@ -151,21 +173,38 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 -- function calls (exit nodes).
 
 cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
-cpTransferMiddle (CmmAssign lhs rhs@(CmmLit   _)) =
-    addRegisterFact lhs rhs
-cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) = (\facts ->
+cpTransferMiddle (CmmAssign lhs rhs@(CmmLit   _)) f =
+    trace ("\nAdding resgister fact: " ++ show lhs ++ " := " ++ show rhs ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+        where
+          f' = addRegisterFact lhs rhs f
+cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) f =
     if lhs /= reg  -- if we register facts like R1 = R1 then rewriting will go into an infinite loop
-    then addRegisterFact lhs rhs facts
-    else facts)
-cpTransferMiddle (CmmAssign lhs               _ ) =
-    dropRegisterFact lhs
-cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) =
-    addStackFact (lhs, off) rhs
-cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) =
-    addStackFact (lhs, off) rhs
-cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) =
-    dropStackFact (lhs, off)
-cpTransferMiddle _ = id
+    then trace ("\nAdding register fact: " ++ show lhs ++ " := " ++ show rhs ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+    else trace ("Ignoring " ++ show lhs ++ " := " ++ show rhs) $ f
+        where
+          f' = addRegisterFact lhs rhs f
+cpTransferMiddle (CmmAssign lhs               _ ) f =
+    trace ("\nDropping resgister fact about " ++ show lhs ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+    where f' = dropRegisterFact lhs f
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
+    trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+        where
+          f' = addStackFact (lhs, off) rhs f
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) f =
+    trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+        where
+          f' = addStackFact (lhs, off) rhs f
+cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
+    trace ("\nDropping stack fact about " ++ show (lhs,off) ++
+           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+        where
+          f' = dropStackFact (lhs, off) f
+cpTransferMiddle _ f = f
 
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
@@ -215,7 +254,7 @@ dropStackFact :: StackLocation -> CpFacts -> CpFacts
 dropStackFact lhs = CA.first (dropFact lhs)
 
 dropRegisterFact :: RegisterLocation -> CpFacts -> CpFacts
-dropRegisterFact lhs (Const stkFs, Const regFs) = (Const stkFs', Const regFs')
+dropRegisterFact lhs (Const stkFs, Const regFs) = (Const stkFs', Const (M.delete lhs regFs'))
     where (stkFs', regFs') = killDefs lhs (stkFs, regFs)
 dropRegisterFact _ _ = panic "Dropping facts from bottom"
 
@@ -246,22 +285,26 @@ maybeCmmExpr (CpInfo fact) = Just fact
 -}
 
 -- See Note [Join operation for copy propagation]
-joinCpFacts :: Ord v
-            => AssignmentFactBot v
+joinCpFacts :: (Show v, Ord v)
+            => Label -> AssignmentFactBot v
             -> AssignmentFactBot v
             -> (ChangeFlag, AssignmentFactBot v)
-joinCpFacts        old   Bottom     = (NoChange, old)
-joinCpFacts (Const old) (Const new) =
-    CA.second Const $ M.foldrWithKey add (NoChange, M.empty) old
+joinCpFacts lbl (Const old)  Bottom     =
+  trace ("\nJoining Const and Bottom for label " ++ show lbl ++ "\nOld facts" ++ show old) $ (NoChange, Const old)
+joinCpFacts lbl (Const old) (Const new) =
+  trace ("\nJoining Const and Const for label " ++ show lbl ++ "\nOld facts" ++ show old ++ "\nNew facts: "
+         ++ show new ++ "\nJoined: " ++ show joined) $
+    CA.second Const $ joined
   where
+    joined = M.foldrWithKey add (NoChange, M.empty) old
     add k old_f (ch, joinmap) =
       case M.lookup k new of
         Nothing    -> (SomeChange, joinmap)
         Just new_f -> if old_f == new_f
                       then (ch        , M.insert k old_f joinmap)
                       else (SomeChange,                  joinmap)
-joinCpFacts Bottom Bottom    = panic "Joining bottom with bottom"
-joinCpFacts Bottom (Const _) = panic "Joining bottom with const"
+joinCpFacts _ Bottom Bottom    = panic "Joining bottom with bottom"
+joinCpFacts _ Bottom (Const _) = panic "Joining bottom with const"
 
 -----------------------------------------------------------------------------
 --                     Node rewriting functions
