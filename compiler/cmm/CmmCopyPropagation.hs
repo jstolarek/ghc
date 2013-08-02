@@ -1,7 +1,5 @@
 {-# LANGUAGE GADTs, CPP #-}
-module CmmCopyPropagation (
-   cmmCopyPropagation
- ) where
+module CmmCopyPropagation where
 
 import Cmm
 import CmmLive
@@ -50,15 +48,16 @@ cmmCopyPropagation dflags graph = do
 --                        Data types used as facts
 -----------------------------------------------------------------------------
 
-type RegisterLocation  = CmmReg
-type StackLocation     = (Area, Int)
-type CpFact            = CmmExpr -- See Note [Assignment facts lattice]
-type AssignmentFact  a = M.Map a CpFact
+type RegisterLocation    = CmmReg
+type StackLocation       = (Area, Int)
+type CpFact              = CmmExpr -- See Note [Assignment facts lattice]
+type AssignmentFact  a   = M.Map a CpFact
 data AssignmentFactBot a = Bottom
                          | Const (AssignmentFact a)
-type RegisterFacts     = AssignmentFactBot RegisterLocation
-type StackFacts        = AssignmentFactBot StackLocation
-type CpFacts           = (StackFacts, RegisterFacts)
+                           deriving (Eq)
+type RegisterFacts       = AssignmentFactBot RegisterLocation
+type StackFacts          = AssignmentFactBot StackLocation
+type CpFacts             = (StackFacts, RegisterFacts)
 
 
 instance Show CmmExpr where
@@ -194,7 +193,7 @@ cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) f =
 #ifdef DEBUG
         trace ("Ignoring " ++ show lhs ++ " := " ++ show rhs) $ f
 #else
-        f
+         f
 #endif
         where
           f' = addRegisterFact lhs rhs f
@@ -206,6 +205,7 @@ cpTransferMiddle (CmmAssign lhs               _ ) f =
     f'
 #endif
     where f' = dropRegisterFact lhs f
+{-
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
 #ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
@@ -229,10 +229,11 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
     trace ("\nDropping stack fact about " ++ show (lhs,off) ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
 #else
-    f'
+     f'
 #endif
         where
           f' = dropStackFact (lhs, off) f
+-}
 cpTransferMiddle _ f = f
 
 -----------------------------------------------------------------------------
@@ -249,12 +250,7 @@ cpTransferMiddle _ f = f
 
 addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
 addStackFact _   _   (Bottom,     _) = panic "Adding stack facts to Bottom"
-addStackFact lhs rhs fs@(Const stkFs, regFs) =
-    case lookupStackFact lhs fs of
-      Nothing -> (Const $ M.insert lhs rhs stkFs, regFs) -- previous fact about lhs was NAC, but now lhs ia constant
-      Just fact -> if fact == rhs
-                   then fs -- we already know that fact, nothing happens
-                   else (Const $ M.delete lhs stkFs, regFs) -- we learned sth inconsistent with previous knowledge, set lhs = NAC
+addStackFact lhs rhs fs@(Const stkFs, regFs) = (Const $ M.insert lhs rhs stkFs, regFs)
 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
 addRegisterFact lhs rhs fs@(Const stkFs, Const regFs) =
@@ -315,7 +311,8 @@ maybeCmmExpr (CpInfo fact) = Just fact
 
 -- See Note [Join operation for copy propagation]
 joinCpFacts :: (Show v, Ord v)
-            => Label -> AssignmentFactBot v
+            => Label
+            -> AssignmentFactBot v
             -> AssignmentFactBot v
             -> (ChangeFlag, AssignmentFactBot v)
 joinCpFacts lbl (Const old)  Bottom     =
@@ -472,6 +469,8 @@ cpRwMiddle _ _ = const $ return Nothing
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
+cpRwLast _ = const $ return Nothing
+{-
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC (\p -> CmmCondBranch p t f  ) pred
 
@@ -484,8 +483,7 @@ cpRwLast call@(CmmCall { cml_target = target }) =
 cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ ret_args ret_off $ intrbl)
-
-cpRwLast _ = const $ return Nothing
+-}
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -589,6 +587,7 @@ rwCmmExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . rwCmmExpr expr
 rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg reg . snd
 rwCmmExpr _                         = const Nothing
 
+-- I think this might not work if fact about a register is a literal
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
 rwCmmReg reg (Const fact) =
     case M.lookup reg fact of
