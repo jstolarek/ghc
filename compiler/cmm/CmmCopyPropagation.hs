@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, CPP #-}
 module CmmCopyPropagation (
    cmmCopyPropagation
  ) where
@@ -174,34 +174,63 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
 
 cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit   _)) f =
+#ifdef DEBUG
     trace ("\nAdding resgister fact: " ++ show lhs ++ " := " ++ show rhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
-        where
-          f' = addRegisterFact lhs rhs f
+#else
+    f'
+#endif
+        where f' = addRegisterFact lhs rhs f
 cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) f =
     if lhs /= reg  -- if we register facts like R1 = R1 then rewriting will go into an infinite loop
-    then trace ("\nAdding register fact: " ++ show lhs ++ " := " ++ show rhs ++
-           "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
-    else trace ("Ignoring " ++ show lhs ++ " := " ++ show rhs) $ f
+    then
+#ifdef DEBUG
+        trace ("\nAdding register fact: " ++ show lhs ++ " := " ++ show rhs ++
+               "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+#else
+        f'
+#endif
+    else
+#ifdef DEBUG
+        trace ("Ignoring " ++ show lhs ++ " := " ++ show rhs) $ f
+#else
+        f
+#endif
         where
           f' = addRegisterFact lhs rhs f
 cpTransferMiddle (CmmAssign lhs               _ ) f =
+#ifdef DEBUG
     trace ("\nDropping resgister fact about " ++ show lhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+#else
+    f'
+#endif
     where f' = dropRegisterFact lhs f
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
+#ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+#else
+    f'
+#endif
         where
           f' = addStackFact (lhs, off) rhs f
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) f =
+#ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+#else
+    f'
+#endif
         where
           f' = addStackFact (lhs, off) rhs f
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
+#ifdef DEBUG
     trace ("\nDropping stack fact about " ++ show (lhs,off) ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
+#else
+    f'
+#endif
         where
           f' = dropStackFact (lhs, off) f
 cpTransferMiddle _ f = f
@@ -290,10 +319,15 @@ joinCpFacts :: (Show v, Ord v)
             -> AssignmentFactBot v
             -> (ChangeFlag, AssignmentFactBot v)
 joinCpFacts lbl (Const old)  Bottom     =
-  trace ("\nJoining Const and Bottom for label " ++ show lbl ++ "\nOld facts" ++ show old) $ (NoChange, Const old)
+#ifdef DEBUG
+  trace ("\nJoining Const and Bottom for label " ++ show lbl ++ "\nOld facts" ++ show old) $
+#endif
+            (NoChange, Const old)
 joinCpFacts lbl (Const old) (Const new) =
+#ifdef DEBUG
   trace ("\nJoining Const and Const for label " ++ show lbl ++ "\nOld facts" ++ show old ++ "\nNew facts: "
          ++ show new ++ "\nJoined: " ++ show joined) $
+#endif
     CA.second Const $ joined
   where
     joined = M.foldrWithKey add (NoChange, M.empty) old
