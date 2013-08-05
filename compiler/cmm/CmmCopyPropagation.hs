@@ -16,6 +16,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Outputable
+import PprCmm
 import Debug.Trace
 
 -- A TODO and FIXME list for this module:
@@ -154,8 +155,15 @@ cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
 -----------------------------------------------------------------------------
 
 cpTransfer :: FwdTransfer CmmNode CpFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle deleteMe
     where cpTransferFirst _ fact = fact
+
+deleteMe n g =
+#ifdef DEBUG
+    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
+           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+#endif
+            distributeFact n g
 
 -- Note [Transfer function]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -196,7 +204,7 @@ cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) f =
          f
 #endif
         where
-          f' = addRegisterFact lhs rhs f
+           f' = addRegisterFact lhs rhs f
 cpTransferMiddle (CmmAssign lhs               _ ) f =
 #ifdef DEBUG
     trace ("\nDropping resgister fact about " ++ show lhs ++
@@ -234,7 +242,26 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
         where
           f' = dropStackFact (lhs, off) f
 -}
+#ifdef DEBUG
+cpTransferMiddle (CmmStore a b) f = trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) f
+
+cpTransferMiddle (CmmUnsafeForeignCall _ b c) f = trace ("CmmUnsafeForeignCall: " ++ show c) f `seq` f
+--return $! trace "Foo" () `seq`
+#endif
+
 cpTransferMiddle _ f = f
+
+{-
+Consider this:
+
+Adding register fact: R1 := _sGn::P32
+Before: (Const fromList [],Const fromList [(_sGn::P32,R1),(R1,_sGm::P32),(HpAlloc,28)]
+)
+After: (Const fromList [],Const fromList [(R1,_sGn::P32),(HpAlloc,28)])
+
+I think there should be no change in the known facts?
+
+-}
 
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
@@ -249,17 +276,19 @@ cpTransferMiddle _ f = f
 -- handling values inside a tuple (remember that CpFacts is a tuple).
 
 addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
-addStackFact _   _   (Bottom,     _) = panic "Adding stack facts to Bottom"
+addStackFact _   _      (Bottom     ,     _) = panic "Adding stack facts to Bottom"
 addStackFact lhs rhs fs@(Const stkFs, regFs) = (Const $ M.insert lhs rhs stkFs, regFs)
 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
 addRegisterFact lhs rhs fs@(Const stkFs, Const regFs) =
     case lookupRegisterFact lhs fs of
-      Nothing   -> (Const stkFs, Const $ M.insert lhs rhs regFs) -- previous fact about lhs was NAC, but now lhs ia constant
+      Nothing   -> let (stkFs', regFs') = killDefs lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
+                   in (Const stkFs', Const $ M.insert lhs rhs regFs') -- and add new fact about register
       Just fact -> if fact == rhs
                    then fs -- we already know that fact, nothing happens
                    else let (stkFs', regFs') = killDefs lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
                         in (Const stkFs', Const $ M.insert lhs rhs regFs') -- and add new fact about register
+
 addRegisterFact _   _   _ = panic "Adding register facts to Bottom"
 
 killDefs :: (Ord a, Ord b)
@@ -317,12 +346,12 @@ joinCpFacts :: (Show v, Ord v)
             -> (ChangeFlag, AssignmentFactBot v)
 joinCpFacts lbl (Const old)  Bottom     =
 #ifdef DEBUG
-  trace ("\nJoining Const and Bottom for label " ++ show lbl ++ "\nOld facts" ++ show old) $
+  trace ("\nJoining Const and Bottom for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts" ++ show old) $
 #endif
             (NoChange, Const old)
 joinCpFacts lbl (Const old) (Const new) =
 #ifdef DEBUG
-  trace ("\nJoining Const and Const for label " ++ show lbl ++ "\nOld facts" ++ show old ++ "\nNew facts: "
+  trace ("\nJoining Const and Const for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts: " ++ show old ++ "\nNew facts: "
          ++ show new ++ "\nJoined: " ++ show joined) $
 #endif
     CA.second Const $ joined
@@ -422,8 +451,8 @@ cpRwMiddle :: DynFlags
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
 -- if we store a register, attempt to rewrite it
-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
-    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
+--cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+--    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
 
 -- otherwise we create a new register, assign previously stored expression to that
 -- new register, and store the new register
@@ -437,13 +466,15 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
       newMemAssign = CmmStore lhs (CmmReg newReg)
   return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
 -}
+{-
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
 
+
+-}
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
-
 cpRwMiddle _ _ = const $ return Nothing
 
 -- these two are not needed - rwCmmExpr does that
@@ -469,21 +500,21 @@ cpRwMiddle _ _ = const $ return Nothing
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast _ = const $ return Nothing
+cpRwLast call@(CmmCall { cml_target = target }) = -- does it make sense? aren't targets of CmmCall literals that cannot be rewritten?
+    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
 {-
+-}
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC (\p -> CmmCondBranch p t f  ) pred
 
 cpRwLast      (CmmSwitch     scrut labels     ) =
     rwCmmExprToGraphOC (\s -> CmmSwitch s labels   ) scrut
 
-cpRwLast call@(CmmCall { cml_target = target }) =
-    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
 
 cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ ret_args ret_off $ intrbl)
--}
+cpRwLast _ = const $ return Nothing
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -515,8 +546,8 @@ rwForeignCall :: ForeignTarget
               -> CpFacts
               -> UniqSM (Maybe (Graph CmmNode e x))
 rwForeignCall tgt res args fun facts@(_, regFacts) =
-     let (f1, tgt')  = rwForeignCallTarget  tgt  facts
-         (f2, res')  = rwForeignCallResults res  regFacts
+     let (f1, tgt' ) = rwForeignCallTarget  tgt  facts
+         (f2, res' ) = rwForeignCallResults res  regFacts
          (f3, args') = rwForeignCallActual  args facts
      in case sumChanges [f1, f2, f3] of
           SomeChange -> return . Just $ (fun tgt' res' args')
@@ -564,8 +595,8 @@ rwCmmExprToGraphOO exprToNode factLookup =
     return . fmap (GUnit . BMiddle . exprToNode) . factLookup
 
 -- rwCmmExprToGraphOC function takes two parameters:
---   * expression to rewrite
 --   * function that knows how to convert a rewritten expression into a CmmNode
+--   * expression to rewrite
 -- rwCmmExprToGraphOC returns a function that accepts CpFacts and maybe
 -- returns a rewritten graph. This function is heavily used by cpRwLast.
 rwCmmExprToGraphOC :: (CmmExpr -> CmmNode O C)
@@ -587,7 +618,10 @@ rwCmmExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . rwCmmExpr expr
 rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg reg . snd
 rwCmmExpr _                         = const Nothing
 
--- I think this might not work if fact about a register is a literal
+-- In some cases we are only allowed to rewrite CmmReg to a different CmmReg.
+-- One example of this is CmmRegOff value constructor, which requires its
+-- second parameter to be CmmReg. So we only accept rewrites to a CmmReg -
+-- anything else is discarded.
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
 rwCmmReg reg (Const fact) =
     case M.lookup reg fact of
