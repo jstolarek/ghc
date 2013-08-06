@@ -16,6 +16,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Outputable
+import PprCmm
 import Debug.Trace
 
 -- A TODO and FIXME list for this module:
@@ -154,8 +155,10 @@ cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
 -----------------------------------------------------------------------------
 
 cpTransfer :: FwdTransfer CmmNode CpFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle distributeFact
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle deleteMe
     where cpTransferFirst _ fact = fact
+
+deleteMe n g = trace (showSDocDebug (unsafeGlobalDynFlags) (ppr n)) $ distributeFact n g
 
 -- Note [Transfer function]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -196,7 +199,7 @@ cpTransferMiddle (CmmAssign lhs rhs@(CmmReg reg)) f =
          f
 #endif
         where
-          f' = addRegisterFact lhs rhs f
+           f' = addRegisterFact lhs rhs f
 cpTransferMiddle (CmmAssign lhs               _ ) f =
 #ifdef DEBUG
     trace ("\nDropping resgister fact about " ++ show lhs ++
@@ -234,7 +237,26 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
         where
           f' = dropStackFact (lhs, off) f
 -}
+#ifdef DEBUG
+cpTransferMiddle (CmmStore a b) f = trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) f
+
+cpTransferMiddle (CmmUnsafeForeignCall _ b c) f = trace ("CmmUnsafeForeignCall: " ++ show c) f `seq` f
+--return $! trace "Foo" () `seq`
+#endif
+
 cpTransferMiddle _ f = f
+
+{-
+Consider this:
+
+Adding register fact: R1 := _sGn::P32
+Before: (Const fromList [],Const fromList [(_sGn::P32,R1),(R1,_sGm::P32),(HpAlloc,28)]
+)
+After: (Const fromList [],Const fromList [(R1,_sGn::P32),(HpAlloc,28)])
+
+I think there should be no change in the known facts?
+
+-}
 
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
@@ -319,12 +341,12 @@ joinCpFacts :: (Show v, Ord v)
             -> (ChangeFlag, AssignmentFactBot v)
 joinCpFacts lbl (Const old)  Bottom     =
 #ifdef DEBUG
-  trace ("\nJoining Const and Bottom for label " ++ show lbl ++ "\nOld facts" ++ show old) $
+  trace ("\nJoining Const and Bottom for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts" ++ show old) $
 #endif
             (NoChange, Const old)
 joinCpFacts lbl (Const old) (Const new) =
 #ifdef DEBUG
-  trace ("\nJoining Const and Const for label " ++ show lbl ++ "\nOld facts" ++ show old ++ "\nNew facts: "
+  trace ("\nJoining Const and Const for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts: " ++ show old ++ "\nNew facts: "
          ++ show new ++ "\nJoined: " ++ show joined) $
 #endif
     CA.second Const $ joined
