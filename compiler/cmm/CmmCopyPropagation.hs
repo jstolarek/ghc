@@ -471,6 +471,7 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
+{-
 -- if we store a register, attempt to rewrite it
 cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
     rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
@@ -491,7 +492,6 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
             ", newMemAssign: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newMemAssign))) $
 #endif
          newMemAssign
-{-
 -}
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
