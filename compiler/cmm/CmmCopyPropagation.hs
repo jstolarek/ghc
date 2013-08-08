@@ -29,6 +29,9 @@ import Debug.Trace
 --    There is a similar problem witg results vs. formals (see rwResults).
 --    related: [Rewriting function calls]
 --  * move sumChanges to some utility module
+--  * CmmCall, CmmForeignCall and CmmUnsafeForeignCall erase all facts, which
+--    is too conservative. They should only erase registers that may be
+--    modified by the call
 
 -----------------------------------------------------------------------------
 --                           Copy propagation pass
@@ -41,7 +44,7 @@ cmmCopyPropagation dflags graph = do
          entryLiveness  = expectJust "entry to copy propagation" $ mapLookup entry_blk liveness
          liveGlobalRegs = map (\r -> (CmmGlobal r, CpTop)) . S.toList $ entryLiveness
          entryRegFacts  = M.fromList liveGlobalRegs-}
-     g' <- dataflowPassFwd graph [(entry_blk, (Const M.empty, Const M.empty))] $
+     g' <- dataflowPassFwd graph [(entry_blk, emptyCpFacts)] $
            analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
@@ -60,6 +63,8 @@ type RegisterFacts       = AssignmentFactBot RegisterLocation
 type StackFacts          = AssignmentFactBot StackLocation
 type CpFacts             = (StackFacts, RegisterFacts)
 
+emptyCpFacts :: CpFacts
+emptyCpFacts = (Const M.empty, Const M.empty)
 
 instance Show CmmExpr where
     show f = showSDocDebug (unsafeGlobalDynFlags) (ppr f)
@@ -155,15 +160,8 @@ cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
 -----------------------------------------------------------------------------
 
 cpTransfer :: FwdTransfer CmmNode CpFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle deleteMe
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle cpTransferLast
     where cpTransferFirst _ fact = fact
-
-deleteMe n g =
-#ifdef DEBUG
-    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
-           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
-#endif
-            distributeFact n g
 
 -- Note [Transfer function]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -242,14 +240,20 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
         where
           f' = dropStackFact (lhs, off) f
 -}
+cpTransferMiddle (CmmStore a b) f =
 #ifdef DEBUG
-cpTransferMiddle (CmmStore a b) f = trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) f
-
-cpTransferMiddle (CmmUnsafeForeignCall _ b c) f = trace ("CmmUnsafeForeignCall: " ++ show c) f `seq` f
---return $! trace "Foo" () `seq`
+    trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) $
 #endif
+      f
+
+cpTransferMiddle c@(CmmUnsafeForeignCall _ _ _) _ =
+#ifdef DEBUG
+    trace ("Killing facts for CmmUnsafeForeignCall " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr c))) $
+#endif
+      emptyCpFacts
 
 cpTransferMiddle _ f = f
+
 
 {-
 Consider this:
@@ -259,9 +263,26 @@ Before: (Const fromList [],Const fromList [(_sGn::P32,R1),(R1,_sGm::P32),(HpAllo
 )
 After: (Const fromList [],Const fromList [(R1,_sGn::P32),(HpAlloc,28)])
 
-I think there should be no change in the known facts?
+I think there should be no change in the known facts? OTOH this situation will never happen
+when all rewrite rules will be enabled, because (_sGn::P32,R1) will be rewritten to
+(_sGn::P32,_sGm::P32) before recording as a fact
 
 -}
+
+cpTransferLast :: CmmNode O C -> CpFacts -> FactBase CpFacts
+cpTransferLast n@(CmmCall _ _ _ _ _ _) f =
+#ifdef DEBUG
+    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
+           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+#endif
+            distributeFact n emptyCpFacts
+cpTransferLast n@(CmmForeignCall _ _ _ _ _ _ _) f =
+#ifdef DEBUG
+    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
+           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+#endif
+            distributeFact n emptyCpFacts
+cpTransferLast n f = distributeFact n f
 
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
@@ -451,12 +472,11 @@ cpRwMiddle :: DynFlags
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
 -- if we store a register, attempt to rewrite it
---cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
---    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
+cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
 
 -- otherwise we create a new register, assign previously stored expression to that
 -- new register, and store the new register
-{-
 -- this causes out of memory errors (inifinite loop?)
 cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
   u <- getUniqueUs
@@ -464,17 +484,22 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
       newReg       = CmmLocal $ LocalReg u regSize
       newRegAssign = CmmAssign newReg rhs
       newMemAssign = CmmStore lhs (CmmReg newReg)
-  return . Just . GUnit . BCons newRegAssign . BMiddle $ newMemAssign
--}
+  return . Just . GUnit . BCons newRegAssign . BMiddle $
+#ifdef DEBUG
+     trace ("Rewriting CmmStore. newReg: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newReg)) ++
+            ", newRegAssign: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newRegAssign)) ++
+            ", newMemAssign: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newMemAssign))) $
+#endif
+         newMemAssign
 {-
+-}
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
 
-
--}
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
+
 cpRwMiddle _ _ = const $ return Nothing
 
 -- these two are not needed - rwCmmExpr does that
@@ -500,16 +525,14 @@ cpRwMiddle _ _ = const $ return Nothing
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast call@(CmmCall { cml_target = target }) = -- does it make sense? aren't targets of CmmCall literals that cannot be rewritten?
+cpRwLast call@(CmmCall { cml_target = target }) =
     rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
-{-
--}
+
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC (\p -> CmmCondBranch p t f  ) pred
 
 cpRwLast      (CmmSwitch     scrut labels     ) =
     rwCmmExprToGraphOC (\s -> CmmSwitch s labels   ) scrut
-
 
 cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
