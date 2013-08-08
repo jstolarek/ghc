@@ -158,7 +158,12 @@ cpTransfer :: FwdTransfer CmmNode CpFacts
 cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle deleteMe
     where cpTransferFirst _ fact = fact
 
-deleteMe n g = trace (showSDocDebug (unsafeGlobalDynFlags) (ppr n)) $ distributeFact n g
+deleteMe n g =
+#ifdef DEBUG
+    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
+           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+#endif
+            distributeFact n g
 
 -- Note [Transfer function]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -446,8 +451,8 @@ cpRwMiddle :: DynFlags
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
 -- if we store a register, attempt to rewrite it
-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
-    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
+--cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+--    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
 
 -- otherwise we create a new register, assign previously stored expression to that
 -- new register, and store the new register
@@ -465,10 +470,11 @@ cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
 
+
+-}
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
--}
 cpRwMiddle _ _ = const $ return Nothing
 
 -- these two are not needed - rwCmmExpr does that
@@ -494,21 +500,21 @@ cpRwMiddle _ _ = const $ return Nothing
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast _ = const $ return Nothing
+cpRwLast call@(CmmCall { cml_target = target }) = -- does it make sense? aren't targets of CmmCall literals that cannot be rewritten?
+    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
 {-
+-}
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC (\p -> CmmCondBranch p t f  ) pred
 
 cpRwLast      (CmmSwitch     scrut labels     ) =
     rwCmmExprToGraphOC (\s -> CmmSwitch s labels   ) scrut
 
-cpRwLast call@(CmmCall { cml_target = target }) =
-    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
 
 cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ ret_args ret_off $ intrbl)
--}
+cpRwLast _ = const $ return Nothing
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
