@@ -8,6 +8,8 @@ import DynFlags
 import Hoopl
 import Maybes
 import Panic
+import Platform
+import CodeGen.Platform
 import UniqSupply
 
 import Control.Arrow      as CA
@@ -211,7 +213,7 @@ cpTransferMiddle (CmmAssign lhs               _ ) f =
     f'
 #endif
     where f' = dropRegisterFact lhs f
-cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
+cpTransferMiddle (CmmStore (CmmStackSlot lhs@(Old) off) rhs@(CmmLit _)) f =
 #ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
@@ -220,9 +222,8 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
 #endif
         where
           f' = addStackFact (lhs, off) rhs f
-{-
--}
-cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) f =
+
+cpTransferMiddle (CmmStore (CmmStackSlot lhs@(Old) off) rhs@(CmmReg _)) f =
 #ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
            "\nBefore: " ++ show f ++ "\nAfter: " ++ show f' ) $ f'
@@ -240,50 +241,29 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
 #endif
         where
           f' = dropStackFact (lhs, off) f
-{-
-cpTransferMiddle (CmmStore a b) f =
-#ifdef DEBUG
-    trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) $
-#endif
-      f
--}
 
-cpTransferMiddle c@(CmmUnsafeForeignCall _ _ _) _ =
+cpTransferMiddle c@(CmmUnsafeForeignCall tgt _ _) f =
 #ifdef DEBUG
     trace ("Killing facts for CmmUnsafeForeignCall " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr c))) $
 #endif
-      emptyCpFacts
+        killDefs (foreignTargetRegs tgt) f
 
 cpTransferMiddle _ f = f
 
 
-{-
-Consider this:
-
-Adding register fact: R1 := _sGn::P32
-Before: (Const fromList [],Const fromList [(_sGn::P32,R1),(R1,_sGm::P32),(HpAlloc,28)]
-)
-After: (Const fromList [],Const fromList [(R1,_sGn::P32),(HpAlloc,28)])
-
-I think there should be no change in the known facts? OTOH this situation will never happen
-when all rewrite rules will be enabled, because (_sGn::P32,R1) will be rewritten to
-(_sGn::P32,_sGm::P32) before recording as a fact
-
--}
-
 cpTransferLast :: CmmNode O C -> CpFacts -> FactBase CpFacts
-cpTransferLast n@(CmmCall _ _ _ _ _ _) f =
+cpTransferLast n@(CmmCall {}) f =
 #ifdef DEBUG
     trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
            " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
 #endif
-            distributeFact n emptyCpFacts
-cpTransferLast n@(CmmForeignCall _ _ _ _ _ _ _) f =
+            distributeFact n (killDefs activeRegs f)
+cpTransferLast n@(CmmForeignCall {tgt=tgt} ) f =
 #ifdef DEBUG
     trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
            " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
 #endif
-            distributeFact n emptyCpFacts
+            distributeFact n (killDefs (foreignTargetRegs tgt) f)
 cpTransferLast n f = distributeFact n f
 
 -----------------------------------------------------------------------------
@@ -305,20 +285,19 @@ addStackFact lhs rhs fs@(Const stkFs, regFs) = (Const $ M.insert lhs rhs stkFs, 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
 addRegisterFact lhs rhs fs@(Const stkFs, Const regFs) =
     case lookupRegisterFact lhs fs of
-      Nothing   -> let (stkFs', regFs') = killDefs lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
+      Nothing   -> let (stkFs', regFs') = killDef lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
                    in (Const stkFs', Const $ M.insert lhs rhs regFs') -- and add new fact about register
       Just fact -> if fact == rhs
                    then fs -- we already know that fact, nothing happens
-                   else let (stkFs', regFs') = killDefs lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
+                   else let (stkFs', regFs') = killDef lhs (stkFs, regFs) -- eliminate all facts where lhs register appears as rhs
                         in (Const stkFs', Const $ M.insert lhs rhs regFs') -- and add new fact about register
 
 addRegisterFact _   _   _ = panic "Adding register facts to Bottom"
 
-killDefs :: (Ord a, Ord b)
-         => RegisterLocation
-         -> (AssignmentFact a, AssignmentFact b)
-         -> (AssignmentFact a, AssignmentFact b)
-killDefs reg (stkFs, regFs) = (stkFs', regFs')
+killDef :: RegisterLocation
+        -> (AssignmentFact StackLocation, AssignmentFact RegisterLocation)
+        -> (AssignmentFact StackLocation, AssignmentFact RegisterLocation)
+killDef reg (stkFs, regFs) = (stkFs', M.delete reg regFs')
     where expr   = CmmReg reg
           stkFs' = M.foldrWithKey add M.empty stkFs
           regFs' = M.foldrWithKey add M.empty regFs
@@ -327,12 +306,16 @@ killDefs reg (stkFs, regFs) = (stkFs', regFs')
                         then acc
                         else M.insert k f acc
 
+killDefs :: [RegisterLocation] -> CpFacts -> CpFacts
+killDefs regs (Const stkFs, Const regFs) = (Const stkFs', Const regFs')
+    where (stkFs', regFs') = foldr killDef (stkFs, regFs) regs
+
 dropStackFact :: StackLocation -> CpFacts -> CpFacts
 dropStackFact lhs = CA.first (dropFact lhs)
 
 dropRegisterFact :: RegisterLocation -> CpFacts -> CpFacts
 dropRegisterFact lhs (Const stkFs, Const regFs) = (Const stkFs', Const (M.delete lhs regFs'))
-    where (stkFs', regFs') = killDefs lhs (stkFs, regFs)
+    where (stkFs', regFs') = killDef lhs (stkFs, regFs)
 dropRegisterFact _ _ = panic "Dropping facts from bottom"
 
 dropFact :: Ord a => a -> AssignmentFactBot a -> AssignmentFactBot a
@@ -654,6 +637,21 @@ rwCmmList f xs facts =
           case f x facts of
             Nothing -> (flag      , x : xs)
             Just x' -> (SomeChange, x': xs)
+
+platform :: Platform
+platform = targetPlatform unsafeGlobalDynFlags -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+-- based on code in CmmNode
+activeRegs :: [RegisterLocation]
+activeRegs = map CmmGlobal (activeStgRegs platform)
+
+activeCallerSavesRegs :: [RegisterLocation]
+activeCallerSavesRegs = map CmmGlobal . filter (callerSaves platform) . activeStgRegs $ platform
+
+foreignTargetRegs :: ForeignTarget -> [RegisterLocation]
+foreignTargetRegs (ForeignTarget _ (ForeignConvention _ _ _ CmmNeverReturns)) = []
+foreignTargetRegs _ = activeCallerSavesRegs
+
 
 -----------------------------------------------------------------------------
 --                        Other utility function
