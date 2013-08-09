@@ -211,7 +211,6 @@ cpTransferMiddle (CmmAssign lhs               _ ) f =
     f'
 #endif
     where f' = dropRegisterFact lhs f
-{-
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
 #ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
@@ -221,6 +220,8 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmLit _)) f =
 #endif
         where
           f' = addStackFact (lhs, off) rhs f
+{-
+-}
 cpTransferMiddle (CmmStore (CmmStackSlot lhs off) rhs@(CmmReg _)) f =
 #ifdef DEBUG
     trace ("\nAdding stack fact: " ++ show (lhs, off) ++ " := " ++ show rhs ++
@@ -239,12 +240,13 @@ cpTransferMiddle (CmmStore (CmmStackSlot lhs off) _             ) f =
 #endif
         where
           f' = dropStackFact (lhs, off) f
--}
+{-
 cpTransferMiddle (CmmStore a b) f =
 #ifdef DEBUG
     trace ("\nCmmStore: " ++ show a ++ ", " ++ show b) $
 #endif
       f
+-}
 
 cpTransferMiddle c@(CmmUnsafeForeignCall _ _ _) _ =
 #ifdef DEBUG
@@ -502,26 +504,6 @@ cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
 
 cpRwMiddle _ _ = const $ return Nothing
 
--- these two are not needed - rwCmmExpr does that
---cpRwMiddle _ (CmmAssign lhs (CmmReg rhs)) =
---    rwCmmExprToGraphOO (CmmAssign lhs) (lookupRegisterFact rhs)
-
---cpRwMiddle _ (CmmStore lhs rhs) =
---    rwCmmExprToGraphOO (CmmStore lhs) (rwCmmExpr rhs)
---cpRwMiddle _ (CmmAssign lhs (CmmLoad (CmmStackSlot reg off) _)) =
---    rwCmmExprToGraphOO (CmmAssign lhs) (lookupStackFact (reg, off))
---cpRwMiddle _ (CmmStore lhs (CmmStackSlot reg off)) =
---    rwCmmExprToGraphOO (CmmStore lhs) (lookupStackFact (reg, off))
-
---cpRwMiddle _ (CmmStore _ (CmmLit  _  )) = const $ return Nothing
-
---cpRwMiddle _ (CmmStore _ (CmmLoad _ _)) = const $ return Nothing -- I32[Sp + _c2::I32 * 4] = I32[_c3::I32];
-
---cpRwMiddle _ (CmmStore (CmmMachOp _ _) _) = const $ return Nothing
-
---cpRwMiddle _ (CmmStore (CmmRegOff _ _) _) = const $ return Nothing
-
-
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
@@ -634,12 +616,12 @@ rwCmmExprToGraphOC exprToNode expr =
 -- equations recurse on Cmm expressions stored within other data
 -- constructors.
 rwCmmExpr :: CmmExpr -> CpFacts -> Maybe CmmExpr
-rwCmmExpr (CmmReg reg             ) = lookupRegisterFact reg
-rwCmmExpr (CmmStackSlot area off  ) = lookupStackFact (area, off)
-rwCmmExpr (CmmMachOp machOp params) = fmap (CmmMachOp machOp) . rwCmmExprs params
-rwCmmExpr (CmmLoad expr ty        ) = fmap (\e -> CmmLoad e ty) . rwCmmExpr expr
-rwCmmExpr (CmmRegOff reg off      ) = fmap (\r -> CmmRegOff r off) . rwCmmReg reg . snd
-rwCmmExpr _                         = const Nothing
+rwCmmExpr (CmmReg reg                        ) = lookupRegisterFact reg
+rwCmmExpr (CmmLoad (CmmStackSlot area off ) _) = lookupStackFact (area, off)
+rwCmmExpr (CmmMachOp machOp params           ) = fmap (CmmMachOp machOp) . rwCmmExprs params
+rwCmmExpr (CmmLoad expr ty                   ) = fmap (\e -> CmmLoad e ty) . rwCmmExpr expr
+rwCmmExpr (CmmRegOff reg off                 ) = fmap (\r -> CmmRegOff r off) . rwCmmReg reg . snd
+rwCmmExpr _                                    = const Nothing
 
 -- In some cases we are only allowed to rewrite CmmReg to a different CmmReg.
 -- One example of this is CmmRegOff value constructor, which requires its
