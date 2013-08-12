@@ -490,9 +490,6 @@ cpRwMiddle _ _ = const $ return Nothing
 cpRwLast :: CmmNode O C
          -> CpFacts
          -> UniqSM (Maybe (Graph CmmNode O C))
-cpRwLast call@(CmmCall { cml_target = target }) =
-    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
-
 cpRwLast      (CmmCondBranch pred  t f        ) =
     rwCmmExprToGraphOC (\p -> CmmCondBranch p t f  ) pred
 
@@ -502,7 +499,11 @@ cpRwLast      (CmmSwitch     scrut labels     ) =
 cpRwLast      (CmmForeignCall tgt res args succ ret_args ret_off intrbl) =
     rwForeignCall tgt res args (\t r a ->
       gUnitOC . (BlockOC BNil) . CmmForeignCall t r a succ ret_args ret_off $ intrbl)
+
 cpRwLast _ = const $ return Nothing
+cpRwLast call@(CmmCall { cml_target = target }) =
+    rwCmmExprToGraphOC (\t -> call {cml_target = t}) target
+
 
 -----------------------------------------------------------------------------
 --                 Utility functions for node rewriting
@@ -599,6 +600,10 @@ rwCmmExprToGraphOC exprToNode expr =
 -- equations recurse on Cmm expressions stored within other data
 -- constructors.
 rwCmmExpr :: CmmExpr -> CpFacts -> Maybe CmmExpr
+{-rwCmmExpr (CmmLoad (CmmReg reg)             _) = (\f ->
+   case lookupRegisterFact reg f of
+     rhs@(Just (CmmLit _)) -> rhs
+     _                     -> Nothing)-}
 rwCmmExpr (CmmReg reg                        ) = lookupRegisterFact reg
 rwCmmExpr (CmmLoad (CmmStackSlot area off ) _) = lookupStackFact (area, off)
 rwCmmExpr (CmmMachOp machOp params           ) = fmap (CmmMachOp machOp) . rwCmmExprs params

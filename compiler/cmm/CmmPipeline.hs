@@ -96,6 +96,8 @@ cpsTop hsc_env proc =
             condPass Opt_CmmLoopify (cmmLoopify (CmmProc h l v g)) g
                      Opt_D_dump_cmm_loopify "Loopify tail calls"
 
+       dump Opt_D_dump_cmm_before_cp "Before copy propagation" g
+
        ------------------ Copy propagation -------------------------------------
        g <- {-# SCC "copyPropagation" #-}
             condPassSM Opt_CmmCopyPropagation (cmmCopyPropagation dflags) g
