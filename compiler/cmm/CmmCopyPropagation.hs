@@ -2,24 +2,22 @@
 module CmmCopyPropagation where
 
 import Cmm
-import CmmLive
 import CmmUtils
 import DynFlags
 import Hoopl
-import Maybes
 import Panic
 import Platform
 import CodeGen.Platform
 import UniqSupply
 
 import Control.Arrow      as CA
-import Control.Monad
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 import Outputable
-import PprCmm
+import PprCmm()
+#ifdef DEBUG
 import Debug.Trace
+#endif
 
 -- A TODO and FIXME list for this module:
 --  * use cmmMachOpFold from CmmOpt to do constant folding after rewriting?
@@ -37,7 +35,7 @@ import Debug.Trace
 cmmCopyPropagation :: DynFlags -> CmmGraph -> UniqSM CmmGraph
 cmmCopyPropagation dflags graph = do
      let entry_blk      = g_entry graph
-     g' <- dataflowPassFwd graph [(entry_blk, emptyCpFacts)] $
+     g' <- dataflowPassFwd graph [(entry_blk, Const emptyCpFacts)] $
            analRewFwd cpLattice cpTransfer (cpRewrite dflags)
      return . fst $ g'
 
@@ -45,19 +43,17 @@ cmmCopyPropagation dflags graph = do
 --                        Data types used as facts
 -----------------------------------------------------------------------------
 
-type RegisterLocation    = CmmReg
-type StackLocation       = (Area, Int)
-type CpFact              = CmmExpr
-type AssignmentFact  a   = M.Map a CpFact
-data AssignmentFactBot a = Bottom -- See Note [Assignment facts lattice]
-                         | Const (AssignmentFact a)
-                           deriving (Eq)
-type RegisterFacts       = AssignmentFactBot RegisterLocation
-type StackFacts          = AssignmentFactBot StackLocation
-type CpFacts             = (StackFacts, RegisterFacts) -- See Note [Copy propagation facts]
+type RegisterLocation = CmmReg
+type StackLocation    = (Area, Int)
+type CpFact           = CmmExpr
+type AssignmentFact a = M.Map a CpFact -- See Note [Assignment facts lattice]
+type RegisterFacts    = AssignmentFact RegisterLocation
+type StackFacts       = AssignmentFact StackLocation
+type CpFacts          = (StackFacts, RegisterFacts) -- See Note [Copy propagation facts]
+data CpFactsWithBot   = Bottom | Const CpFacts
 
 emptyCpFacts :: CpFacts
-emptyCpFacts = (Const M.empty, Const M.empty)
+emptyCpFacts = (M.empty, M.empty)
 
 instance Show CmmExpr where
     show f = showSDocDebug (unsafeGlobalDynFlags) (ppr f)
@@ -73,9 +69,11 @@ instance Show ChangeFlag where
     show NoChange   = "NoChange"
     show SomeChange = "SomeChange"
 
+{-
 instance (Show a) => Show (AssignmentFactBot a) where
     show Bottom    = "Bottom"
     show (Const m) = "Const " ++ show m
+-}
 
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -108,15 +106,18 @@ instance (Show a) => Show (AssignmentFactBot a) where
 --                              Lattice
 -----------------------------------------------------------------------------
 
-cpLattice :: DataflowLattice CpFacts
-cpLattice = DataflowLattice "copy propagation" (Bottom, Bottom) cpJoin
+cpLattice :: DataflowLattice CpFactsWithBot
+cpLattice = DataflowLattice "copy propagation" Bottom cpJoin
 
-cpJoin :: JoinFun CpFacts
-cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
-              (changeFlag, (joinMem, joinReg))
+cpJoin :: JoinFun CpFactsWithBot
+cpJoin _ (OldFact (Const old))  (NewFact Bottom) = (NoChange, Const old)
+cpJoin lbl (OldFact (Const (oldMem, oldReg))) (NewFact (Const (newMem, newReg))) = -- lbl only for debugging
+              (changeFlag, Const (joinMem, joinReg))
     where (memChange, joinMem) = joinCpFacts lbl oldMem newMem
           (regChange, joinReg) = joinCpFacts lbl oldReg newReg
           changeFlag           = sumChanges [memChange, regChange]
+cpJoin _ (OldFact Bottom) (NewFact Bottom)    = panic "Joining bottom with bottom"
+cpJoin _ (OldFact Bottom) (NewFact (Const _)) = panic "Joining bottom with const"
 
 -- Note [Join operation for copy propagation]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -152,8 +153,8 @@ cpJoin lbl (OldFact (oldMem, oldReg)) (NewFact (newMem, newReg)) =
 --                          Transfer function
 -----------------------------------------------------------------------------
 
-cpTransfer :: FwdTransfer CmmNode CpFacts
-cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle cpTransferLast
+cpTransfer :: FwdTransfer CmmNode CpFactsWithBot
+cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddleWithBot cpTransferLastWithBot
     where cpTransferFirst _ fact = fact
 
 -- Note [Transfer function]
@@ -177,6 +178,10 @@ cpTransfer = mkFTransfer3 cpTransferFirst cpTransferMiddle cpTransferLast
 -- for foreign calls we only kill caller-saves registeres. List of registers
 -- being killed is actually based on implementation of instance declarations
 -- for DefinerOfRegs typeclass in CmmNode.
+
+cpTransferMiddleWithBot :: CmmNode O O -> CpFactsWithBot -> CpFactsWithBot
+cpTransferMiddleWithBot node (Const facts) = Const (cpTransferMiddle node facts)
+cpTransferMiddleWithBot _ _ = panic "Transfering middle node with Bottom facts"
 
 cpTransferMiddle :: CmmNode O O -> CpFacts -> CpFacts
 cpTransferMiddle (CmmAssign lhs rhs@(CmmLit   _)) f =
@@ -249,21 +254,24 @@ cpTransferMiddle c@(CmmUnsafeForeignCall tgt _ _) f =
 
 cpTransferMiddle _ f = f
 
+cpTransferLastWithBot :: CmmNode O C -> CpFactsWithBot -> FactBase CpFactsWithBot
+cpTransferLastWithBot n (Const f) = distributeFact n (Const (cpTransferLast n f))
+cpTransferLastWithBot _ _ = panic "Transfering last node with Bottom facts"
 
-cpTransferLast :: CmmNode O C -> CpFacts -> FactBase CpFacts
+cpTransferLast :: CmmNode O C -> CpFacts -> CpFacts
 cpTransferLast n@(CmmCall {}) f =
 #ifdef DEBUG
     trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
            " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
 #endif
-            distributeFact n (killDefs activeRegs f)
+            killDefs activeRegs f
 cpTransferLast n@(CmmForeignCall {tgt=tgt} ) f =
 #ifdef DEBUG
     trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
            " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
 #endif
-            distributeFact n (killDefs (foreignTargetRegs tgt) f)
-cpTransferLast n f = distributeFact n f
+            killDefs (foreignTargetRegs tgt) f
+cpTransferLast n f = f
 
 -----------------------------------------------------------------------------
 --             Utility functions for adding and finding facts
@@ -292,28 +300,15 @@ cpTransferLast n f = distributeFact n f
 -- one fact, we cannot have a fact containing that register on LHS.
 
 addStackFact :: StackLocation -> CpFact -> CpFacts -> CpFacts
-addStackFact _   _      (Bottom     ,     _) = panic "Adding stack facts to Bottom"
-addStackFact lhs rhs fs@(Const stkFs, regFs) = (Const $ M.insert lhs rhs stkFs, regFs)
+addStackFact lhs rhs = CA.first (M.insert lhs rhs)
 
 addRegisterFact :: RegisterLocation -> CpFact -> CpFacts -> CpFacts
-addRegisterFact lhs rhs fs@(Const stkFs, Const regFs)
-    | Just _ <- lookupRegisterFact lhs fs = (Const stkFs, Const $ M.insert lhs rhs regFs)
-    | otherwise = let (stkFs', regFs') = killDef lhs (stkFs, regFs)
-                  in (Const stkFs', Const $ M.insert lhs rhs regFs')
-{-
-    case lookupRegisterFact lhs fs of
-      Nothing   -> let (stkFs', regFs') = killDef lhs (stkFs, regFs)
-                   in (Const stkFs', Const $ M.insert lhs rhs regFs')
-      Just fact -> if fact == rhs
-                   then fs -- we already know that fact, nothing happens
-                   else let (stkFs', regFs') = killDef lhs (stkFs, regFs)
-                        in (Const stkFs', Const $ M.insert lhs rhs regFs')
--}
-addRegisterFact _   _   _ = panic "Adding register facts to Bottom"
+addRegisterFact lhs rhs fs
+    | Just _ <- lookupRegisterFact lhs fs = addFact fs
+    | otherwise                           = addFact (killDef lhs fs)
+      where addFact = CA.second (M.insert lhs rhs)
 
-killDef :: RegisterLocation
-        -> (AssignmentFact StackLocation, AssignmentFact RegisterLocation)
-        -> (AssignmentFact StackLocation, AssignmentFact RegisterLocation)
+killDef :: RegisterLocation -> CpFacts -> CpFacts
 killDef reg (stkFs, regFs) = (stkFs', M.delete reg regFs')
     where expr   = CmmReg reg
           stkFs' = M.foldrWithKey add M.empty stkFs
@@ -324,48 +319,32 @@ killDef reg (stkFs, regFs) = (stkFs', M.delete reg regFs')
                         else M.insert k f acc
 
 killDefs :: [RegisterLocation] -> CpFacts -> CpFacts
-killDefs regs (Const stkFs, Const regFs) = (Const stkFs', Const regFs')
-    where (stkFs', regFs') = foldr killDef (stkFs, regFs) regs
+killDefs regs (stkFs, regFs) = foldr killDef (stkFs, regFs) regs
 
 dropStackFact :: StackLocation -> CpFacts -> CpFacts
-dropStackFact lhs = CA.first (dropFact lhs)
+dropStackFact lhs = CA.first (M.delete lhs)
 
 dropRegisterFact :: RegisterLocation -> CpFacts -> CpFacts
-dropRegisterFact lhs (Const stkFs, Const regFs) = (Const stkFs', Const (M.delete lhs regFs'))
-    where (stkFs', regFs') = killDef lhs (stkFs, regFs)
-dropRegisterFact _ _ = panic "Dropping facts from bottom"
-
-dropFact :: Ord a => a -> AssignmentFactBot a -> AssignmentFactBot a
-dropFact k (Const m) = Const (M.delete k m)
-dropFact _  Bottom   = panic "Removing facts from Bottom"
+dropRegisterFact lhs = CA.second (M.delete lhs) . killDef lhs
 
 lookupStackFact :: StackLocation -> CpFacts -> Maybe CpFact
-lookupStackFact k = lookupCpFact k . fst
+lookupStackFact k = M.lookup k . fst
 
 lookupRegisterFact :: RegisterLocation -> CpFacts -> Maybe CpFact
-lookupRegisterFact k = lookupCpFact k . snd
-
-lookupCpFact :: Ord a => a -> AssignmentFactBot a -> Maybe CpFact
-lookupCpFact k (Const m) = M.lookup k m
-lookupCpFact _  Bottom   = panic "Looking for facts in bottom"
+lookupRegisterFact k = M.lookup k . snd
 
 -- See Note [Join operation for copy propagation]
 joinCpFacts :: (Show v, Ord v)
             => Label
-            -> AssignmentFactBot v
-            -> AssignmentFactBot v
-            -> (ChangeFlag, AssignmentFactBot v)
-joinCpFacts lbl (Const old)  Bottom     =
+            -> AssignmentFact v
+            -> AssignmentFact v
+            -> (ChangeFlag, AssignmentFact v)
+joinCpFacts lbl old new =
 #ifdef DEBUG
-  trace ("\nJoining Const and Bottom for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts" ++ show old) $
-#endif
-            (NoChange, Const old)
-joinCpFacts lbl (Const old) (Const new) =
-#ifdef DEBUG
-  trace ("\nJoining Const and Const for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts: " ++ show old ++ "\nNew facts: "
+  trace ("\nJoining facts for label " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr lbl)) ++ "\nOld facts: " ++ show old ++ "\nNew facts: "
          ++ show new ++ "\nJoined: " ++ show joined) $
 #endif
-    CA.second Const $ joined
+    joined
   where
     joined = M.foldrWithKey add (NoChange, M.empty) old
     add k old_f (ch, joinmap) =
@@ -374,15 +353,13 @@ joinCpFacts lbl (Const old) (Const new) =
         Just new_f -> if old_f == new_f
                       then (ch        , M.insert k old_f joinmap)
                       else (SomeChange,                  joinmap)
-joinCpFacts _ Bottom Bottom    = panic "Joining bottom with bottom"
-joinCpFacts _ Bottom (Const _) = panic "Joining bottom with const"
 
 -----------------------------------------------------------------------------
 --                     Node rewriting functions
 -----------------------------------------------------------------------------
 
-cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CpFacts
-cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
+cpRewrite :: DynFlags -> FwdRewrite UniqSM CmmNode CpFactsWithBot
+cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddleWithBot dflags) cpRwLastWithBot
     where cpRwFirst _ _ = return Nothing
 
 -- Note [Rewrite functions]
@@ -457,6 +434,13 @@ cpRewrite dflags = deepFwdRw3 cpRwFirst (cpRwMiddle dflags) cpRwLast
 -- Rewrite functions make heavy use of helper functions to reduce boilerplate
 -- code - see comment for a particular function for a more detailed explanation.
 
+cpRwMiddleWithBot :: DynFlags
+                  -> CmmNode O O
+                  -> CpFactsWithBot
+                  -> UniqSM (Maybe (Graph CmmNode O O))
+cpRwMiddleWithBot dflags node (Const facts) = cpRwMiddle dflags node facts
+cpRwMiddleWithBot _      _ _ = panic "Rewritting middle node with Bottom facts"
+
 cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
@@ -491,6 +475,12 @@ cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
       GUnit . BMiddle . CmmUnsafeForeignCall t r $ a)
 
 cpRwMiddle _ _ = const $ return Nothing
+
+cpRwLastWithBot :: CmmNode O C
+                -> CpFactsWithBot
+                -> UniqSM (Maybe (Graph CmmNode O C))
+cpRwLastWithBot node (Const facts) = cpRwLast node facts
+cpRwLastWithBot _    _             = panic "Rewritting last node with Bottom facts"
 
 cpRwLast :: CmmNode O C
          -> CpFacts
@@ -621,11 +611,9 @@ rwCmmExpr _                                    = const Nothing
 -- second parameter to be CmmReg. So we only accept rewrites to a CmmReg -
 -- anything else is discarded.
 rwCmmReg :: CmmReg -> RegisterFacts -> Maybe CmmReg
-rwCmmReg reg (Const fact) =
-    case M.lookup reg fact of
-      Just (CmmReg reg') -> Just reg'
-      _                  -> Nothing
-rwCmmReg _ _ = panic "Looking for register facts in bottom"
+rwCmmReg reg fact
+    | Just (CmmReg reg') <- M.lookup reg fact = Just reg'
+    | otherwise                               = Nothing
 
 rwCmmExprs :: [CmmExpr] -> CpFacts -> Maybe [CmmExpr]
 rwCmmExprs = rwCmmList rwCmmExpr
