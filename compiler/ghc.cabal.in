@@ -170,6 +170,7 @@ Library
         CmmCallConv
         CmmCommonBlockElim
         CmmContFlowOpt
+        CmmPreCopyPropagation
         CmmCopyPropagation
         CmmExpr
         CmmInfo

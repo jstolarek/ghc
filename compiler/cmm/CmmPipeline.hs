@@ -18,6 +18,7 @@ import CmmContFlowOpt
 import CmmLayoutStack
 import CmmSink
 import CmmLoopify
+import CmmPreCopyPropagation
 import CmmCopyPropagation
 import Hoopl
 
@@ -97,7 +98,12 @@ cpsTop hsc_env proc =
                      Opt_D_dump_cmm_loopify "Loopify tail calls"
 
        dump Opt_D_dump_cmm_before_cp "Before copy propagation" g
-
+{-
+       ------------------ Copy propagation preprocessing -----------------------
+       g <- {-# SCC "copyPropagationPreprocessing" #-}
+            condPassSM Opt_CmmCopyPropagation (cmmPreCopyPropagation dflags) g
+                       Opt_D_dump_cmm_copy_prop "Copy propagation preprocessing"
+-}
        ------------------ Copy propagation -------------------------------------
        g <- {-# SCC "copyPropagation" #-}
             condPassSM Opt_CmmCopyPropagation (cmmCopyPropagation dflags) g
