@@ -2,6 +2,7 @@
 module CmmCopyPropagation where
 
 import Cmm
+import CmmCallConv ( globalArgRegs )
 import CmmUtils
 import DynFlags
 import Hoopl
@@ -68,12 +69,6 @@ instance Show Area where
 instance Show ChangeFlag where
     show NoChange   = "NoChange"
     show SomeChange = "SomeChange"
-
-{-
-instance (Show a) => Show (AssignmentFactBot a) where
-    show Bottom    = "Bottom"
-    show (Const m) = "Const " ++ show m
--}
 
 -- Note [Copy propagation facts]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -250,8 +245,7 @@ cpTransferMiddle c@(CmmUnsafeForeignCall tgt _ _) f =
 #ifdef DEBUG
     trace ("Killing facts for CmmUnsafeForeignCall " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr c))) $
 #endif
-        killDefs (foreignTargetRegs tgt) f
-
+            CA.first (const M.empty) $ killDefs (foreignTargetRegs tgt) f -- can I keep register facts here? Can I kill less regs?
 cpTransferMiddle _ f = f
 
 cpTransferLastWithBot :: CmmNode O C -> CpFactsWithBot -> FactBase CpFactsWithBot
@@ -260,17 +254,19 @@ cpTransferLastWithBot _ _ = panic "Transfering last node with Bottom facts"
 
 cpTransferLast :: CmmNode O C -> CpFacts -> CpFacts
 cpTransferLast n@(CmmCall {}) f =
-#ifdef DEBUG
-    trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
-           " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+#ifdef DEBUG2
+    --trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
+    --       " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
+      trace ("List of regs to kill: " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr activeRegs) ++
+              "\nFacts after killing: " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (killDefs activeRegs f)) ) $
 #endif
-            killDefs activeRegs f
+            CA.first (const M.empty) $ killDefs activeRegs f
 cpTransferLast n@(CmmForeignCall {tgt=tgt} ) f =
 #ifdef DEBUG
     trace ("Successors of exit node " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr n) ++
            " are " ++ showSDocDebug (unsafeGlobalDynFlags) (ppr (successors n))) $
 #endif
-            killDefs (foreignTargetRegs tgt) f
+            CA.first (const M.empty) $ killDefs activeRegs f -- can I keep register facts here? Can I kill less regs?
 cpTransferLast n f = f
 
 -----------------------------------------------------------------------------
@@ -445,30 +441,11 @@ cpRwMiddle :: DynFlags
            -> CmmNode O O
            -> CpFacts
            -> UniqSM (Maybe (Graph CmmNode O O))
--- if we store a register, attempt to rewrite it
-cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
-    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
-
-{-
--- otherwise we create a new register, assign previously stored expression to that
--- new register, and store the new register
--- this causes out of memory errors (inifinite loop?)
-cpRwMiddle dflags (CmmStore lhs rhs) = const $ do
-  u <- getUniqueUs
-  let regSize      = cmmExprType dflags rhs
-      newReg       = CmmLocal $ LocalReg u regSize
-      newRegAssign = CmmAssign newReg rhs
-      newMemAssign = CmmStore lhs (CmmReg newReg)
-  return . Just . GUnit . BCons newRegAssign . BMiddle $
-#ifdef DEBUG
-     trace ("Rewriting CmmStore. newReg: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newReg)) ++
-            ", newRegAssign: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newRegAssign)) ++
-            ", newMemAssign: " ++ (showSDocDebug (unsafeGlobalDynFlags) (ppr newMemAssign))) $
-#endif
-         newMemAssign
--}
 cpRwMiddle _ (CmmAssign lhs rhs) =
     rwCmmExprToGraphOO (CmmAssign lhs) (rwCmmExpr rhs)
+
+cpRwMiddle _ (CmmStore lhs (CmmReg rhs)) =
+    rwCmmExprToGraphOO (CmmStore lhs) (lookupRegisterFact rhs)
 
 cpRwMiddle _ (CmmUnsafeForeignCall tgt res args) =
     rwForeignCall tgt res args (\t r a ->
@@ -595,10 +572,6 @@ rwCmmExprToGraphOC exprToNode expr =
 -- equations recurse on Cmm expressions stored within other data
 -- constructors.
 rwCmmExpr :: CmmExpr -> CpFacts -> Maybe CmmExpr
-{-rwCmmExpr (CmmLoad (CmmReg reg)             _) = (\f ->
-   case lookupRegisterFact reg f of
-     rhs@(Just (CmmLit _)) -> rhs
-     _                     -> Nothing)-}
 rwCmmExpr (CmmReg reg                        ) = lookupRegisterFact reg
 rwCmmExpr (CmmLoad (CmmStackSlot area off ) _) = lookupStackFact (area, off)
 rwCmmExpr (CmmMachOp machOp params           ) = fmap (CmmMachOp machOp) . rwCmmExprs params
@@ -641,7 +614,7 @@ platform = targetPlatform unsafeGlobalDynFlags -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 -- based on code in CmmNode
 activeRegs :: [RegisterLocation]
-activeRegs = map CmmGlobal (activeStgRegs platform)
+activeRegs = map CmmGlobal (globalArgRegs unsafeGlobalDynFlags)
 
 activeCallerSavesRegs :: [RegisterLocation]
 activeCallerSavesRegs = map CmmGlobal . filter (callerSaves platform) . activeStgRegs $ platform
