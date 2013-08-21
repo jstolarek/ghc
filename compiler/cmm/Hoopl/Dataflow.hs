@@ -240,9 +240,8 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
                     -- in the Body; the facts for Labels *in*
                     -- the Body are in the 'DG f n C C'
     body blockmap init_fbase
-      = fixpoint Fwd lattice do_block entries blockmap init_fbase
+      = fixpoint Fwd lattice do_block blockmap init_fbase
       where
-        entries = mapKeys init_fbase
         lattice = fp_lattice pass
         do_block :: forall x . Block n C x -> FactBase f
                  -> UniqSM (DG f n C x, Fact x f)
@@ -406,10 +405,10 @@ analyzeBwd BwdPass { bp_lattice = lattice,
 analyzeAndRewriteBwd
    :: NonLocal n
    => BwdPass UniqSM n f
-   -> MaybeC e [Label] -> Graph n e x -> Fact x f
+   -> Graph n e x -> Fact x f
    -> UniqSM (Graph n e x, FactBase f, MaybeO e f)
-analyzeAndRewriteBwd pass entries g f =
-  do (rg, fout) <- arbGraph pass (fmap targetLabels entries) g f
+analyzeAndRewriteBwd pass  g f =
+  do (rg, fout) <- arbGraph pass g f
      let (g', fb) = normalizeGraph rg
      return (g', fb, distinguishedEntryFact g' fout)
 
@@ -429,10 +428,10 @@ distinguishedEntryFact g f = maybe g
 arbGraph :: forall n f e x .
             NonLocal n =>
             BwdPass UniqSM n f ->
-            Entries e -> Graph n e x -> Fact x f -> UniqSM (DG f n e x, Fact e f)
+            Graph n e x -> Fact x f -> UniqSM (DG f n e x, Fact e f)
 arbGraph pass@BwdPass { bp_lattice  = lattice,
                         bp_transfer = transfer,
-                        bp_rewrite  = rewrite } entries g in_fact = graph g in_fact
+                        bp_rewrite  = rewrite } g in_fact = graph g in_fact
   where
     {- nested type synonyms would be so lovely here
     type ARB  thing = forall e x . thing e x -> Fact x f -> m (DG f n e x, f)
@@ -440,7 +439,7 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
     -}
     graph ::              Graph n e x -> Fact x f -> UniqSM (DG f n e x, Fact e f)
     block :: forall e x . Block n e x -> Fact x f -> UniqSM (DG f n e x, f)
-    body  :: [Label] -> Body n -> Fact C f -> UniqSM (DG f n C C, Fact C f)
+    body  :: Body n -> Fact C f -> UniqSM (DG f n C C, Fact C f)
     node  :: forall e x . (ShapeLifter e x)
              => n e x       -> Fact x f -> UniqSM (DG f n e x, f)
     cat :: forall e a x info info' info''.
@@ -456,12 +455,11 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
       exit  :: MaybeO x (Block n C O)           -> Fact x f -> UniqSM (DG f n C x, Fact C f)
       exit (JustO blk) f = arbx block blk f
       exit NothingO    f = return (dgnilC, f)
-      ebcat entry bdy f = c entries entry f
-       where c :: MaybeC e [Label] -> MaybeO e (Block n O C)
-                -> Fact C f -> UniqSM (DG f n e C, Fact e f)
-             c NothingC (JustO entry)   f = (block entry `cat` body (successors entry) bdy) f
-             c (JustC entries) NothingO f = body entries bdy f
-             c _ _ _ = error "bogus GADT pattern match failure"
+      ebcat entry bdy f = c entry f
+       where c :: MaybeO e (Block n O C)
+               -> Fact C f -> UniqSM (DG f n e C, Fact e f)
+             c (JustO entry) f = (block entry `cat` body bdy) f
+             c NothingO      f = body bdy f
 
     -- Lift from nodes to blocks
     block BNil            f = return (dgnil, f)
@@ -482,7 +480,7 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
                             where entry_f = btransfer transfer n f
                Just (g, rw) ->
                           do { let pass' = pass { bp_rewrite = rw }
-                             ; (g, f) <- arbGraph pass' (fwdEntryLabel n) g f
+                             ; (g, f) <- arbGraph pass' g f
                              ; return (g, bwdEntryFact lattice n f)} }
 
     -- | Compose fact transformers and concatenate the resulting
@@ -506,8 +504,8 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
                     -- Outgoing factbase is restricted to Labels *not* in
                     -- in the Body; the facts for Labels *in*
                     -- the Body are in the 'DG f n C C'
-    body entries blockmap init_fbase
-      = fixpoint Bwd (bp_lattice pass) do_block entries blockmap init_fbase
+    body blockmap init_fbase
+      = fixpoint Bwd (bp_lattice pass) do_block blockmap init_fbase
       where
         do_block :: forall x. Block n C x -> Fact x f -> UniqSM (DG f n C x, LabelMap f)
         do_block b f = do (g, f) <- block b f
@@ -584,12 +582,11 @@ fixpoint :: forall n f. NonLocal n
  => Direction
  -> DataflowLattice f
  -> (Block n C C -> Fact C f -> UniqSM (DG f n C C, Fact C f))
- -> [Label]
  -> LabelMap (Block n C C)
  -> (Fact C f -> UniqSM (DG f n C C, Fact C f))
 
 fixpoint direction DataflowLattice{ fact_bot = _, fact_join = join }
-         do_block entries blockmap init_fbase
+         do_block blockmap init_fbase
   = do
         -- trace ("fixpoint: " ++ show (case direction of Fwd -> True; Bwd -> False) ++ " " ++ show (mapKeys blockmap) ++ show entries ++ " " ++ show (mapKeys init_fbase)) $ return()
         (fbase, newblocks) <- loop start init_fbase mapEmpty
@@ -600,6 +597,7 @@ fixpoint direction DataflowLattice{ fact_bot = _, fact_join = join }
     -- for which we have facts and which are *not* in
     -- the blocks of the graph
   where
+    entries    = mapKeys init_fbase
     blocks     = sortBlocks direction entries blockmap
     n          = length blocks
     block_arr  = {-# SCC "block_arr" #-} listArray (0,n-1) blocks
