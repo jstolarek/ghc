@@ -283,9 +283,8 @@ analyzeFwd FwdPass { fp_lattice = lattice,
          NothingO    -> body
      where
        body :: Fact C f -> Fact C f
-       body f = fixpointAnal Fwd lattice do_block entries blockmap f
+       body f = fixpointAnal Fwd lattice do_block blockmap f
          where
-           entries = mapKeys f
            do_block :: forall x . Block n C x -> Fact C f -> Fact x f
            do_block b fb = block b entryFact
              where entryFact = getFact lattice (entryLabel b) fb
@@ -317,16 +316,15 @@ analyzeFwdBlocks FwdPass { fp_lattice = lattice,
                            fp_transfer = FwdTransfer3 (ftr, _, ltr) }
                  g in_fact = graph g in_fact
   where
-    graph :: Graph n e C -> Fact e f -> FactBase f
+    graph :: Graph n e C -> Fact e f -> Fact C f
     graph (GMany g_entry blockmap NothingO)
       = case g_entry of
          JustO entry -> block entry `cat` body
          NothingO    -> body
      where
        body :: Fact C f -> Fact C f
-       body f = fixpointAnal Fwd lattice do_block entries blockmap f
+       body f = fixpointAnal Fwd lattice do_block blockmap f
          where
-           entries = mapKeys f
            do_block :: forall x . Block n C x -> FactBase f -> Fact x f
            do_block b fb = block b entryFact
              where entryFact = getFact lattice (entryLabel b) fb
@@ -352,23 +350,18 @@ analyzeFwdBlocks FwdPass { fp_lattice = lattice,
 analyzeBwd
    :: forall n f e .  NonLocal n =>
       BwdPass UniqSM n f
-   -> MaybeC e [Label]
    -> Graph n e C -> Fact C f
    -> FactBase f
 analyzeBwd BwdPass { bp_lattice = lattice,
                      bp_transfer = BwdTransfer3 (ftr, mtr, ltr) }
-   entries g in_fact = graph g in_fact
+           g in_fact = graph g in_fact
   where
-    graph :: Graph n e C -> Fact C f -> FactBase f
-    graph (GMany entry blockmap NothingO)
-      = case (entries, entry) of
-         (NothingC, JustO entry)   -> body (successors entry)
-         (JustC entries, NothingO) -> body entries
-         _ -> error "bogus GADT pattern match failure"
+    graph :: Graph n e C -> Fact C f -> Fact C f
+    graph (GMany _ blockmap NothingO) = body
      where
-       body  :: [Label] -> Fact C f -> Fact C f
-       body entries f
-         = fixpointAnal Bwd lattice do_block entries blockmap f
+       body :: Fact C f -> Fact C f
+       body f
+         = fixpointAnal Bwd lattice do_block blockmap f
          where
            do_block :: forall x . Block n C x -> Fact x f -> FactBase f
            do_block b fb = mapSingleton (entryLabel b) (block b fb)
@@ -532,14 +525,14 @@ fixpointAnal :: forall n f. NonLocal n
  => Direction
  -> DataflowLattice f
  -> (Block n C C -> Fact C f -> Fact C f)
- -> [Label]
  -> LabelMap (Block n C C)
  -> Fact C f -> FactBase f
 
 fixpointAnal direction DataflowLattice{ fact_bot = _, fact_join = join }
-              do_block entries blockmap init_fbase
+              do_block blockmap init_fbase
   = loop start init_fbase
   where
+    entries    = mapKeys init_fbase
     blocks     = sortBlocks direction entries blockmap
     n          = length blocks
     block_arr  = {-# SCC "block_arr" #-} listArray (0,n-1) blocks

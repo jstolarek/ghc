@@ -545,8 +545,8 @@ dataflowAnalBwd :: NonLocal n =>
                    GenCmmGraph n -> [(BlockId, f)]
                 -> BwdPass UniqSM n f
                 -> BlockEnv f
-dataflowAnalBwd (CmmGraph {g_entry=entry, g_graph=graph}) facts bwd =
-  analyzeBwd bwd (JustC [entry]) graph (mkFactBase (bp_lattice bwd) facts)
+dataflowAnalBwd (CmmGraph {g_graph=graph}) facts bwd =
+  analyzeBwd bwd graph (mkFactBase (bp_lattice bwd) facts)
 
 dataflowPassBwd :: NonLocal n =>
                    GenCmmGraph n -> [(BlockId, f)]
