@@ -30,6 +30,7 @@ module Hoopl.Dataflow
   )
 where
 
+import Maybes     (expectJust)
 import UniqSupply
 
 import Data.Maybe
@@ -842,25 +843,9 @@ instance ShapeLifter O C where
   brewrite  (BwdRewrite3  (_, _, br)) n f = br n f
   fwdEntryLabel _ = NothingC
 
-{-
-class ShapeLifter e x where
-  singletonDG   :: f -> n e x -> DG f n e x
-
-instance ShapeLifter C O where
-  singletonDG f n = gUnitCO (DBlock f (BlockCO n BNil))
-
-instance ShapeLifter O O where
-  singletonDG f = gUnitOO . DBlock f . BMiddle
-
-instance ShapeLifter O C where
-  singletonDG f n = gUnitOC (DBlock f (BlockOC BNil n))
--}
-
 -- Fact lookup: the fact `orelse` bottom
 getFact  :: DataflowLattice f -> Label -> FactBase f -> f
-getFact lat l fb = case lookupFact l fb of Just  f -> f
-                                           Nothing -> fact_bot lat
-
+getFact lat l fb = expectJust "getFact" $ lookupFact l fb
 
 
 {-  Note [Respects fuel]
