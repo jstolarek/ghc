@@ -36,7 +36,7 @@ deepFwdRw f = deepFwdRw3 f f f
 -- But rw and rw' are single functions.
 thenFwdRw :: forall n f.
              FwdRewrite UniqSM n f
-          -> FwdRewrite UniqSM n f 
+          -> FwdRewrite UniqSM n f
           -> FwdRewrite UniqSM n f
 thenFwdRw rw3 rw3' = wrapFR2 thenrw rw3 rw3'
  where
