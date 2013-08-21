@@ -311,24 +311,22 @@ analyzeFwd FwdPass { fp_lattice = lattice,
 analyzeFwdBlocks
    :: forall n f e .  NonLocal n =>
       FwdPass UniqSM n f
-   -> MaybeC e [Label]
    -> Graph n e C -> Fact e f
    -> FactBase f
 analyzeFwdBlocks FwdPass { fp_lattice = lattice,
                            fp_transfer = FwdTransfer3 (ftr, _, ltr) }
-  entries g in_fact = graph g in_fact
+                 g in_fact = graph g in_fact
   where
     graph :: Graph n e C -> Fact e f -> FactBase f
-    graph (GMany entry blockmap NothingO)
-      = case (entries, entry) of
-         (NothingC, JustO entry)   -> block entry `cat` body (successors entry)
-         (JustC entries, NothingO) -> body entries
-         _ -> error "bogus GADT pattern match failure"
+    graph (GMany g_entry blockmap NothingO)
+      = case g_entry of
+         JustO entry -> block entry `cat` body
+         NothingO    -> body
      where
-       body  :: [Label] -> Fact C f -> Fact C f
-       body entries f
-         = fixpointAnal Fwd lattice do_block entries blockmap f
+       body :: Fact C f -> Fact C f
+       body f = fixpointAnal Fwd lattice do_block entries blockmap f
          where
+           entries = mapKeys f
            do_block :: forall x . Block n C x -> FactBase f -> Fact x f
            do_block b fb = block b entryFact
              where entryFact = getFact lattice (entryLabel b) fb

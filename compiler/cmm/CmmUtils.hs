@@ -538,8 +538,8 @@ dataflowAnalFwdBlocks :: NonLocal n =>
                    GenCmmGraph n -> [(BlockId, f)]
                 -> FwdPass UniqSM n f
                 -> UniqSM (BlockEnv f)
-dataflowAnalFwdBlocks (CmmGraph {g_entry=entry, g_graph=graph}) facts fwd = do
-  return (analyzeFwdBlocks fwd (JustC [entry]) graph (mkFactBase (fp_lattice fwd) facts))
+dataflowAnalFwdBlocks (CmmGraph {g_graph=graph}) facts fwd = do
+  return (analyzeFwdBlocks fwd graph (mkFactBase (fp_lattice fwd) facts))
 
 dataflowAnalBwd :: NonLocal n =>
                    GenCmmGraph n -> [(BlockId, f)]
