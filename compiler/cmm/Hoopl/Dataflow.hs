@@ -189,7 +189,7 @@ arfGraph pass@FwdPass { fp_transfer = transfer,
       exit NothingO    f = return (dgnilC, f)
       ebcat entry bdy f = c entry f
        where c :: MaybeO e (Block n O C)
-                -> Fact e f -> UniqSM (DG f n e C, Fact C f)
+               -> Fact e f -> UniqSM (DG f n e C, Fact C f)
              c (JustO entry) f = (block entry `cat` body bdy) f
              c NothingO      f = body bdy f
 
@@ -826,7 +826,7 @@ instance ShapeLifter O C where
   brewrite  (BwdRewrite3  (_, _, br)) n f = br n f
   fwdEntryLabel _ = NothingC
 
--- Fact lookup: the fact `orelse` bottom
+-- Fact lookup: the fact `orelse` panic
 getFact  :: Label -> FactBase f -> f
 getFact l fb = expectJust "getFact" $ lookupFact l fb
 
