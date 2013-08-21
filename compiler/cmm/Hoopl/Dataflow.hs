@@ -154,8 +154,6 @@ distinguishedExitFact g f = maybe g
 --       Forward Implementation
 ----------------------------------------------------------------
 
-type Entries e = MaybeC e [Label]
-
 arfGraph :: forall n f e x .  NonLocal n =>
             FwdPass UniqSM n f ->
             Graph n e x -> Fact e f -> UniqSM (DG f n e x, Fact x f)
@@ -272,25 +270,23 @@ forwardBlockList entries blks = postorder_dfs_from blks entries
 analyzeFwd
    :: forall n f e .  NonLocal n =>
       FwdPass UniqSM n f
-   -> MaybeC e [Label]
    -> Graph n e C -> Fact e f
    -> FactBase f
 analyzeFwd FwdPass { fp_lattice = lattice,
                      fp_transfer = FwdTransfer3 (ftr, mtr, ltr) }
-  entries g in_fact = graph g in_fact
+           g in_fact = graph g in_fact
   where
-    graph :: Graph n e C -> Fact e f -> FactBase f
-    graph (GMany entry blockmap NothingO)
-      = case (entries, entry) of
-         (NothingC, JustO entry)   -> block entry `cat` body (successors entry)
-         (JustC entries, NothingO) -> body entries
-         _ -> error "bogus GADT pattern match failure"
+    graph :: Graph n e C -> Fact e f -> Fact C f
+    graph (GMany g_entry blockmap NothingO)
+      = case g_entry of
+         JustO entry -> block entry `cat` body
+         NothingO    -> body
      where
-       body  :: [Label] -> Fact C f -> Fact C f
-       body entries f
-         = fixpointAnal Fwd lattice do_block entries blockmap f
+       body :: Fact C f -> Fact C f
+       body f = fixpointAnal Fwd lattice do_block entries blockmap f
          where
-           do_block :: forall x . Block n C x -> FactBase f -> Fact x f
+           entries = mapKeys f
+           do_block :: forall x . Block n C x -> Fact C f -> Fact x f
            do_block b fb = block b entryFact
              where entryFact = getFact lattice (entryLabel b) fb
 
