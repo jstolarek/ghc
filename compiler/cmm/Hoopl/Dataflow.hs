@@ -46,7 +46,7 @@ import Compiler.Hoopl.Internals
   )
 
 
--- -----------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 noRewrite :: a -> b -> UniqSM (Maybe c)
 noRewrite _ _ = return Nothing
@@ -357,14 +357,10 @@ analyzeBwd BwdPass { bp_lattice = lattice,
            g in_fact = graph g in_fact
   where
     graph :: Graph n e C -> Fact C f -> Fact C f
-    graph (GMany _ blockmap NothingO) = body
-     where
-       body :: Fact C f -> Fact C f
-       body f
-         = fixpointAnal Bwd lattice do_block blockmap f
-         where
-           do_block :: forall x . Block n C x -> Fact x f -> FactBase f
-           do_block b fb = mapSingleton (entryLabel b) (block b fb)
+    graph (GMany _ blockmap NothingO) = fixpointAnal Bwd lattice do_block blockmap
+        where
+          do_block :: forall x . Block n C x -> Fact x f -> FactBase f
+          do_block b fb = mapSingleton (entryLabel b) (block b fb)
 
     -- NB. eta-expand block, GHC can't do this by itself.  See #5809.
     block :: forall e x . Block n e x -> Fact x f -> f

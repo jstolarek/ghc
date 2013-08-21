@@ -110,7 +110,9 @@ cafTransfers = mkBTransfer3 first middle last
                               else s
 
 cafAnal :: CmmGraph -> CAFEnv
-cafAnal g = dataflowAnalBwd g [] $ analBwd cafLattice cafTransfers
+cafAnal graph =
+    dataflowAnalBwd graph [(entry, Set.empty)] $ analBwd cafLattice cafTransfers
+  where entry = g_entry graph
 
 -----------------------------------------------------------------------
 -- Building the SRTs

@@ -54,7 +54,7 @@ type BlockEntryLiveness r = BlockEnv (CmmLive r)
 
 cmmLocalLiveness :: DynFlags -> CmmGraph -> BlockEntryLiveness LocalReg
 cmmLocalLiveness dflags graph =
-  check $ dataflowAnalBwd graph [] $ analBwd liveLattice (xferLive dflags)
+  check $ dataflowAnalBwd graph [(entry, emptyRegSet)] $ analBwd liveLattice (xferLive dflags)
   where entry = g_entry graph
         check facts = noLiveOnEntry entry
                         (expectJust "check" $ mapLookup entry facts) facts
