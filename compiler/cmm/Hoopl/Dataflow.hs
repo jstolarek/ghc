@@ -93,6 +93,40 @@ mkBRewrite3 f m l = BwdRewrite3 (lift f, lift m, lift l)
 --              Analyze and rewrite forward: the interface
 -----------------------------------------------------------------------------
 
+-- Note [Hoopl cleanup]
+-- ~~~~~~~~~~~~~~~~~~~~
+--
+-- When doing dataflow analysis Hoopl behvaes like this:
+--   * when user passes in some initial facts about entry nodes it ignores
+--     bottom element of DataflowLattice
+--   * when user does not pass initial (incoming) facts about entry nodes
+--     it uses bottom element of DataflowLattice
+--
+-- So it clearly needs only one of the two. This is a bit unelegant, because
+-- user is forced to pass in some fact information to hoopl in two different
+-- ways. The idea behind a cleanup is to have only one place where user passes
+-- in this information: namely, the analysis functions. User would have to
+-- always pass in a set of incomming facts for each entry node. Note that
+-- this set of facts could be empty.
+--
+-- The idea is to do a two-stage cleanup. First stage would be to modify this
+-- module and its dependencies within a compiler. Second stage would be
+-- modifying Hoopl library to remove bottom element from a lattice and break
+-- other people's code :)
+--
+-- The way hoopl implements bottom internally is that it performs a join
+-- if there are many incoming facts, but if there is only one fact it
+-- doesn't do a join.
+--
+-- Simon also doesn't like joinInFacts, because we're doing it every time for
+-- no apparent reason. I'm not sure if this function ever get's called - if it
+-- would my code would panic, but clearly it doesn't. Probably worth
+-- investigating as well.
+
+-- type family Entries e f
+-- type instance Entries O f = f
+-- type instance Entries C f = [(Label,f)]
+
 -- | if the graph being analyzed is open at the entry, there must
 --   be no other entry point, or all goes horribly wrong...
 analyzeAndRewriteFwd
@@ -100,6 +134,8 @@ analyzeAndRewriteFwd
       FwdPass UniqSM n f
    -> MaybeC e [Label]
    -> Graph n  e x -> Fact e f
+--   -> Entries e f   -- Entry points and the incoming fact for each
+--   -> Graph n  e x  -- Code inaccessible from the entry points is simply discarded
    -> UniqSM (Graph n e x, FactBase f, MaybeO x f)
 analyzeAndRewriteFwd pass entries g f =
   do (rg, fout) <- arfGraph pass (fmap targetLabels entries) g f
