@@ -61,7 +61,8 @@ cmmLocalLiveness dflags graph =
 
 cmmGlobalLiveness :: DynFlags -> CmmGraph -> BlockEntryLiveness GlobalReg
 cmmGlobalLiveness dflags graph =
-  dataflowAnalBwd graph [] $ analBwd liveLattice (xferLive dflags)
+  dataflowAnalBwd graph [(entry, emptyRegSet)] $ analBwd liveLattice (xferLive dflags)
+  where entry = g_entry graph
 
 -- | On entry to the procedure, there had better not be any LocalReg's live-in.
 noLiveOnEntry :: BlockId -> CmmLive LocalReg -> a -> a
