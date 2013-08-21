@@ -33,7 +33,6 @@ where
 import Maybes     (expectJust)
 import UniqSupply
 
-import Data.Maybe
 import Data.Array
 
 import Compiler.Hoopl hiding
@@ -158,8 +157,7 @@ distinguishedExitFact g f = maybe g
 arfGraph :: forall n f e x .  NonLocal n =>
             FwdPass UniqSM n f ->
             Graph n e x -> Fact e f -> UniqSM (DG f n e x, Fact x f)
-arfGraph pass@FwdPass { fp_lattice = lattice,
-                        fp_transfer = transfer,
+arfGraph pass@FwdPass { fp_transfer = transfer,
                         fp_rewrite  = rewrite } g in_fact = graph g in_fact
   where
     {- nested type synonyms would be so lovely here
@@ -231,9 +229,7 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
             (Block n C x ->        f -> UniqSM (DG f n C x, Fact x f))
          -> (Block n C x -> Fact C f -> UniqSM (DG f n C x, Fact x f))
     arfx arf thing fb =
-      arf thing $ fromJust $ lookupFact (entryLabel thing) $ joinInFacts lattice fb
-     -- joinInFacts adds debugging information
-
+      arf thing $ getFact (entryLabel thing) fb
 
                     -- Outgoing factbase is restricted to Labels *not* in
                     -- in the Body; the facts for Labels *in*
@@ -245,16 +241,7 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
         do_block :: forall x . Block n C x -> FactBase f
                  -> UniqSM (DG f n C x, Fact x f)
         do_block b fb = block b entryFact
-          where entryFact = getFact lattice (entryLabel b) fb
-
-
--- Join all the incoming facts with bottom.
--- We know the results _shouldn't change_, but the transfer
--- functions might, for example, generate some debugging traces.
-joinInFacts :: DataflowLattice f -> FactBase f -> FactBase f
-joinInFacts (lattice @ DataflowLattice {fact_bot = bot, fact_join = fj}) fb =
-  mkFactBase lattice $ map botJoin $ mapToList fb
-    where botJoin (l, f) = (l, snd $ fj l (OldFact bot) (NewFact f))
+          where entryFact = getFact (entryLabel b) fb
 
 forwardBlockList :: (NonLocal n)
                  => [Label] -> Body n -> [Block n C C]
@@ -288,7 +275,7 @@ analyzeFwd FwdPass { fp_lattice = lattice,
          where
            do_block :: forall x . Block n C x -> Fact C f -> Fact x f
            do_block b fb = block b entryFact
-             where entryFact = getFact lattice (entryLabel b) fb
+             where entryFact = getFact (entryLabel b) fb
 
     -- NB. eta-expand block, GHC can't do this by itself.  See #5809.
     block :: forall e x . Block n e x -> f -> Fact x f
@@ -328,7 +315,7 @@ analyzeFwdBlocks FwdPass { fp_lattice = lattice,
          where
            do_block :: forall x . Block n C x -> FactBase f -> Fact x f
            do_block b fb = block b entryFact
-             where entryFact = getFact lattice (entryLabel b) fb
+             where entryFact = getFact (entryLabel b) fb
 
     -- NB. eta-expand block, GHC can't do this by itself.  See #5809.
     block :: forall e x . Block n e x -> f -> Fact x f
@@ -413,8 +400,7 @@ arbGraph :: forall n f e x .
             NonLocal n =>
             BwdPass UniqSM n f ->
             Graph n e x -> Fact x f -> UniqSM (DG f n e x, Fact e f)
-arbGraph pass@BwdPass { bp_lattice  = lattice,
-                        bp_transfer = transfer,
+arbGraph pass@BwdPass { bp_transfer = transfer,
                         bp_rewrite  = rewrite } g in_fact = graph g in_fact
   where
     {- nested type synonyms would be so lovely here
@@ -465,7 +451,7 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
                Just (g, rw) ->
                           do { let pass' = pass { bp_rewrite = rw }
                              ; (g, f) <- arbGraph pass' g f
-                             ; return (g, bwdEntryFact lattice n f)} }
+                             ; return (g, bwdEntryFact n f)} }
 
     -- | Compose fact transformers and concatenate the resulting
     -- rewritten graphs.
@@ -480,10 +466,7 @@ arbGraph pass@BwdPass { bp_lattice  = lattice,
          -> (Block n C x -> Fact x f -> UniqSM (DG f n C x, Fact C f))
 
     arbx arb thing f = do { (rg, f) <- arb thing f
-                          ; let fb = joinInFacts (bp_lattice pass) $
-                                     mapSingleton (entryLabel thing) f
-                          ; return (rg, fb) }
-     -- joinInFacts adds debugging information
+                          ; return (rg, mapSingleton (entryLabel thing) f) }
 
                     -- Outgoing factbase is restricted to Labels *not* in
                     -- in the Body; the facts for Labels *in*
@@ -808,7 +791,7 @@ class ShapeLifter e x where
  frewrite  :: FwdRewrite m n f -> n e x
            -> f -> m (Maybe (Graph n e x, FwdRewrite m n f))
 -- @ end node.tex
- bwdEntryFact :: NonLocal n => DataflowLattice f -> n e x -> Fact e f -> f
+ bwdEntryFact :: NonLocal n => n e x -> Fact e f -> f
  btransfer    :: BwdTransfer n f -> n e x -> Fact x f -> f
  brewrite     :: BwdRewrite m n f -> n e x
               -> Fact x f -> m (Maybe (Graph n e x, BwdRewrite m n f))
@@ -816,7 +799,7 @@ class ShapeLifter e x where
 instance ShapeLifter C O where
   singletonDG f n = gUnitCO (DBlock f (BlockCO n BNil))
   fwdEntryFact     n f  = mapSingleton (entryLabel n) f
-  bwdEntryFact lat n fb = getFact lat (entryLabel n) fb
+  bwdEntryFact     n fb = getFact (entryLabel n) fb
   ftransfer (FwdTransfer3 (ft, _, _)) n f = ft n f
   btransfer (BwdTransfer3 (bt, _, _)) n f = bt n f
   frewrite  (FwdRewrite3  (fr, _, _)) n f = fr n f
@@ -826,7 +809,7 @@ instance ShapeLifter C O where
 instance ShapeLifter O O where
   singletonDG f = gUnitOO . DBlock f . BMiddle
   fwdEntryFact   _ f = f
-  bwdEntryFact _ _ f = f
+  bwdEntryFact   _ f = f
   ftransfer (FwdTransfer3 (_, ft, _)) n f = ft n f
   btransfer (BwdTransfer3 (_, bt, _)) n f = bt n f
   frewrite  (FwdRewrite3  (_, fr, _)) n f = fr n f
@@ -836,7 +819,7 @@ instance ShapeLifter O O where
 instance ShapeLifter O C where
   singletonDG f n = gUnitOC (DBlock f (BlockOC BNil n))
   fwdEntryFact   _ f = f
-  bwdEntryFact _ _ f = f
+  bwdEntryFact   _ f = f
   ftransfer (FwdTransfer3 (_, _, ft)) n f = ft n f
   btransfer (BwdTransfer3 (_, _, bt)) n f = bt n f
   frewrite  (FwdRewrite3  (_, _, fr)) n f = fr n f
@@ -844,8 +827,8 @@ instance ShapeLifter O C where
   fwdEntryLabel _ = NothingC
 
 -- Fact lookup: the fact `orelse` bottom
-getFact  :: DataflowLattice f -> Label -> FactBase f -> f
-getFact lat l fb = expectJust "getFact" $ lookupFact l fb
+getFact  :: Label -> FactBase f -> f
+getFact l fb = expectJust "getFact" $ lookupFact l fb
 
 
 {-  Note [Respects fuel]
