@@ -96,7 +96,7 @@ mkBRewrite3 f m l = BwdRewrite3 (lift f, lift m, lift l)
 -- Note [Hoopl cleanup]
 -- ~~~~~~~~~~~~~~~~~~~~
 --
--- When doing dataflow analysis Hoopl behvaes like this:
+-- When doing dataflow analysis Hoopl behaves like this:
 --   * when user passes in some initial facts about entry nodes it ignores
 --     bottom element of DataflowLattice
 --   * when user does not pass initial (incoming) facts about entry nodes
@@ -115,8 +115,10 @@ mkBRewrite3 f m l = BwdRewrite3 (lift f, lift m, lift l)
 -- other people's code :)
 --
 -- The way hoopl implements bottom internally is that it performs a join
--- if there are many incoming facts, but if there is only one fact it
--- doesn't do a join.
+-- if the analyzed block is in the domain, i.e. we have already analyzed it
+-- earlier and know sth about it. If we don't have any facts about the block
+-- being analyzed then we don't perform a join and just accept the new fact.
+-- See Note [Unreachable blocks] and updateFact function.
 --
 -- Simon also doesn't like joinInFacts, because we're doing it every time for
 -- no apparent reason. I'm not sure if this function ever get's called - if it
@@ -127,18 +129,16 @@ mkBRewrite3 f m l = BwdRewrite3 (lift f, lift m, lift l)
 -- type instance Entries O f = f
 -- type instance Entries C f = [(Label,f)]
 
+
 -- | if the graph being analyzed is open at the entry, there must
 --   be no other entry point, or all goes horribly wrong...
 analyzeAndRewriteFwd
    :: forall n f e x .  NonLocal n =>
       FwdPass UniqSM n f
-   -> MaybeC e [Label]
-   -> Graph n  e x -> Fact e f
---   -> Entries e f   -- Entry points and the incoming fact for each
---   -> Graph n  e x  -- Code inaccessible from the entry points is simply discarded
+   -> Graph n e x -> Fact e f
    -> UniqSM (Graph n e x, FactBase f, MaybeO x f)
-analyzeAndRewriteFwd pass entries g f =
-  do (rg, fout) <- arfGraph pass (fmap targetLabels entries) g f
+analyzeAndRewriteFwd pass g f =
+  do (rg, fout) <- arfGraph pass g f
      let (g', fb) = normalizeGraph rg
      return (g', fb, distinguishedExitFact g' fout)
 
@@ -158,10 +158,10 @@ type Entries e = MaybeC e [Label]
 
 arfGraph :: forall n f e x .  NonLocal n =>
             FwdPass UniqSM n f ->
-            Entries e -> Graph n e x -> Fact e f -> UniqSM (DG f n e x, Fact x f)
+            Graph n e x -> Fact e f -> UniqSM (DG f n e x, Fact x f)
 arfGraph pass@FwdPass { fp_lattice = lattice,
                         fp_transfer = transfer,
-                        fp_rewrite  = rewrite } entries g in_fact = graph g in_fact
+                        fp_rewrite  = rewrite } g in_fact = graph g in_fact
   where
     {- nested type synonyms would be so lovely here
     type ARF  thing = forall e x . thing e x -> f        -> m (DG f n e x, Fact x f)
@@ -171,7 +171,7 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
     block :: forall e x .
              Block n e x -> f -> UniqSM (DG f n e x, Fact x f)
 
-    body  :: [Label] -> LabelMap (Block n C C)
+    body  :: LabelMap (Block n C C)
           -> Fact C f -> UniqSM (DG f n C C, Fact C f)
                     -- Outgoing factbase is restricted to Labels *not* in
                     -- in the Body; the facts for Labels *in*
@@ -190,12 +190,11 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
       exit  :: MaybeO x (Block n C O)           -> Fact C f -> UniqSM (DG f n C x, Fact x f)
       exit (JustO blk) f = arfx block blk f
       exit NothingO    f = return (dgnilC, f)
-      ebcat entry bdy f = c entries entry f
-       where c :: MaybeC e [Label] -> MaybeO e (Block n O C)
+      ebcat entry bdy f = c entry f
+       where c :: MaybeO e (Block n O C)
                 -> Fact e f -> UniqSM (DG f n e C, Fact C f)
-             c NothingC (JustO entry)   f = (block entry `cat` body (successors entry) bdy) f
-             c (JustC entries) NothingO f = body entries bdy f
-             c _ _ _ = error "bogus GADT pattern match failure"
+             c (JustO entry) f = (block entry `cat` body bdy) f
+             c NothingO      f = body bdy f
 
     -- Lift from nodes to blocks
     block BNil            f = return (dgnil, f)
@@ -219,7 +218,7 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
               Just (g, rw) ->
                   let pass' = pass { fp_rewrite = rw }
                       f'    = fwdEntryFact n f
-                  in  arfGraph pass' (fwdEntryLabel n) g f' }
+                  in  arfGraph pass' g f' }
 
     -- | Compose fact transformers and concatenate the resulting
     -- rewritten graphs.
@@ -240,9 +239,10 @@ arfGraph pass@FwdPass { fp_lattice = lattice,
                     -- Outgoing factbase is restricted to Labels *not* in
                     -- in the Body; the facts for Labels *in*
                     -- the Body are in the 'DG f n C C'
-    body entries blockmap init_fbase
+    body blockmap init_fbase
       = fixpoint Fwd lattice do_block entries blockmap init_fbase
       where
+        entries = mapKeys init_fbase
         lattice = fp_lattice pass
         do_block :: forall x . Block n C x -> FactBase f
                  -> UniqSM (DG f n C x, Fact x f)
@@ -696,7 +696,7 @@ we'll propagate (x=4) to L4, and nuke the otherwise-good rewriting of L4.
   client's fact_join function because it might give the client
   some useful debugging information.
 
-* All of this only applies for *forward* ixpoints.  For the backward
+* All of this only applies for *forward* fixpoints.  For the backward
   case we must treat every block as reachable; it might finish with a
   'return', and therefore have no successors, for example.
 -}
