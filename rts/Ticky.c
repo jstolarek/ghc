@@ -54,7 +54,7 @@ PrintTickyInfo(void)
   unsigned long tot_allocs = /* total number of things allocated */
 	ALLOC_FUN_ctr + ALLOC_SE_THK_ctr + ALLOC_UP_THK_ctr + ALLOC_CON_ctr + ALLOC_TUP_ctr +
     	+ ALLOC_TSO_ctr + ALLOC_BH_ctr  + ALLOC_PAP_ctr + ALLOC_PRIM_ctr
-      ;	
+      ;
 
   unsigned long tot_adm_wds = /* total number of admin words allocated */
 	ALLOC_FUN_adm + ALLOC_THK_adm + ALLOC_CON_adm + ALLOC_TUP_adm
@@ -81,25 +81,25 @@ PrintTickyInfo(void)
 
   unsigned long tot_fun_direct_enters = ENT_STATIC_FUN_DIRECT_ctr + ENT_DYN_FUN_DIRECT_ctr;
   unsigned long tot_ind_enters = ENT_STATIC_IND_ctr + ENT_DYN_IND_ctr;
-  
+
   // This is the number of times we entered a function via some kind
   // of slow call.  It amounts to all the slow applications, not
   // counting those that were to too few arguments.
   /*
   XXX This us unused - can we delete it? -- IGL 2008-04-25
-  unsigned long tot_fun_slow_enters = 
-      SLOW_CALL_ctr - 
+  unsigned long tot_fun_slow_enters =
+      SLOW_CALL_ctr -
       SLOW_CALL_FUN_TOO_FEW_ctr -
       SLOW_CALL_PAP_TOO_FEW_ctr;
   */
 
   unsigned long tot_known_calls =
-      KNOWN_CALL_ctr + KNOWN_CALL_TOO_FEW_ARGS_ctr + 
+      KNOWN_CALL_ctr + KNOWN_CALL_TOO_FEW_ARGS_ctr +
       + KNOWN_CALL_EXTRA_ARGS_ctr;
   unsigned long tot_tail_calls =
       UNKNOWN_CALL_ctr + tot_known_calls;
 
-  unsigned long tot_enters = 
+  unsigned long tot_enters =
       tot_con_enters + tot_fun_direct_enters +
 	tot_ind_enters + ENT_PERM_IND_ctr + ENT_PAP_ctr + tot_thk_enters;
   unsigned long jump_direct_enters =
@@ -123,7 +123,7 @@ PrintTickyInfo(void)
   FILE *tf = RtsFlags.TickyFlags.tickyFile;
 
   /* If tf = NULL, that means the user passed in stderr for the ticky stats
-     file. According to a comment in RtsFlags.c, this means to use 
+     file. According to a comment in RtsFlags.c, this means to use
      debugBelch to print out messages. But this function prints out a lot
      of stuff so in order to avoid changing a lot of code, we just dump
      the same output to stderr (for now). */
@@ -148,7 +148,7 @@ PrintTickyInfo(void)
 	PC(INTAVG(ALLOC_FUN_ctr, tot_allocs)));
   if (ALLOC_FUN_ctr != 0)
       fprintf(tf,"\t\t%5.1f %5.1f %5.1f %5.1f %5.1f", ALLOC_HISTO_MAGIC(FUN));
- 
+
 
   fprintf(tf,"\n%11ld (%5.1f%%) thunks",
 	ALLOC_SE_THK_ctr + ALLOC_UP_THK_ctr,
@@ -225,7 +225,7 @@ PrintTickyInfo(void)
 
   fprintf(tf,"\nFUNCTION ENTRIES: %ld\n", tot_fun_direct_enters);
 
-  fprintf(tf, "\nTAIL CALLS: %ld, of which %ld (%.lf%%) were to known functions\n", 
+  fprintf(tf, "\nTAIL CALLS: %ld, of which %ld (%.lf%%) were to known functions\n",
 	  tot_tail_calls, tot_known_calls,
 	  PC(INTAVG(tot_known_calls,tot_tail_calls)));
 
@@ -233,9 +233,9 @@ PrintTickyInfo(void)
 	  SLOW_CALL_ctr, SLOW_CALL_UNEVALD_ctr);
   fprintf(tf, "\n");
   fprintf(tf, "         Too few args   Correct args   Too many args\n");
-  fprintf(tf, "   FUN     %8" FMT_Int "       %8" FMT_Int "        %8" FMT_Int "\n", 
+  fprintf(tf, "   FUN     %8" FMT_Int "       %8" FMT_Int "        %8" FMT_Int "\n",
 	  SLOW_CALL_FUN_TOO_FEW_ctr, SLOW_CALL_FUN_CORRECT_ctr, SLOW_CALL_FUN_TOO_MANY_ctr);
-  fprintf(tf, "   PAP     %8" FMT_Int "       %8" FMT_Int "        %8" FMT_Int "\n", 
+  fprintf(tf, "   PAP     %8" FMT_Int "       %8" FMT_Int "        %8" FMT_Int "\n",
 	  SLOW_CALL_PAP_TOO_FEW_ctr, SLOW_CALL_PAP_CORRECT_ctr, SLOW_CALL_PAP_TOO_MANY_ctr);
   fprintf(tf, "\n");
 
@@ -246,7 +246,7 @@ PrintTickyInfo(void)
 
   /* krc: comment out some of this stuff temporarily */
 
-  /*
+
   fprintf(tf, "\nRET_NEW:         %11ld: ", RET_NEW_ctr);
   for (i = 0; i < 9; i++) { fprintf(tf, "%5.1f%%",
 				PC(INTAVG(RET_NEW_hst[i],RET_NEW_ctr))); }
@@ -260,7 +260,7 @@ PrintTickyInfo(void)
 				    PC(INTAVG(RET_UNBOXED_TUP_hst[i],
 					      RET_UNBOXED_TUP_ctr))); }
   fprintf(tf, "\n");
-  */
+
 
   fprintf(tf,"\nUPDATE FRAMES: %" FMT_Int " (%" FMT_Int " omitted from thunks)",
 	UPDF_PUSHED_ctr,
@@ -443,8 +443,8 @@ PrintTickyInfo(void)
  * the ENT_PERM_IND, but we then enter the PERM_IND that was built for
  * the next update frame below, and so on down the chain until we
  * finally reach the value.  Thus we count many new ENT_PERM_INDs too
- * early.  
- * 
+ * early.
+ *
  * This of course refers to the -ticky version that uses PERM_INDs to
  * determine the number of closures entered 0/1/>1.  KSW 1999-04.  */
   COND_PR_CTR(ENT_PERM_IND_ctr,RtsFlags.GcFlags.squeezeUpdFrames == rtsFalse,"E!NT_PERM_IND_ctr requires +RTS -Z");
@@ -492,8 +492,6 @@ PrintTickyInfo(void)
   PR_CTR(SLOW_CALL_PAP_TOO_MANY_ctr);
   PR_CTR(SLOW_CALL_UNEVALD_ctr);
 
-  /* krc: put off till later... */
-#if FALSE
   PR_HST(SLOW_CALL_hst,0);
   PR_HST(SLOW_CALL_hst,1);
   PR_HST(SLOW_CALL_hst,2);
@@ -502,14 +500,11 @@ PrintTickyInfo(void)
   PR_HST(SLOW_CALL_hst,5);
   PR_HST(SLOW_CALL_hst,6);
   PR_HST(SLOW_CALL_hst,7);
-#endif
 
   PR_CTR(RET_NEW_ctr);
   PR_CTR(RET_OLD_ctr);
   PR_CTR(RET_UNBOXED_TUP_ctr);
 
-  /* krc: put off till later... */
-#if FALSE
   PR_HST(RET_NEW_hst,0);
   PR_HST(RET_NEW_hst,1);
   PR_HST(RET_NEW_hst,2);
@@ -537,7 +532,6 @@ PrintTickyInfo(void)
   PR_HST(RET_UNBOXED_TUP_hst,6);
   PR_HST(RET_UNBOXED_TUP_hst,7);
   PR_HST(RET_UNBOXED_TUP_hst,8);
-#endif /* FALSE */
 
   PR_CTR(UPDF_OMITTED_ctr);
   PR_CTR(UPDF_PUSHED_ctr);

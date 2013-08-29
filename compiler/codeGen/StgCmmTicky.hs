@@ -578,26 +578,13 @@ bumpTickyLitByE lhs e = do
   emit (addToMemE (bWord dflags) (CmmLit lhs) e)
 
 bumpHistogram :: FastString -> Int -> FCode ()
-bumpHistogram _lbl _n
---  = bumpHistogramE lbl (CmmLit (CmmInt (fromIntegral n) cLongWidth))
-    = return ()    -- TEMP SPJ Apr 07
-                   -- six years passed - still temp? JS Aug 2013
-
-{-
-bumpHistogramE :: LitString -> CmmExpr -> FCode ()
-bumpHistogramE lbl n
-  = do  t <- newTemp cLong
-        emitAssign (CmmLocal t) n
-        emit (mkCmmIfThen (CmmMachOp (MO_U_Le cLongWidth) [CmmReg (CmmLocal t), eight])
-                          (mkAssign (CmmLocal t) eight))
-        emit (addToMem cLong
-                       (cmmIndexExpr cLongWidth
-                                (CmmLit (CmmLabel (mkRtsDataLabel lbl)))
-                                (CmmReg (CmmLocal t)))
-                       1)
-  where
-   eight = CmmLit (CmmInt 8 cLongWidth)
--}
+bumpHistogram lbl n = do
+  let offset = n `min` 8
+  emit (addToMem cLong
+                 (cmmIndexExpr cLongWidth
+                               (CmmLit (CmmLabel (mkRtsDataLabel lbl)))
+                               (CmmReg (CmmInt (fromIntegral offset) cLongWidth)))
+                 1)
 
 ------------------------------------------------------------------
 -- Showing the "type category" for ticky-ticky profiling
