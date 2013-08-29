@@ -627,6 +627,7 @@ cgConApp con stg_args
                 -- it only affects profiling (hence the False)
 
         ; emit =<< fcode_init
+        ; tickyReturnNewCon (dataConRepRepArity con)
         ; emitReturn [idInfoToAmode idinfo] }
 
 cgIdApp :: Id -> [StgArg] -> FCode ReturnKind
@@ -645,7 +646,7 @@ cgIdApp fun_id args = do
         fun         = idInfoToAmode fun_info
         lf_info     = cg_lf         fun_info
         node_points dflags = nodeMustPointToIt dflags lf_info
-    case (getCallMethod dflags fun_name cg_fun_id lf_info (length args) (cg_loc fun_info) self_loop_info) of
+    case (getCallMethod dflags fun_name cg_fun_id lf_info (length args) self_loop_info) of
 
             -- A value in WHNF, so we can just return it.
         ReturnIt -> emitReturn [fun]    -- ToDo: does ReturnIt guarantee tagged?
@@ -665,13 +666,24 @@ cgIdApp fun_id args = do
                      then directCall NativeNodeCall   lbl arity (fun_arg:args)
                      else directCall NativeDirectCall lbl arity args }
 
-        -- Let-no-escape call or self-recursive tail-call
-        JumpToIt blk_id lne_regs -> do
+        -- Let-no-escape call
+        JumpToIt -> let (LneLoc blk_id lne_regs) = cg_loc fun_info
+                    in do
+                      { adjustHpBackwards -- always do this before a tail-call
+                      ; cmm_args <- getNonVoidArgAmodes args
+                      ; emitMultiAssign lne_regs cmm_args
+                      ; emit (mkBranch blk_id)
+                      ; return AssignedDirectly }
+
+        -- See Note [Self-recursive tail calls]
+        JumpToSelf blk_id lne_regs -> do
           { adjustHpBackwards -- always do this before a tail-call
           ; cmm_args <- getNonVoidArgAmodes args
           ; emitMultiAssign lne_regs cmm_args
           ; emit (mkBranch blk_id)
           ; return AssignedDirectly }
+
+--
 
 -- Note [Self-recursive tail calls]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

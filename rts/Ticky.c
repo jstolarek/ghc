@@ -244,8 +244,6 @@ PrintTickyInfo(void)
 	tot_returns_of_new,
 	PC(INTAVG(tot_returns_of_new,tot_returns)));
 
-  /* krc: comment out some of this stuff temporarily */
-
 
   fprintf(tf, "\nRET_NEW:         %11ld: ", RET_NEW_ctr);
   for (i = 0; i < 9; i++) { fprintf(tf, "%5.1f%%",

@@ -500,7 +500,7 @@ When black-holing, single-entry closures could also be entered via node
 data CallMethod
   = EnterIt             -- No args, not a function
 
-  | JumpToIt BlockId [LocalReg] -- A join point or a header of a local loop
+  | JumpToIt            -- A join point
 
   | ReturnIt            -- It's a value (function, unboxed value,
                         -- or constructor), so just return it.
@@ -512,6 +512,8 @@ data CallMethod
         CLabel          --   The code label
         RepArity        --   Its arity
 
+  | JumpToSelf BlockId [LocalReg] -- saturated recursive call in tail position
+
 getCallMethod :: DynFlags
               -> Name           -- Function being applied
               -> Id             -- Function Id used to chech if it can refer to
@@ -519,42 +521,37 @@ getCallMethod :: DynFlags
                                 -- itself
               -> LambdaFormInfo -- Its info
               -> RepArity       -- Number of available arguments
-              -> CgLoc          -- Passed in from cgIdApp so that we can
-                                -- handle let-no-escape bindings and self-recursive
-                                -- tail calls using the same data constructor,
-                                -- JumpToIt. This saves us one case branch in
-                                -- cgIdApp
               -> Maybe SelfLoopInfo -- can we perform a self-recursive tail call?
               -> CallMethod
 
-getCallMethod _ _ id _ n_args _cg_loc (Just (self_loop_id, block_id, args))
+getCallMethod _ _ id _ n_args (Just (self_loop_id, block_id, args))
   | id == self_loop_id, n_args == length args
   -- If these patterns match then we know that:
   --   * function is performing a self-recursive call in a tail position
   --   * number of parameters of the function matches functions arity.
   -- See Note [Self-recursive tail calls] in StgCmmExpr for more details
-  = JumpToIt block_id args
+  = JumpToSelf block_id args
 
-getCallMethod dflags _name _ lf_info _n_args _cg_loc _self_loop_info
+getCallMethod dflags _name _ lf_info _n_args _self_loop_info
   | nodeMustPointToIt dflags lf_info && gopt Opt_Parallel dflags
   =     -- If we're parallel, then we must always enter via node.
         -- The reason is that the closure may have been
         -- fetched since we allocated it.
     EnterIt
 
-getCallMethod dflags name id (LFReEntrant _ arity _ _) n_args _cg_loc _self_loop_info
+getCallMethod dflags name id (LFReEntrant _ arity _ _) n_args _self_loop_info
   | n_args == 0    = ASSERT( arity /= 0 )
                      ReturnIt        -- No args at all
   | n_args < arity = SlowCall        -- Not enough args
   | otherwise      = DirectEntry (enterIdLabel dflags name (idCafInfo id)) arity
 
-getCallMethod _ _name _ LFUnLifted n_args _cg_loc _self_loop_info
+getCallMethod _ _name _ LFUnLifted n_args _self_loop_info
   = ASSERT( n_args == 0 ) ReturnIt
 
-getCallMethod _ _name _ (LFCon _) n_args _cg_loc _self_loop_info
+getCallMethod _ _name _ (LFCon _) n_args _self_loop_info
   = ASSERT( n_args == 0 ) ReturnIt
 
-getCallMethod dflags name id (LFThunk _ _ updatable std_form_info is_fun) n_args _cg_loc _self_loop_info
+getCallMethod dflags name id (LFThunk _ _ updatable std_form_info is_fun) n_args _self_loop_info
   | is_fun      -- it *might* be a function, so we must "call" it (which is always safe)
   = SlowCall    -- We cannot just enter it [in eval/apply, the entry code
                 -- is the fast-entry code]
@@ -578,22 +575,20 @@ getCallMethod dflags name id (LFThunk _ _ updatable std_form_info is_fun) n_args
   = ASSERT( n_args == 0 )
     DirectEntry (thunkEntryLabel dflags name (idCafInfo id) std_form_info updatable) 0
 
-getCallMethod _ _name _ (LFUnknown True) _n_arg _cg_locs _self_loop_info
+getCallMethod _ _name _ (LFUnknown True) _n_arg _self_loop_info
   = SlowCall -- might be a function
 
-getCallMethod _ name _ (LFUnknown False) n_args _cg_loc _self_loop_info
+getCallMethod _ name _ (LFUnknown False) n_args _self_loop_info
   = ASSERT2( n_args == 0, ppr name <+> ppr n_args )
     EnterIt -- Not a function
 
-getCallMethod _ _name _ LFBlackHole _n_args _cg_loc _self_loop_info
+getCallMethod _ _name _ LFBlackHole _n_args _self_loop_info
   = SlowCall    -- Presumably the black hole has by now
                 -- been updated, but we don't know with
                 -- what, so we slow call it
 
-getCallMethod _ _name _ LFLetNoEscape _n_args (LneLoc blk_id lne_regs) _self_loop_info
-  = JumpToIt blk_id lne_regs
-
-getCallMethod _ _ _ _ _ _ _ = panic "Unknown call method"
+getCallMethod _ _name _ LFLetNoEscape _n_args _self_loop_info
+  = JumpToIt
 
 -----------------------------------------------------------------------------
 --                staticClosureRequired
