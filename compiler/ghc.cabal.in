@@ -458,7 +458,6 @@ Library
         Vectorise
         Hoopl.Dataflow
         Hoopl
-
 --        CgInfoTbls used in ghci/DebuggerUtils
 --        CgHeapery  mkVirtHeapOffsets used in ghci
 
