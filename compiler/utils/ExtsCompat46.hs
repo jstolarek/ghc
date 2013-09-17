@@ -96,100 +96,100 @@ import qualified GHC.Exts as E (
 #if __GLASGOW_HASKELL__ > 706
 
 gtChar# :: Char# -> Char# -> Bool
-gtChar# a b = isTrue# (a `E.gtChar#` b)
+gtChar# a b = tagToEnum# (a `E.gtChar#` b)
 geChar# :: Char# -> Char# -> Bool
-geChar# a b = isTrue# (a `E.geChar#` b)
+geChar# a b = tagToEnum# (a `E.geChar#` b)
 eqChar# :: Char# -> Char# -> Bool
-eqChar# a b = isTrue# (a `E.eqChar#` b)
+eqChar# a b = tagToEnum# (a `E.eqChar#` b)
 neChar# :: Char# -> Char# -> Bool
-neChar# a b = isTrue# (a `E.neChar#` b)
+neChar# a b = tagToEnum# (a `E.neChar#` b)
 ltChar# :: Char# -> Char# -> Bool
-ltChar# a b = isTrue# (a `E.ltChar#` b)
+ltChar# a b = tagToEnum# (a `E.ltChar#` b)
 leChar# :: Char# -> Char# -> Bool
-leChar# a b = isTrue# (a `E.leChar#` b)
+leChar# a b = tagToEnum# (a `E.leChar#` b)
 
 infix 4 >#, >=#, ==#, /=#, <#, <=#
 
 (>#) :: Int# -> Int# -> Bool
-(>#) a b = isTrue# (a E.># b)
+(>#) a b = tagToEnum# (a E.># b)
 (>=#) :: Int# -> Int# -> Bool
-(>=#) a b = isTrue# (a E.>=# b)
+(>=#) a b = tagToEnum# (a E.>=# b)
 (==#) :: Int# -> Int# -> Bool
-(==#) a b = isTrue# (a E.==# b)
+(==#) a b = tagToEnum# (a E.==# b)
 (/=#) :: Int# -> Int# -> Bool
-(/=#) a b = isTrue# (a E./=# b)
+(/=#) a b = tagToEnum# (a E./=# b)
 (<#)  :: Int# -> Int# -> Bool
-(<#) a b = isTrue# (a E.<# b)
+(<#) a b = tagToEnum# (a E.<# b)
 (<=#) :: Int# -> Int# -> Bool
-(<=#) a b = isTrue# (a E.<=# b)
+(<=#) a b = tagToEnum# (a E.<=# b)
 
 gtWord# :: Word# -> Word# -> Bool
-gtWord# a b = isTrue# (a `E.gtWord#` b)
+gtWord# a b = tagToEnum# (a `E.gtWord#` b)
 geWord# :: Word# -> Word# -> Bool
-geWord# a b = isTrue# (a `E.geWord#` b)
+geWord# a b = tagToEnum# (a `E.geWord#` b)
 eqWord# :: Word# -> Word# -> Bool
-eqWord# a b = isTrue# (a `E.eqWord#` b)
+eqWord# a b = tagToEnum# (a `E.eqWord#` b)
 neWord# :: Word# -> Word# -> Bool
-neWord# a b = isTrue# (a `E.neWord#` b)
+neWord# a b = tagToEnum# (a `E.neWord#` b)
 ltWord# :: Word# -> Word# -> Bool
-ltWord# a b = isTrue# (a `E.ltWord#` b)
+ltWord# a b = tagToEnum# (a `E.ltWord#` b)
 leWord# :: Word# -> Word# -> Bool
-leWord# a b = isTrue# (a `E.leWord#` b)
+leWord# a b = tagToEnum# (a `E.leWord#` b)
 
 infix 4 >##, >=##, ==##, /=##, <##, <=##
 
 (>##)  :: Double# -> Double# -> Bool
-(>##) a b = isTrue# (a E.>## b)
+(>##) a b = tagToEnum# (a E.>## b)
 (>=##) :: Double# -> Double# -> Bool
-(>=##) a b = isTrue# (a E.>=## b)
+(>=##) a b = tagToEnum# (a E.>=## b)
 (==##) :: Double# -> Double# -> Bool
-(==##) a b = isTrue# (a E.==## b)
+(==##) a b = tagToEnum# (a E.==## b)
 (/=##) :: Double# -> Double# -> Bool
-(/=##) a b = isTrue# (a E./=## b)
+(/=##) a b = tagToEnum# (a E./=## b)
 (<##)  :: Double# -> Double# -> Bool
-(<##) a b = isTrue# (a E.<## b)
+(<##) a b = tagToEnum# (a E.<## b)
 (<=##) :: Double# -> Double# -> Bool
-(<=##) a b = isTrue# (a E.<=## b)
+(<=##) a b = tagToEnum# (a E.<=## b)
 
 gtFloat# :: Float# -> Float# -> Bool
-gtFloat# a b = isTrue# (a `E.gtFloat#` b)
+gtFloat# a b = tagToEnum# (a `E.gtFloat#` b)
 geFloat# :: Float# -> Float# -> Bool
-geFloat# a b = isTrue# (a `E.geFloat#` b)
+geFloat# a b = tagToEnum# (a `E.geFloat#` b)
 eqFloat# :: Float# -> Float# -> Bool
-eqFloat# a b = isTrue# (a `E.eqFloat#` b)
+eqFloat# a b = tagToEnum# (a `E.eqFloat#` b)
 neFloat# :: Float# -> Float# -> Bool
-neFloat# a b = isTrue# (a `E.neFloat#` b)
+neFloat# a b = tagToEnum# (a `E.neFloat#` b)
 ltFloat# :: Float# -> Float# -> Bool
-ltFloat# a b = isTrue# (a `E.ltFloat#` b)
+ltFloat# a b = tagToEnum# (a `E.ltFloat#` b)
 leFloat# :: Float# -> Float# -> Bool
-leFloat# a b = isTrue# (a `E.leFloat#` b)
+leFloat# a b = tagToEnum# (a `E.leFloat#` b)
 
 gtAddr# :: Addr# -> Addr# -> Bool
-gtAddr# a b = isTrue# (a `E.gtAddr#` b)
+gtAddr# a b = tagToEnum# (a `E.gtAddr#` b)
 geAddr# :: Addr# -> Addr# -> Bool
-geAddr# a b = isTrue# (a `E.geAddr#` b)
+geAddr# a b = tagToEnum# (a `E.geAddr#` b)
 eqAddr# :: Addr# -> Addr# -> Bool
-eqAddr# a b = isTrue# (a `E.eqAddr#` b)
+eqAddr# a b = tagToEnum# (a `E.eqAddr#` b)
 neAddr# :: Addr# -> Addr# -> Bool
-neAddr# a b = isTrue# (a `E.neAddr#` b)
+neAddr# a b = tagToEnum# (a `E.neAddr#` b)
 ltAddr# :: Addr# -> Addr# -> Bool
-ltAddr# a b = isTrue# (a `E.ltAddr#` b)
+ltAddr# a b = tagToEnum# (a `E.ltAddr#` b)
 leAddr# :: Addr# -> Addr# -> Bool
-leAddr# a b = isTrue# (a `E.leAddr#` b)
+leAddr# a b = tagToEnum# (a `E.leAddr#` b)
 
 sameMutableArray# :: MutableArray# s a -> MutableArray# s a -> Bool
-sameMutableArray# a b = isTrue# (E.sameMutableArray# a b)
+sameMutableArray# a b = tagToEnum# (E.sameMutableArray# a b)
 sameMutableByteArray# :: MutableByteArray# s -> MutableByteArray# s -> Bool
-sameMutableByteArray# a b = isTrue# (E.sameMutableByteArray# a b)
+sameMutableByteArray# a b = tagToEnum# (E.sameMutableByteArray# a b)
 sameMutableArrayArray# :: MutableArrayArray# s -> MutableArrayArray# s -> Bool
-sameMutableArrayArray# a b = isTrue# (E.sameMutableArrayArray# a b)
+sameMutableArrayArray# a b = tagToEnum# (E.sameMutableArrayArray# a b)
 
 sameMutVar# :: MutVar# s a -> MutVar# s a -> Bool
-sameMutVar# a b = isTrue# (E.sameMutVar# a b)
+sameMutVar# a b = tagToEnum# (E.sameMutVar# a b)
 sameTVar# :: TVar# s a -> TVar# s a -> Bool
-sameTVar# a b = isTrue# (E.sameTVar# a b)
+sameTVar# a b = tagToEnum# (E.sameTVar# a b)
 sameMVar# :: MVar# s a -> MVar# s a -> Bool
-sameMVar# a b = isTrue# (E.sameMVar# a b)
+sameMVar# a b = tagToEnum# (E.sameMVar# a b)
 
 #else
 
