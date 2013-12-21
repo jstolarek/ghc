@@ -480,7 +480,6 @@ closureCodeBody top_lvl bndr cl_info cc args arity body fv_details
                 -- of a self-recursive tail call. See Note
                 -- [Self-recursive tail calls] in StgCmmExpr
                 ; loop_header_id <- newLabelC
-                ; emitLabel loop_header_id
                 ; when node_points (ldvEnterClosure cl_info (CmmLocal node))
                 -- Extend reader monad with information that
                 -- self-recursive tail calls can be optimized into local

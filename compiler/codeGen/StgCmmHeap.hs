@@ -544,7 +544,7 @@ heapStackCheckGen stk_hwm mb_bytes
 -- at this stage of the pipeline we are not supposed to refer to Sp
 -- itself, because the stack is not yet manifest, so we don't quite
 -- know where Sp pointing.
-
+--
 -- So instead of referring directly to Sp - as we used to do in the
 -- past - the code generator uses (old + 0) in the stack check. That
 -- is the address of the first word of the old area, so if we add N
@@ -614,6 +614,12 @@ do_checks mb_stk_hwm checkYield mb_alloc_lit do_gc = do
   case mb_stk_hwm of
     Nothing -> return ()
     Just stk_hwm -> tickyStackCheck >> (emit =<< mkCmmIfGoto (sp_oflo stk_hwm) gc_id)
+
+  self_loop_info <- getSelfLoop
+  case self_loop_info of
+    Just (_, loop_header_id, _)
+        | checkYield && isJust mb_stk_hwm -> emitLabel loop_header_id
+    _otherwise -> return ()
 
   if (isJust mb_alloc_lit)
     then do
