@@ -75,7 +75,6 @@ noSyntaxExpr :: SyntaxExpr id -- Before renaming, and sometimes after,
                               -- (if the syntax slot makes no sense)
 noSyntaxExpr = HsLit (HsString (fsLit "noSyntaxExpr"))
 
-
 type CmdSyntaxTable id = [(Name, SyntaxExpr id)]
 -- See Note [CmdSyntaxTable]
 
@@ -145,9 +144,9 @@ data HsExpr id
                 (LHsExpr id)    -- right operand
 
   -- | Negation operator. Contains the negated expression and the name
-  -- of 'negate'              
-  | NegApp      (LHsExpr id) 
-                (SyntaxExpr id) 
+  -- of 'negate'
+  | NegApp      (LHsExpr id)
+                (SyntaxExpr id)
 
   | HsPar       (LHsExpr id)    -- ^ Parenthesised expr; see Note [Parens in HsSyn]
 
@@ -157,7 +156,7 @@ data HsExpr id
                 (LHsExpr id)    -- operand
 
   -- | Used for explicit tuples and sections thereof
-  | ExplicitTuple               
+  | ExplicitTuple
         [HsTupArg id]
         Boxity
 
@@ -172,10 +171,10 @@ data HsExpr id
                 (LHsExpr id)    --  else part
 
   -- | Multi-way if
-  | HsMultiIf   PostTcType [LGRHS id (LHsExpr id)] 
+  | HsMultiIf   PostTcType [LGRHS id (LHsExpr id)]
 
   -- | let(rec)
-  | HsLet       (HsLocalBinds id) 
+  | HsLet       (HsLocalBinds id)
                 (LHsExpr  id)
 
   | HsDo        (HsStmtContext Name) -- The parameterisation is unimportant
@@ -185,13 +184,13 @@ data HsExpr id
                 PostTcType           -- Type of the whole expression
 
   -- | Syntactic list: [a,b,c,...]
-  | ExplicitList                        
+  | ExplicitList
                 PostTcType              -- Gives type of components of list
                 (Maybe (SyntaxExpr id)) -- For OverloadedLists, the fromListN witness
                 [LHsExpr id]
 
   -- | Syntactic parallel array: [:e1, ..., en:]
-  | ExplicitPArr                
+  | ExplicitPArr
                 PostTcType      -- type of elements of the parallel array
                 [LHsExpr id]
 
@@ -214,8 +213,8 @@ data HsExpr id
   -- For a type family, the arg types are of the *instance* tycon,
   -- not the family tycon
 
-  -- | Expression with an explicit type signature. @e :: type@  
-  | ExprWithTySig                       
+  -- | Expression with an explicit type signature. @e :: type@
+  | ExprWithTySig
                 (LHsExpr id)
                 (LHsType id)
 
@@ -225,13 +224,13 @@ data HsExpr id
                                         -- round-tripping purposes
 
   -- | Arithmetic sequence
-  | ArithSeq                            
+  | ArithSeq
                 PostTcExpr
                 (Maybe (SyntaxExpr id))   -- For OverloadedLists, the fromList witness
                 (ArithSeqInfo id)
 
   -- | Arithmetic sequence for parallel array
-  | PArrSeq                             
+  | PArrSeq
                 PostTcExpr              -- [:e1..e2:] or [:e1, e2..e3:]
                 (ArithSeqInfo id)
 
@@ -760,7 +759,7 @@ data HsCmd id
                 (HsCmd id)     -- If   cmd :: arg1 --> res
                                --       co :: arg1 ~ arg2
                                -- Then (HsCmdCast co cmd) :: arg2 --> res
-                
+
   deriving (Data, Typeable)
 
 data HsArrAppType = HsHigherOrderApp | HsFirstOrderApp
@@ -909,7 +908,7 @@ patterns in each equation.
 data MatchGroup id body
   = MG { mg_alts    :: [LMatch id body]  -- The alternatives
        , mg_arg_tys :: [PostTcType]      -- Types of the arguments, t1..tn
-       , mg_res_ty  :: PostTcType        -- Type of the result, tr 
+       , mg_res_ty  :: PostTcType        -- Type of the result, tr
        , mg_origin  :: Origin }
      -- The type is the type of the entire group
      --      t1 -> ... -> tn -> tr
