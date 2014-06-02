@@ -17,6 +17,8 @@ import qualified Data.List as List
 import Data.Word
 import Outputable
 import UniqFM
+import Debug.Trace
+import PprCmm
 
 my_trace :: String -> SDoc -> a -> a
 my_trace = if False then pprTrace else \_ _ a -> a
@@ -58,16 +60,22 @@ type HashCode = Int
 -- Try to find a block that is equal (or ``common'') to b.
 common_block :: State -> (HashCode, CmmBlock) -> State
 common_block (old_change, bmap, subst) (hash, b) =
+  pprTrace "Looking for common blocks" (ppr bid) $
   case lookupUFM bmap hash of
-    Just bs -> case (List.find (eqBlockBodyWith (eqBid subst) b) bs,
+    Just bs -> pprTrace "Found block with the same hash: " (ppr (map entryLabel bs)) $
+               case (List.find (eqBlockBodyWith (eqBid subst) b) bs,
                      mapLookup bid subst) of
-                 (Just b', Nothing)                         -> addSubst b'
-                 (Just b', Just b'') | entryLabel b' /= b'' -> addSubst b'
-                                     | otherwise -> (old_change, bmap, subst)
-                 _ -> (old_change, addToUFM bmap hash (b : bs), subst)
+                 (Just b', Nothing)                         -> pprTrace "First alt. b' is " (ppr (entryLabel b'))
+                                                               addSubst b'
+                 (Just b', Just b'') | entryLabel b' /= b'' -> pprTrace "Second alt. (b',b'') is " (ppr (entryLabel b',b''))
+                                                               addSubst b'
+                                     | otherwise -> pprTrace "Third alt. (b',b'') is " (ppr (entryLabel b',b'')) $
+                                                    (old_change, bmap, subst)
+                 (Nothing, Just b'') -> pprTrace "Fourth alt. b'' is " (ppr $ b'') $ (old_change, addToUFM bmap hash (b : bs), subst)
+                 (Nothing, Nothing) -> pprTrace "Fifth alt. Dummy value is " (ppr bid) $ (old_change, addToUFM bmap hash (b : bs), subst)
     Nothing -> (old_change, addToUFM bmap hash [b], subst)
   where bid = entryLabel b
-        addSubst b' = my_trace "found new common block" (ppr bid <> char '=' <> ppr (entryLabel b')) $
+        addSubst b' = pprTrace "found new common block" (ppr bid <> char '=' <> ppr (entryLabel b')) $
                       (True, bmap, mapInsert bid (entryLabel b') subst)
 
 
@@ -81,8 +89,9 @@ common_block (old_change, bmap, subst) (hash, b) =
 -- The hashing is a bit arbitrary (the numbers are completely arbitrary),
 -- but it should be fast and good enough.
 hash_block :: CmmBlock -> HashCode
-hash_block block =
-  fromIntegral (foldBlockNodesB3 (hash_fst, hash_mid, hash_lst) block (0 :: Word32) .&. (0x7fffffff :: Word32))
+hash_block block = let res = fromIntegral (foldBlockNodesB3 (hash_fst, hash_mid, hash_lst) block (0 :: Word32) .&. (0x7fffffff :: Word32))
+  in pprTrace ("Hash value: " ++ (show res ) ++ " given to block ") (ppr (entryLabel block)) $
+  res
   -- UniqFM doesn't like negative Ints
   where hash_fst _ h = h
         hash_mid m h = hash_node m + h `shiftL` 1
@@ -145,7 +154,10 @@ eqMiddleWith :: (BlockId -> BlockId -> Bool)
              -> CmmNode O O -> CmmNode O O -> Bool
 eqMiddleWith _ (CmmComment _) (CmmComment _) = True
 eqMiddleWith eqBid (CmmAssign r1 e1) (CmmAssign r2 e2)
-  = r1 == r2 && eqExprWith eqBid e1 e2
+  = pprTrace "First register" (ppr r1) $
+    pprTrace "Second register" (ppr r2) $
+    trace ("Are they equal? " ++ show (r1 == r2)) $
+    r1 == r2 && eqExprWith eqBid e1 e2
 eqMiddleWith eqBid (CmmStore l1 r1) (CmmStore l2 r2)
   = eqExprWith eqBid l1 l2 && eqExprWith eqBid r1 r2
 eqMiddleWith eqBid (CmmUnsafeForeignCall t1 r1 a1)
@@ -178,7 +190,9 @@ eqExprWith eqBid = eq
 -- IDs to block IDs.
 eqBlockBodyWith :: (BlockId -> BlockId -> Bool) -> CmmBlock -> CmmBlock -> Bool
 eqBlockBodyWith eqBid block block'
-  = and (zipWith (eqMiddleWith eqBid) (blockToList m) (blockToList m')) &&
+  = pprTrace "First block: " (ppr (blockToList m)) $
+    pprTrace "Second block: " (ppr (blockToList m')) $
+    and (zipWith (eqMiddleWith eqBid) (blockToList m) (blockToList m')) &&
     eqLastWith eqBid l l'
   where (_,m,l)   = blockSplit block
         (_,m',l') = blockSplit block'
