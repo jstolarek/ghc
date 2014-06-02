@@ -77,9 +77,6 @@ noSyntaxExpr = HsLit (HsString (fsLit "noSyntaxExpr"))
 
 type CmdSyntaxTable id = [(Name, SyntaxExpr id)]
 -- See Note [CmdSyntaxTable]
-
-noSyntaxTable :: CmdSyntaxTable id
-noSyntaxTable = []
 \end{code}
 
 Note [CmdSyntaxtable]
@@ -87,7 +84,7 @@ Note [CmdSyntaxtable]
 Used only for arrow-syntax stuff (HsCmdTop), the CmdSyntaxTable keeps
 track of the methods needed for a Cmd.
 
-* Before the renamer, this list is 'noSyntaxTable'
+* Before the renamer it is an empty list
 
 * After the renamer, it takes the form @[(std_name, HsVar actual_name)]@
   For example, for the 'arr' method
