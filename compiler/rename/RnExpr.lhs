@@ -182,7 +182,7 @@ rnExpr (HsSpliceE is_typed splice) = rnSpliceExpr is_typed splice
 rnExpr (HsQuasiQuoteE qq)
   = runQuasiQuoteExpr qq        `thenM` \ lexpr' ->
     -- Wrap the result of the quasi-quoter in parens so that we don't
-    -- lose the outermost location set by runQuasiQuote (#7918) 
+    -- lose the outermost location set by runQuasiQuote (#7918)
     rnExpr (HsPar lexpr')
 
 ---------------------------------------------
@@ -1010,7 +1010,7 @@ rn_rec_stmts rnBody bndrs stmts =
     return (concat segs_s)
 
 ---------------------------------------------
-segmentRecStmts :: HsStmtContext Name 
+segmentRecStmts :: HsStmtContext Name
                 -> Stmt Name body
                 -> [Segment (LStmt Name body)] -> FreeVars
                 -> ([LStmt Name body], FreeVars)

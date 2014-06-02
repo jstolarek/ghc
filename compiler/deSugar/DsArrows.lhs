@@ -7,12 +7,6 @@ Desugaring arrow commands
 
 \begin{code}
 {-# LANGUAGE CPP #-}
-{-# OPTIONS_GHC -fno-warn-tabs #-}
--- The above warning supression flag is a temporary kludge.
--- While working on this module you are encouraged to remove it and
--- detab the module (please do the detabbing in a separate patch). See
---     http://ghc.haskell.org/trac/ghc/wiki/Commentary/CodingStyle#TabsvsSpaces
--- for details
 
 module DsArrows ( dsProcExpr ) where
 
@@ -309,16 +303,16 @@ dsLCmd :: DsCmdEnv -> IdSet -> Type -> Type -> LHsCmd Id -> [Id]
 dsLCmd ids local_vars stk_ty res_ty cmd env_ids
   = dsCmd ids local_vars stk_ty res_ty (unLoc cmd) env_ids
 
-dsCmd   :: DsCmdEnv    -- arrow combinators
-    -> IdSet           -- set of local vars available to this command
-    -> Type            -- type of the stack (right-nested tuple)
-    -> Type            -- return type of the command
-    -> HsCmd Id        -- command to desugar
-    -> [Id]            -- list of vars in the input to this command
-                       -- This is typically fed back,
-                       -- so don't pull on it too early
-    -> DsM (CoreExpr,  -- desugared expression
-        IdSet)         -- subset of local vars that occur free
+dsCmd   :: DsCmdEnv        -- arrow combinators
+        -> IdSet           -- set of local vars available to this command
+        -> Type            -- type of the stack (right-nested tuple)
+        -> Type            -- return type of the command
+        -> HsCmd Id        -- command to desugar
+        -> [Id]            -- list of vars in the input to this command
+                           -- This is typically fed back,
+                           -- so don't pull on it too early
+        -> DsM (CoreExpr,  -- desugared expression
+                IdSet)     -- subset of local vars that occur free
 
 -- D |- fun :: a t1 t2
 -- D, xs |- arg :: t1
