@@ -59,7 +59,7 @@ dsGRHSs :: HsMatchContext Name -> [Pat Id]      -- These are to build a MatchCon
         -> GRHSs Id (LHsExpr Id)                -- Guarded RHSs
         -> Type                                 -- Type of RHS
         -> DsM MatchResult
-dsGRHSs hs_ctx _ (GRHSs grhss binds) rhs_ty 
+dsGRHSs hs_ctx _ (GRHSs grhss binds) rhs_ty
   = ASSERT( notNull grhss )
     do { match_results <- mapM (dsGRHS hs_ctx rhs_ty) grhss
        ; let match_result1 = foldr1 combineMatchResults match_results
@@ -102,11 +102,11 @@ matchGuards [] _ rhs _
         -- NB:  The success of this clause depends on the typechecker not
         --      wrapping the 'otherwise' in empty HsTyApp or HsWrap constructors
         --      If it does, you'll get bogus overlap warnings
-matchGuards (BodyStmt e _ _ _ : stmts) ctx rhs rhs_ty
+matchGuards (BodyStmt e _ _ : stmts) ctx rhs rhs_ty
   | Just addTicks <- isTrueLHsExpr e = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     return (adjustMatchResultDs addTicks match_result)
-matchGuards (BodyStmt expr _ _ _ : stmts) ctx rhs rhs_ty = do
+matchGuards (BodyStmt expr _ _ : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     pred_expr <- dsLExpr expr
     return (mkGuardedMatchResult pred_expr match_result)
@@ -119,7 +119,7 @@ matchGuards (LetStmt binds : stmts) ctx rhs rhs_ty = do
         --         so we can't desugar the bindings without the
         --         body expression in hand
 
-matchGuards (BindStmt pat bind_rhs _ _ : stmts) ctx rhs rhs_ty = do
+matchGuards (BindStmt pat bind_rhs _  : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     core_rhs <- dsLExpr bind_rhs
     matchSinglePat core_rhs (StmtCtxt ctx) pat rhs_ty match_result

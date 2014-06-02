@@ -81,7 +81,7 @@ dsListComp lquals res_ty = do
 -- and the type of the elements that it outputs (tuples of binders)
 dsInnerListComp :: (ParStmtBlock Id Id) -> DsM (CoreExpr, Type)
 dsInnerListComp (ParStmtBlock stmts bndrs _)
-  = do { expr <- dsListComp (stmts ++ [noLoc $ mkLastStmt (mkBigLHsVarTup bndrs)])
+  = do { expr <- dsListComp (stmts ++ [noLoc $ mkLastStmtMonad (mkBigLHsVarTup bndrs)])
                             (mkListTy bndrs_tuple_type)
        ; return (expr, bndrs_tuple_type) }
   where
@@ -216,7 +216,7 @@ deListComp (LastStmt body _ : quals) list
        ; return (mkConsExpr (exprType core_body) core_body list) }
 
         -- Non-last: must be a guard
-deListComp (BodyStmt guard _ _ _ : quals) list = do  -- rule B above
+deListComp (BodyStmt guard _ _ : quals) list = do  -- rule B above
     core_guard <- dsLExpr guard
     core_rest <- deListComp quals list
     return (mkIfThenElse core_guard core_rest list)
@@ -230,7 +230,7 @@ deListComp (stmt@(TransStmt {}) : quals) list = do
     (inner_list_expr, pat) <- dsTransStmt stmt
     deBindComp pat inner_list_expr quals list
 
-deListComp (BindStmt pat list1 _ _ : quals) core_list2 = do -- rule A' above
+deListComp (BindStmt pat list1 _ : quals) core_list2 = do -- rule A' above
     core_list1 <- dsLExpr list1
     deBindComp pat core_list1 quals core_list2
 
@@ -322,7 +322,7 @@ dfListComp c_id n_id (LastStmt body _ : quals)
        ; return (mkApps (Var c_id) [core_body, Var n_id]) }
 
         -- Non-last: must be a guard
-dfListComp c_id n_id (BodyStmt guard _ _ _  : quals) = do
+dfListComp c_id n_id (BodyStmt guard _ _  : quals) = do
     core_guard <- dsLExpr guard
     core_rest <- dfListComp c_id n_id quals
     return (mkIfThenElse core_guard core_rest (Var n_id))
@@ -337,7 +337,7 @@ dfListComp c_id n_id (stmt@(TransStmt {}) : quals) = do
     -- Anyway, we bind the newly grouped list via the generic binding function
     dfBindComp c_id n_id (pat, inner_list_expr) quals
 
-dfListComp c_id n_id (BindStmt pat list1 _ _ : quals) = do
+dfListComp c_id n_id (BindStmt pat list1 _ : quals) = do
     -- evaluate the two lists
     core_list1 <- dsLExpr list1
 
@@ -485,7 +485,7 @@ dsPArrComp (ParStmt qss _ _ : quals) = dePArrParComp qss quals
 --  <<[:e' | p <- e, qs:]>> =
 --    <<[:e' | qs:]>> p (filterP (\x -> case x of {p -> True; _ -> False}) e)
 --
-dsPArrComp (BindStmt p e _ _ : qs) = do
+dsPArrComp (BindStmt p e _ : qs) = do
     filterP <- dsDPHBuiltin filterPVar
     ce <- dsLExpr e
     let ety'ce  = parrElemType ce
@@ -525,7 +525,7 @@ dePArrComp (LastStmt e' _ : quals) pa cea
 --
 --  <<[:e' | b, qs:]>> pa ea = <<[:e' | qs:]>> pa (filterP (\pa -> b) ea)
 --
-dePArrComp (BodyStmt b _ _ _ : qs) pa cea = do
+dePArrComp (BodyStmt b _ _ : qs) pa cea = do
     filterP <- dsDPHBuiltin filterPVar
     let ty = parrElemType cea
     (clam,_) <- deLambda ty pa b
@@ -544,7 +544,7 @@ dePArrComp (BodyStmt b _ _ _ : qs) pa cea = do
 --    in
 --    <<[:e' | qs:]>> (pa, p) (crossMapP ea ef)
 --
-dePArrComp (BindStmt p e _ _ : qs) pa cea = do
+dePArrComp (BindStmt p e _ : qs) pa cea = do
     filterP <- dsDPHBuiltin filterPVar
     crossMapP <- dsDPHBuiltin crossMapPVar
     ce <- dsLExpr e
@@ -612,7 +612,7 @@ dePArrParComp qss quals = do
       panic "DsListComp.dePArrComp: Empty parallel list comprehension"
     deParStmt (ParStmtBlock qs xs _:qss) = do        -- first statement
       let res_expr = mkLHsVarTuple xs
-      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmt res_expr])
+      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmtMonad res_expr])
       parStmts qss (mkLHsVarPatTup xs) cqs
     ---
     parStmts []             pa cea = return (pa, cea)
@@ -621,7 +621,7 @@ dePArrParComp qss quals = do
       let pa'      = mkLHsPatTup [pa, mkLHsVarPatTup xs]
           ty'cea   = parrElemType cea
           res_expr = mkLHsVarTuple xs
-      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmt res_expr])
+      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmtMonad res_expr])
       let ty'cqs = parrElemType cqs
           cea'   = mkApps (Var zipP) [Type ty'cea, Type ty'cqs, cea, cqs]
       parStmts qss pa' cea'
@@ -674,7 +674,7 @@ dsMcStmts (L loc stmt : lstmts) = putSrcSpanDs loc (dsMcStmt stmt lstmts)
 ---------------
 dsMcStmt :: ExprStmt Id -> [ExprLStmt Id] -> DsM CoreExpr
 
-dsMcStmt (LastStmt body ret_op) stmts
+dsMcStmt (LastStmt body (LastStmtMonad ret_op)) stmts
   = ASSERT( null stmts )
     do { body' <- dsLExpr body
        ; ret_op' <- dsExpr ret_op
@@ -686,7 +686,7 @@ dsMcStmt (LetStmt binds) stmts
        ; dsLocalBinds binds rest }
 
 --   [ .. | a <- m, stmts ]
-dsMcStmt (BindStmt pat rhs bind_op fail_op) stmts
+dsMcStmt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) stmts
   = do { rhs' <- dsLExpr rhs
        ; dsMcBindStmt pat rhs' bind_op fail_op stmts }
 
@@ -694,7 +694,7 @@ dsMcStmt (BindStmt pat rhs bind_op fail_op) stmts
 --
 --   [ .. | exp, stmts ]
 --
-dsMcStmt (BodyStmt exp then_exp guard_exp _) stmts
+dsMcStmt (BodyStmt exp (BodyStmtMonad then_exp guard_exp) _) stmts
   = do { exp'       <- dsLExpr exp
        ; guard_exp' <- dsExpr guard_exp
        ; then_exp'  <- dsExpr then_exp
@@ -780,7 +780,7 @@ dsMcStmt (ParStmt blocks mzip_op bind_op) stmts_rest
 
        ; dsMcBindStmt pat rhs bind_op noSyntaxExpr stmts_rest }
   where
-    ds_inner (ParStmtBlock stmts bndrs return_op) 
+    ds_inner (ParStmtBlock stmts bndrs return_op)
        = do { exp <- dsInnerMonadComp stmts bndrs return_op
             ; return (exp, mkBigCoreVarTupTy bndrs) }
 
@@ -842,7 +842,7 @@ dsInnerMonadComp :: [ExprLStmt Id]
                  -> HsExpr Id   -- The monomorphic "return" operator
                  -> DsM CoreExpr
 dsInnerMonadComp stmts bndrs ret_op
-  = dsMcStmts (stmts ++ [noLoc (LastStmt (mkBigLHsVarTup bndrs) ret_op)])
+  = dsMcStmts (stmts ++ [noLoc (LastStmt (mkBigLHsVarTup bndrs) (LastStmtMonad ret_op))])
 
 -- The `unzip` function for `GroupStmt` in a monad comprehensions
 --

@@ -1590,14 +1590,14 @@ aexp2   :: { LHsExpr RdrName }
         | '(|' aexp2 cmdargs '|)'       { LL $ HsArrForm $2 Nothing (reverse $3) }
 
 splice_exp :: { LHsExpr RdrName }
-        : TH_ID_SPLICE          { L1 $ mkHsSpliceE 
-                                        (L1 $ HsVar (mkUnqual varName 
-                                                        (getTH_ID_SPLICE $1))) } 
-        | '$(' exp ')'          { LL $ mkHsSpliceE $2 }               
-        | TH_ID_TY_SPLICE       { L1 $ mkHsSpliceTE 
-                                        (L1 $ HsVar (mkUnqual varName 
-                                                        (getTH_ID_TY_SPLICE $1))) } 
-        | '$$(' exp ')'         { LL $ mkHsSpliceTE $2 }               
+        : TH_ID_SPLICE          { L1 $ mkHsSpliceE
+                                        (L1 $ HsVar (mkUnqual varName
+                                                        (getTH_ID_SPLICE $1))) }
+        | '$(' exp ')'          { LL $ mkHsSpliceE $2 }
+        | TH_ID_TY_SPLICE       { L1 $ mkHsSpliceTE
+                                        (L1 $ HsVar (mkUnqual varName
+                                                        (getTH_ID_TY_SPLICE $1))) }
+        | '$$(' exp ')'         { LL $ mkHsSpliceTE $2 }
 
 cmdargs :: { [LHsCmdTop RdrName] }
         : cmdargs acmd                  { $2 : $1 }
@@ -1853,8 +1853,8 @@ stmt  :: { LStmt RdrName (LHsExpr RdrName) }
         | 'rec' stmtlist                { LL $ mkRecStmt (unLoc $2) }
 
 qual  :: { LStmt RdrName (LHsExpr RdrName) }
-    : bindpat '<-' exp                  { LL $ mkBindStmt $1 $3 }
-    | exp                               { L1 $ mkBodyStmt $1 }
+    : bindpat '<-' exp                  { LL $ mkBindStmtMonad $1 $3 }
+    | exp                               { L1 $ mkBodyStmtMonad $1 }
     | 'let' binds                       { LL $ LetStmt (unLoc $2) }
 
 -----------------------------------------------------------------------------

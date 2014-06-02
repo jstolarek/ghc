@@ -81,16 +81,28 @@ mkCmdEnv tc_meths
 do_arr :: DsCmdEnv -> Type -> Type -> CoreExpr -> CoreExpr
 do_arr ids b_ty c_ty f = mkApps (arr_id ids) [Type b_ty, Type c_ty, f]
 
+do_arr2 :: CoreExpr -> Type -> Type -> CoreExpr -> CoreExpr
+do_arr2 arr_id b_ty c_ty f = mkApps arr_id [Type b_ty, Type c_ty, f]
+
 -- (>>>) :: forall b c d. a b c -> a c d -> a b d
 do_compose :: DsCmdEnv -> Type -> Type -> Type ->
               CoreExpr -> CoreExpr -> CoreExpr
 do_compose ids b_ty c_ty d_ty f g
   = mkApps (compose_id ids) [Type b_ty, Type c_ty, Type d_ty, f, g]
 
+do_compose2 :: CoreExpr -> Type -> Type -> Type ->
+              CoreExpr -> CoreExpr -> CoreExpr
+do_compose2 compose_id b_ty c_ty d_ty f g
+  = mkApps compose_id [Type b_ty, Type c_ty, Type d_ty, f, g]
+
 -- first :: forall b c d. a b c -> a (b,d) (c,d)
 do_first :: DsCmdEnv -> Type -> Type -> Type -> CoreExpr -> CoreExpr
 do_first ids b_ty c_ty d_ty f
   = mkApps (first_id ids) [Type b_ty, Type c_ty, Type d_ty, f]
+
+do_first2 :: CoreExpr -> Type -> Type -> Type -> CoreExpr -> CoreExpr
+do_first2 first_id b_ty c_ty d_ty f
+  = mkApps first_id [Type b_ty, Type c_ty, Type d_ty, f]
 
 -- app :: forall b c. a (a b c, b) c
 do_app :: DsCmdEnv -> Type -> Type -> CoreExpr
@@ -115,6 +127,11 @@ do_premap :: DsCmdEnv -> Type -> Type -> Type ->
              CoreExpr -> CoreExpr -> CoreExpr
 do_premap ids b_ty c_ty d_ty f g
    = do_compose ids b_ty c_ty d_ty (do_arr ids b_ty c_ty f) g
+
+do_premap2 :: CoreExpr -> CoreExpr -> Type -> Type -> Type ->
+             CoreExpr -> CoreExpr -> CoreExpr
+do_premap2 compose_id arr_id b_ty c_ty d_ty f g
+   = do_compose2 compose_id b_ty c_ty d_ty (do_arr2 arr_id b_ty c_ty f) g
 
 mkFailExpr :: HsMatchContext Id -> Type -> DsM CoreExpr
 mkFailExpr ctxt ty
@@ -704,12 +721,14 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
-dsCmdDo ids local_vars res_ty [L _ (LastStmt body _)] env_ids = do
+dsCmdDo ids local_vars res_ty [L _ (LastStmt body (LastStmtArrow arr_id compose_id))] env_ids = do
     (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     env_var <- newSysLocalDs env_ty
     let core_map = Lam env_var (mkCorePairExpr (Var env_var) mkCoreUnitExpr)
-    return (do_premap ids
+    arr     <- dsExpr arr_id
+    compose <- dsExpr compose_id
+    return (do_premap2 compose arr
                       env_ty
                       (mkCorePairTy env_ty unitTy)
                       res_ty
@@ -760,7 +779,8 @@ dsCmdStmt
 --        ---> premap (\ ((xs)) -> (((xs1),()),(xs')))
 --            (first c >>> arr snd) >>> ss
 
-dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
+dsCmdStmt ids local_vars out_ids (BodyStmt cmd (BodyStmtArrow
+              arr1_id arr2_id compose1_id compose2_id first_id) c_ty) env_ids = do
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
     core_mux <- matchEnv env_ids
         (mkCorePairExpr
@@ -772,10 +792,15 @@ dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
         before_c_ty = mkCorePairTy in_ty1 out_ty
         after_c_ty  = mkCorePairTy c_ty out_ty
     snd_fn <- mkSndExpr c_ty out_ty
-    return (do_premap ids in_ty before_c_ty out_ty core_mux $
-               do_compose ids before_c_ty after_c_ty out_ty
-                   (do_first ids in_ty1 c_ty out_ty core_cmd) $
-               do_arr ids after_c_ty out_ty snd_fn,
+    compose1 <- dsExpr compose1_id
+    compose2 <- dsExpr compose2_id
+    arr2 <- dsExpr arr2_id
+    arr1 <- dsExpr arr1_id
+    first <- dsExpr first_id
+    return (do_premap2 compose1 arr1 in_ty before_c_ty out_ty core_mux $
+               do_compose2 compose2 before_c_ty after_c_ty out_ty
+                   (do_first2 first in_ty1 c_ty out_ty core_cmd) $
+               do_arr2 arr2 after_c_ty out_ty snd_fn,
                    extendVarSetList fv_cmd out_ids)
 
 -- D; xs1 |-a c : () --> t
@@ -789,7 +814,8 @@ dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
 -- It would be simpler and more consistent to do this using second,
 -- but that's likely to be defined in terms of first.
 
-dsCmdStmt ids local_vars out_ids (BindStmt pat cmd _ _) env_ids = do
+dsCmdStmt ids local_vars out_ids (BindStmt pat cmd (BindStmtArrow
+              arr1_id arr2_id compose1_id compose2_id first_id)) env_ids = do
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
     let pat_ty   = hsLPatType pat
         pat_vars = mkVarSet (collectPatBinders pat)
@@ -823,10 +849,15 @@ dsCmdStmt ids local_vars out_ids (BindStmt pat cmd _ _) env_ids = do
         in_ty1 = mkCorePairTy (mkBigCoreVarTupTy env_ids1) unitTy
         in_ty2 = mkBigCoreVarTupTy env_ids2
         before_c_ty = mkCorePairTy in_ty1 in_ty2
-    return (do_premap ids in_ty before_c_ty out_ty core_mux $
-               do_compose ids before_c_ty after_c_ty out_ty
-                 (do_first ids in_ty1 pat_ty in_ty2 core_cmd) $
-               do_arr ids after_c_ty out_ty proj_expr,
+    compose1 <- dsExpr compose1_id
+    compose2 <- dsExpr compose2_id
+    arr2 <- dsExpr arr2_id
+    arr1 <- dsExpr arr1_id
+    first <- dsExpr first_id
+    return (do_premap2 compose1 arr1 in_ty before_c_ty out_ty core_mux $
+               do_compose2 compose2 before_c_ty after_c_ty out_ty
+                 (do_first2 first in_ty1 pat_ty in_ty2 core_cmd) $
+               do_arr2 arr2 after_c_ty out_ty proj_expr,
                  fv_cmd `unionVarSet` (mkVarSet out_ids `minusVarSet` pat_vars))
 
 -- D; xs' |-a do { ss } : t
@@ -1173,7 +1204,7 @@ collectLStmtBinders :: LStmt Id body -> [Id]
 collectLStmtBinders = collectStmtBinders . unLoc
 
 collectStmtBinders :: Stmt Id body -> [Id]
-collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
+collectStmtBinders (BindStmt pat _ _)   = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []

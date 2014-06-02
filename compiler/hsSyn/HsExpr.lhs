@@ -1046,6 +1046,21 @@ type GuardStmt  id = Stmt  id (LHsExpr id)
 type GhciLStmt  id = LStmt id (LHsExpr id)
 type GhciStmt   id = Stmt  id (LHsExpr id)
 
+-- TODO: Explain why we have these datatypes, comment on the fields
+data LastStmtIDs idR = LastStmtMonad (SyntaxExpr idR)
+                     | LastStmtArrow (SyntaxExpr idR) (SyntaxExpr idR) -- arr, compose
+                       deriving (Data, Typeable)
+data BindStmtIDs idR = BindStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
+                     | BindStmtArrow (SyntaxExpr idR) (SyntaxExpr idR)
+                                     (SyntaxExpr idR) (SyntaxExpr idR)
+                                     (SyntaxExpr idR) -- arr, arr, compose, compose, first
+                       deriving (Data, Typeable)
+data BodyStmtIDs idR = BodyStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
+                     | BodyStmtArrow (SyntaxExpr idR) (SyntaxExpr idR)
+                                     (SyntaxExpr idR) (SyntaxExpr idR)
+                                     (SyntaxExpr idR) -- arr, arr, compose, compose, first
+                       deriving (Data, Typeable)
+
 -- The SyntaxExprs in here are used *only* for do-notation and monad
 -- comprehensions, which have rebindable syntax. Otherwise they are unused.
 data StmtLR idL idR body -- body should always be (LHs**** idR)
@@ -1053,22 +1068,22 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
               -- and (after the renamer) DoExpr, MDoExpr
               -- Not used for GhciStmtCtxt, PatGuard, which scope over other stuff
                body
-               (SyntaxExpr idR)   -- The return operator, used only for MonadComp
+               (LastStmtIDs idR)  -- The return operator, used only for MonadComp
                                   -- For ListComp, PArrComp, we use the baked-in 'return'
                                   -- For DoExpr, MDoExpr, we don't appply a 'return' at all
                                   -- See Note [Monad Comprehensions]
   | BindStmt (LPat idL)
              body
-             (SyntaxExpr idR) -- The (>>=) operator; see Note [The type of bind]
-             (SyntaxExpr idR) -- The fail operator
-             -- The fail operator is noSyntaxExpr
-             -- if the pattern match can't fail
+             (BindStmtIDs idR) -- The (>>=) operator; see Note [The type of bind]
+                               -- The fail operator
+                               -- The fail operator is noSyntaxExpr
+                               -- if the pattern match can't fail
 
-  | BodyStmt body             -- See Note [BodyStmt]
-             (SyntaxExpr idR) -- The (>>) operator
-             (SyntaxExpr idR) -- The `guard` operator; used only in MonadComp
-                              -- See notes [Monad Comprehensions]
-             PostTcType       -- Element type of the RHS (used for arrows)
+  | BodyStmt body              -- See Note [BodyStmt]
+             (BodyStmtIDs idR) -- The (>>) operator
+                               -- The `guard` operator; used only in MonadComp
+                               -- See notes [Monad Comprehensions]
+             PostTcType        -- Element type of the RHS (used for arrows)
 
   | LetStmt  (HsLocalBindsLR idL idR)
 
@@ -1296,9 +1311,9 @@ instance (OutputableBndr idL, OutputableBndr idR, Outputable body)
 pprStmt :: (OutputableBndr idL, OutputableBndr idR, Outputable body)
         => (StmtLR idL idR body) -> SDoc
 pprStmt (LastStmt expr _)         = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
-pprStmt (BindStmt pat expr _ _)   = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
+pprStmt (BindStmt pat expr _)     = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
 pprStmt (LetStmt binds)           = hsep [ptext (sLit "let"), pprBinds binds]
-pprStmt (BodyStmt expr _ _ _)     = ppr expr
+pprStmt (BodyStmt expr _ _)       = ppr expr
 pprStmt (ParStmt stmtss _ _)      = sep (punctuate (ptext (sLit " | ")) (map ppr stmtss))
 
 pprStmt (TransStmt { trS_stmts = stmts, trS_by = by, trS_using = using, trS_form = form })

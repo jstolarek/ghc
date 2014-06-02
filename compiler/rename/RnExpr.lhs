@@ -560,8 +560,8 @@ methodNamesLStmt = methodNamesStmt . unLoc
 
 methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
 methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
-methodNamesStmt (BodyStmt cmd _ _ _)             = methodNamesLCmd cmd
-methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
+methodNamesStmt (BodyStmt cmd _ _)               = methodNamesLCmd cmd
+methodNamesStmt (BindStmt _ cmd _)               = methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
 methodNamesStmt (ParStmt {})                     = emptyFVs
@@ -659,10 +659,10 @@ rnStmt ctxt rnBody (L loc (LastStmt body _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
         ; (ret_op, fvs1)   <- lookupStmtName ctxt returnMName
         ; (thing,  fvs3)   <- thing_inside []
-        ; return (([L loc (LastStmt body' ret_op)], thing),
+        ; return (([L loc (LastStmt body' (LastStmtMonad ret_op))], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs3) }
 
-rnStmt ctxt rnBody (L loc (BodyStmt body _ _ _)) thing_inside
+rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
         ; (then_op, fvs1)  <- lookupStmtName ctxt thenMName
         ; (guard_op, fvs2) <- if isListCompExpr ctxt
@@ -672,17 +672,17 @@ rnStmt ctxt rnBody (L loc (BodyStmt body _ _ _)) thing_inside
                               -- Also for sub-stmts of same eg [ e | x<-xs, gd | blah ]
                               -- Here "gd" is a guard
         ; (thing, fvs3)    <- thing_inside []
-        ; return (([L loc (BodyStmt body' then_op guard_op placeHolderType)], thing),
+        ; return (([L loc (BodyStmt body' (BodyStmtMonad then_op guard_op) placeHolderType)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }
 
-rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
+rnStmt ctxt rnBody (L loc (BindStmt pat body _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
                 -- The binders do not scope over the expression
         ; (bind_op, fvs1) <- lookupStmtName ctxt bindMName
         ; (fail_op, fvs2) <- lookupStmtName ctxt failMName
         ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
         { (thing, fvs3) <- thing_inside (collectPatBinders pat')
-        ; return (([L loc (BindStmt pat' body' bind_op fail_op)], thing),
+        ; return (([L loc (BindStmt pat' body' (BindStmtMonad bind_op fail_op))], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }}
        -- fv_expr shouldn't really be filtered by the rnPatsAndThen
         -- but it does not matter because the names are unique
@@ -800,9 +800,9 @@ lookupStmtName ctxt n
   = case ctxt of
       ListComp        -> not_rebindable
       PArrComp        -> not_rebindable
-      ArrowExpr       -> not_rebindable
       PatGuard {}     -> not_rebindable
 
+      ArrowExpr       -> rebindable
       DoExpr          -> rebindable
       MDoExpr         -> rebindable
       MonadComp       -> rebindable
@@ -896,17 +896,17 @@ rn_rec_stmt_lhs :: Outputable body => MiniFixityEnv
                    -- so we don't bother to compute it accurately in the other cases
                 -> RnM [(LStmtLR Name RdrName body, FreeVars)]
 
-rn_rec_stmt_lhs _ (L loc (BodyStmt body a b c))
-  = return [(L loc (BodyStmt body a b c), emptyFVs)]
+rn_rec_stmt_lhs _ (L loc (BodyStmt body ids ty))
+  = return [(L loc (BodyStmt body ids ty), emptyFVs)]
 
-rn_rec_stmt_lhs _ (L loc (LastStmt body a))
-  = return [(L loc (LastStmt body a), emptyFVs)]
+rn_rec_stmt_lhs _ (L loc (LastStmt body ids))
+  = return [(L loc (LastStmt body ids), emptyFVs)]
 
-rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body a b))
+rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body ids))
   = do
       -- should the ctxt be MDo instead?
       (pat', fv_pat) <- rnBindPat (localRecNameMaker fix_env) pat
-      return [(L loc (BindStmt pat' body a b),
+      return [(L loc (BindStmt pat' body ids),
                fv_pat)]
 
 rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _)))
@@ -958,15 +958,15 @@ rn_rec_stmt rnBody _ (L loc (LastStmt body _)) _
   = do  { (body', fv_expr) <- rnBody body
         ; (ret_op, fvs1)   <- lookupSyntaxName returnMName
         ; return [(emptyNameSet, fv_expr `plusFV` fvs1, emptyNameSet,
-                   L loc (LastStmt body' ret_op))] }
+                   L loc (LastStmt body' (LastStmtMonad ret_op)))] }
 
-rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _ _)) _
+rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _)) _
   = rnBody body `thenM` \ (body', fvs) ->
     lookupSyntaxName thenMName  `thenM` \ (then_op, fvs1) ->
     return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
-              L loc (BodyStmt body' then_op noSyntaxExpr placeHolderType))]
+              L loc (BodyStmt body' (BodyStmtMonad then_op noSyntaxExpr) placeHolderType))]
 
-rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
+rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _)) fv_pat
   = rnBody body         `thenM` \ (body', fv_expr) ->
     lookupSyntaxName bindMName  `thenM` \ (bind_op, fvs1) ->
     lookupSyntaxName failMName  `thenM` \ (fail_op, fvs2) ->
@@ -975,7 +975,7 @@ rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
         fvs   = fv_expr `plusFV` fv_pat `plusFV` fvs1 `plusFV` fvs2
     in
     return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
-              L loc (BindStmt pat' body' bind_op fail_op))]
+              L loc (BindStmt pat' body' (BindStmtMonad bind_op fail_op)))]
 
 rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _))) _
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
@@ -1224,10 +1224,11 @@ checkLastStmt ctxt lstmt@(L loc stmt)
       _         -> check_other
   where
     check_do    -- Expect BodyStmt, and change it to LastStmt
-      = case stmt of
-          BodyStmt e _ _ _ -> return (L loc (mkLastStmt e))
-          LastStmt {}      -> return lstmt   -- "Deriving" clauses may generate a
-                                             -- LastStmt directly (unlike the parser)
+      = case (ctxt, stmt) of
+          (ArrowExpr, BodyStmt e _ _) -> return (L loc (mkLastStmtArrow e))
+          (_        , BodyStmt e _ _) -> return (L loc (mkLastStmtMonad e))
+          (_,         LastStmt {}   ) -> return lstmt -- "Deriving" clauses may generate a
+                                                      -- LastStmt directly (unlike the parser)
           _                -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
     last_error = (ptext (sLit "The last statement in") <+> pprAStmtContext ctxt
                   <+> ptext (sLit "must be an expression"))

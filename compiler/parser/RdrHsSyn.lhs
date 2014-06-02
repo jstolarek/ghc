@@ -11,11 +11,11 @@ module RdrHsSyn (
         mkHsIntegral, mkHsFractional, mkHsIsString,
         mkHsDo, mkSpliceDecl,
         mkRoleAnnotDecl,
-        mkClassDecl, 
-        mkTyData, mkDataFamInst, 
+        mkClassDecl,
+        mkTyData, mkDataFamInst,
         mkTySynonym, mkTyFamInstEqn,
-        mkTyFamInst, 
-        mkFamDecl, 
+        mkTyFamInst,
+        mkFamDecl,
         splitCon, mkInlinePragma,
         mkRecConstrOrUpdate, -- HsExp -> [HsFieldUpdate] -> P HsExp
         mkTyLit,
@@ -60,7 +60,7 @@ module RdrHsSyn (
 import HsSyn            -- Lots of it
 import Class            ( FunDep )
 import CoAxiom          ( Role, fsFromRole )
-import RdrName          ( RdrName, isRdrTyVar, isRdrTc, mkUnqual, rdrNameOcc, 
+import RdrName          ( RdrName, isRdrTyVar, isRdrTc, mkUnqual, rdrNameOcc,
                           isRdrDataCon, isUnqual, getRdrName, setRdrNameSpace,
                           rdrNameSpace )
 import OccName          ( tcClsName, isVarNameSpace )
@@ -161,7 +161,7 @@ mkDataDefn new_or_data cType mcxt ksig data_cons maybe_deriv
   = do { checkDatatypeContext mcxt
        ; let cxt = fromMaybe (noLoc []) mcxt
        ; return (HsDataDefn { dd_ND = new_or_data, dd_cType = cType
-                            , dd_ctxt = cxt 
+                            , dd_ctxt = cxt
                             , dd_cons = data_cons
                             , dd_kindSig = ksig
                             , dd_derivs = maybe_deriv }) }
@@ -302,7 +302,7 @@ cvTopDecls decls = go (fromOL decls)
 cvBindGroup :: OrdList (LHsDecl RdrName) -> HsValBinds RdrName
 cvBindGroup binding
   = case cvBindsAndSigs binding of
-      (mbs, sigs, fam_ds, tfam_insts, dfam_insts, _) 
+      (mbs, sigs, fam_ds, tfam_insts, dfam_insts, _)
          -> ASSERT( null fam_ds && null tfam_insts && null dfam_insts)
             ValBindsIn mbs sigs
 
@@ -555,7 +555,7 @@ checkTyClHdr ty
   where
     goL (L l ty) acc = go l ty acc
 
-    go l (HsTyVar tc) acc 
+    go l (HsTyVar tc) acc
         | isRdrTc tc          = return (L l tc, acc)
     go _ (HsOpTy t1 (_, ltc@(L _ tc)) t2) acc
         | isRdrTc tc         = return (ltc, t1:t2:acc)
@@ -674,7 +674,7 @@ checkAPat msg loc e0 = do
    RecordCon c _ (HsRecFields fs dd)
                         -> do fs <- mapM (checkPatField msg) fs
                               return (ConPatIn c (RecCon (HsRecFields fs dd)))
-   HsSpliceE is_typed s | not is_typed 
+   HsSpliceE is_typed s | not is_typed
                         -> return (SplicePat s)
    HsQuasiQuoteE q      -> return (QuasiQuotePat q)
    _                    -> patFail msg loc e0
@@ -891,25 +891,25 @@ locMap :: (SrcSpan -> a -> P b) -> Located a -> P (Located b)
 locMap f (L l a) = f l a >>= (\b -> return $ L l b)
 
 checkCmd :: SrcSpan -> HsExpr RdrName -> P (HsCmd RdrName)
-checkCmd _ (HsArrApp e1 e2 ptt haat b) = 
+checkCmd _ (HsArrApp e1 e2 ptt haat b) =
     return $ HsCmdArrApp e1 e2 ptt haat b
-checkCmd _ (HsArrForm e mf args) = 
+checkCmd _ (HsArrForm e mf args) =
     return $ HsCmdArrForm e mf args
-checkCmd _ (HsApp e1 e2) = 
+checkCmd _ (HsApp e1 e2) =
     checkCommand e1 >>= (\c -> return $ HsCmdApp c e2)
-checkCmd _ (HsLam mg) = 
+checkCmd _ (HsLam mg) =
     checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdLam mg')
-checkCmd _ (HsPar e) = 
+checkCmd _ (HsPar e) =
     checkCommand e >>= (\c -> return $ HsCmdPar c)
-checkCmd _ (HsCase e mg) = 
+checkCmd _ (HsCase e mg) =
     checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdCase e mg')
 checkCmd _ (HsIf cf ep et ee) = do
     pt <- checkCommand et
     pe <- checkCommand ee
     return $ HsCmdIf cf ep pt pe
-checkCmd _ (HsLet lb e) = 
+checkCmd _ (HsLet lb e) =
     checkCommand e >>= (\c -> return $ HsCmdLet lb c)
-checkCmd _ (HsDo DoExpr stmts ty) = 
+checkCmd _ (HsDo DoExpr stmts ty) =
     mapM checkCmdLStmt stmts >>= (\ss -> return $ HsCmdDo ss ty)
 
 checkCmd _ (OpApp eLeft op fixity eRight) = do
@@ -926,12 +926,12 @@ checkCmdLStmt :: ExprLStmt RdrName -> P (CmdLStmt RdrName)
 checkCmdLStmt = locMap checkCmdStmt
 
 checkCmdStmt :: SrcSpan -> ExprStmt RdrName -> P (CmdStmt RdrName)
-checkCmdStmt _ (LastStmt e r) = 
+checkCmdStmt _ (LastStmt e r) =
     checkCommand e >>= (\c -> return $ LastStmt c r)
-checkCmdStmt _ (BindStmt pat e b f) = 
-    checkCommand e >>= (\c -> return $ BindStmt pat c b f)
-checkCmdStmt _ (BodyStmt e t g ty) = 
-    checkCommand e >>= (\c -> return $ BodyStmt c t g ty)
+checkCmdStmt _ (BindStmt pat e ids@(BindStmtArrow _ _ _ _ _)) =
+    checkCommand e >>= (\c -> return $ BindStmt pat c ids)
+checkCmdStmt _ (BodyStmt e ids@(BodyStmtArrow _ _ _ _ _) ty) =
+    checkCommand e >>= (\c -> return $ BodyStmt c ids ty)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
 checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do
     ss <- mapM checkCmdLStmt stmts
@@ -953,7 +953,7 @@ checkCmdGRHSs (GRHSs grhss binds) = do
 
 checkCmdGRHS :: LGRHS RdrName (LHsExpr RdrName) -> P (LGRHS RdrName (LHsCmd RdrName))
 checkCmdGRHS = locMap $ const convert
-  where 
+  where
     convert (GRHS stmts e) = do
         c <- checkCommand e
 --        cmdStmts <- mapM checkCmdLStmt stmts
@@ -963,7 +963,7 @@ checkCmdGRHS = locMap $ const convert
 cmdFail :: SrcSpan -> HsExpr RdrName -> P a
 cmdFail loc e = parseErrorSDoc loc (text "Parse error in command:" <+> ppr e)
 cmdStmtFail :: SrcSpan -> Stmt RdrName (LHsExpr RdrName) -> P a
-cmdStmtFail loc e = parseErrorSDoc loc 
+cmdStmtFail loc e = parseErrorSDoc loc
                     (text "Parse error in command statement:" <+> ppr e)
 
 ---------------------------------------------------------------------------
@@ -992,7 +992,7 @@ mk_rec_fields fs False = HsRecFields { rec_flds = fs, rec_dotdot = Nothing }
 mk_rec_fields fs True  = HsRecFields { rec_flds = fs, rec_dotdot = Just (length fs) }
 
 mkInlinePragma :: (InlineSpec, RuleMatchInfo) -> Maybe Activation -> InlinePragma
--- The (Maybe Activation) is because the user can omit 
+-- The (Maybe Activation) is because the user can omit
 -- the activation spec (and usually does)
 mkInlinePragma (inl, match_info) mb_act
   = InlinePragma { inl_inline = inl
@@ -1115,7 +1115,7 @@ data ImpExpSubSpec = ImpExpAbs | ImpExpAll | ImpExpList [ RdrName ]
 mkModuleImpExp :: RdrName -> ImpExpSubSpec -> IE RdrName
 mkModuleImpExp name subs =
   case subs of
-    ImpExpAbs 
+    ImpExpAbs
       | isVarNameSpace (rdrNameSpace name) -> IEVar       name
       | otherwise                          -> IEThingAbs  nameT
     ImpExpAll                              -> IEThingAll  nameT

@@ -526,7 +526,7 @@ addTickHsExpr (ExplicitList ty wit es) =
         liftM3 ExplicitList
                 (return ty)
                 (addTickWit wit)
-                (mapM (addTickLHsExpr) es) 
+                (mapM (addTickLHsExpr) es)
              where addTickWit Nothing = return Nothing
                    addTickWit (Just fln) = do fln' <- addTickHsExpr fln
                                               return (Just fln')
@@ -650,21 +650,19 @@ addTickLStmts' isGuard lstmts res
        ; return (lstmts', a) }
 
 addTickStmt :: (Maybe (Bool -> BoxLabel)) -> Stmt Id (LHsExpr Id) -> TM (Stmt Id (LHsExpr Id))
-addTickStmt _isGuard (LastStmt e ret) = do
+addTickStmt _isGuard (LastStmt e ids) = do
         liftM2 LastStmt
                 (addTickLHsExpr e)
-                (addTickSyntaxExpr hpcSrcSpan ret)
-addTickStmt _isGuard (BindStmt pat e bind fail) = do
-        liftM4 BindStmt
+                (addTickLastStmtIDs ids)
+addTickStmt _isGuard (BindStmt pat e ids) = do
+        liftM3 BindStmt
                 (addTickLPat pat)
                 (addTickLHsExprRHS e)
-                (addTickSyntaxExpr hpcSrcSpan bind)
-                (addTickSyntaxExpr hpcSrcSpan fail)
-addTickStmt isGuard (BodyStmt e bind' guard' ty) = do
-        liftM4 BodyStmt
+                (addTickBindStmtIDs ids)
+addTickStmt isGuard (BodyStmt e ids ty) = do
+        liftM3 BodyStmt
                 (addTick isGuard e)
-                (addTickSyntaxExpr hpcSrcSpan bind')
-                (addTickSyntaxExpr hpcSrcSpan guard')
+                (addTickBodyStmtIDs ids)
                 (return ty)
 addTickStmt _isGuard (LetStmt binds) = do
         liftM LetStmt
@@ -807,7 +805,7 @@ addTickHsCmd (HsCmdArrForm e fix cmdtop) =
                (return fix)
                (mapM (liftL (addTickHsCmdTop)) cmdtop)
 
-addTickHsCmd (HsCmdCast co cmd) 
+addTickHsCmd (HsCmdCast co cmd)
   = liftM2 HsCmdCast (return co) (addTickHsCmd cmd)
 
 -- Others should never happen in a command context.
@@ -855,22 +853,58 @@ addTickLCmdStmts' lstmts res
   where
         binders = collectLStmtsBinders lstmts
 
+
+addTickLastStmtIDs :: LastStmtIDs Id -> TM (LastStmtIDs Id)
+addTickLastStmtIDs (LastStmtMonad ret) = do
+        liftM  LastStmtMonad
+               (addTickSyntaxExpr hpcSrcSpan ret)
+addTickLastStmtIDs (LastStmtArrow arr  compose) = do
+        liftM2 LastStmtArrow
+               (addTickSyntaxExpr hpcSrcSpan arr)
+               (addTickSyntaxExpr hpcSrcSpan compose)
+
+
+addTickBindStmtIDs :: BindStmtIDs Id -> TM (BindStmtIDs Id)
+addTickBindStmtIDs (BindStmtMonad bind fail) = do
+        liftM2 BindStmtMonad
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan fail)
+addTickBindStmtIDs (BindStmtArrow arr1 arr2 compose1 compose2 first) = do
+        liftM5 BindStmtArrow
+               (addTickSyntaxExpr hpcSrcSpan arr1)
+               (addTickSyntaxExpr hpcSrcSpan arr2)
+               (addTickSyntaxExpr hpcSrcSpan compose1)
+               (addTickSyntaxExpr hpcSrcSpan compose2)
+               (addTickSyntaxExpr hpcSrcSpan first)
+
+addTickBodyStmtIDs :: BodyStmtIDs Id -> TM (BodyStmtIDs Id)
+addTickBodyStmtIDs (BodyStmtMonad bind guard) = do
+        liftM2 BodyStmtMonad
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan guard)
+addTickBodyStmtIDs (BodyStmtArrow arr1 arr2 compose1 compose2 first) = do
+        liftM5 BodyStmtArrow
+               (addTickSyntaxExpr hpcSrcSpan arr1)
+               (addTickSyntaxExpr hpcSrcSpan arr2)
+               (addTickSyntaxExpr hpcSrcSpan compose1)
+               (addTickSyntaxExpr hpcSrcSpan compose2)
+               (addTickSyntaxExpr hpcSrcSpan first)
+
+
 addTickCmdStmt :: Stmt Id (LHsCmd Id) -> TM (Stmt Id (LHsCmd Id))
-addTickCmdStmt (BindStmt pat c bind fail) = do
-        liftM4 BindStmt
+addTickCmdStmt (BindStmt pat c ids) = do
+        liftM3 BindStmt
                 (addTickLPat pat)
                 (addTickLHsCmd c)
-                (return bind)
-                (return fail)
-addTickCmdStmt (LastStmt c ret) = do
+                (addTickBindStmtIDs ids)
+addTickCmdStmt (LastStmt c ids) = do
         liftM2 LastStmt
                 (addTickLHsCmd c)
-                (addTickSyntaxExpr hpcSrcSpan ret)
-addTickCmdStmt (BodyStmt c bind' guard' ty) = do
-        liftM4 BodyStmt
+                (addTickLastStmtIDs ids)
+addTickCmdStmt (BodyStmt c ids ty) = do
+        liftM3 BodyStmt
                 (addTickLHsCmd c)
-                (addTickSyntaxExpr hpcSrcSpan bind')
-                (addTickSyntaxExpr hpcSrcSpan guard')
+                (addTickBodyStmtIDs ids)
                 (return ty)
 addTickCmdStmt (LetStmt binds) = do
         liftM LetStmt
