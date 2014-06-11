@@ -603,7 +603,7 @@ ppr_expr (HsTcBracketOut e []) = ppr e
 ppr_expr (HsTcBracketOut e ps) = ppr e $$ ptext (sLit "pending(tc)") <+> ppr ps
 ppr_expr (HsQuasiQuoteE qq)    = ppr qq
 
-ppr_expr (HsProc pat (L _ (HsCmdTop cmd _ _ _)))
+ppr_expr (HsProc pat (L _ (HsCmdTop cmd _ _ _ _ _)))
   = hsep [ptext (sLit "proc"), ppr pat, ptext (sLit "->"), ppr cmd]
 
 ppr_expr (HsTick tickish exp)
@@ -776,6 +776,8 @@ data HsCmdTop id
              PostTcType          -- Nested tuple of inputs on the command's stack
              PostTcType          -- return type of the command
              (CmdSyntaxTable id) -- See Note [CmdSyntaxTable]
+             (SyntaxExpr id)     -- compose (>>>)
+             (SyntaxExpr id)     -- arr
   deriving (Data, Typeable)
 \end{code}
 
@@ -860,9 +862,9 @@ ppr_cmd (HsCmdArrForm op _ args)
          4 (sep (map (pprCmdArg.unLoc) args) <> ptext (sLit "|)"))
 
 pprCmdArg :: OutputableBndr id => HsCmdTop id -> SDoc
-pprCmdArg (HsCmdTop cmd@(L _ (HsCmdArrForm _ Nothing [])) _ _ _)
+pprCmdArg (HsCmdTop cmd@(L _ (HsCmdArrForm _ Nothing [])) _ _ _ _ _)
   = ppr_lcmd cmd
-pprCmdArg (HsCmdTop cmd _ _ _)
+pprCmdArg (HsCmdTop cmd _ _ _ _ _)
   = parens (ppr_lcmd cmd)
 
 instance OutputableBndr id => Outputable (HsCmdTop id) where

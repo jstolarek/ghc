@@ -916,8 +916,8 @@ checkCmd _ (OpApp eLeft op fixity eRight) = do
     -- OpApp becomes a HsCmdArrForm with a (Just fixity) in it
     c1 <- checkCommand eLeft
     c2 <- checkCommand eRight
-    let arg1 = L (getLoc c1) $ HsCmdTop c1 placeHolderType placeHolderType []
-        arg2 = L (getLoc c2) $ HsCmdTop c2 placeHolderType placeHolderType []
+    let arg1 = L (getLoc c1) $ HsCmdTop c1 placeHolderType placeHolderType [] noSyntaxExpr noSyntaxExpr
+        arg2 = L (getLoc c2) $ HsCmdTop c2 placeHolderType placeHolderType [] noSyntaxExpr noSyntaxExpr
     return $ HsCmdArrForm op (Just fixity) [arg1, arg2]
 
 checkCmd l e = cmdFail l e

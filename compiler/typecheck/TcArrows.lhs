@@ -125,11 +125,11 @@ tcCmdTop :: CmdEnv
          -> CmdType
          -> TcM (LHsCmdTop TcId)
 
-tcCmdTop env (L loc (HsCmdTop cmd _ _ names)) cmd_ty@(cmd_stk, res_ty)
+tcCmdTop env (L loc (HsCmdTop cmd _ _ names c a)) cmd_ty@(cmd_stk, res_ty)
   = setSrcSpan loc $
     do	{ cmd'   <- tcCmd env cmd cmd_ty
 	; names' <- mapM (tcSyntaxName ProcOrigin (cmd_arr env)) names
-	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty names') }
+	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty names' c' a') }
 ----------------------------------------
 tcCmd  :: CmdEnv -> LHsCmd Name -> CmdType -> TcM (LHsCmd TcId)
 	-- The main recursive function

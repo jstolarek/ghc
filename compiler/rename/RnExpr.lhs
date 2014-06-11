@@ -411,15 +411,18 @@ rnCmdArgs (arg:args)
 rnCmdTop :: LHsCmdTop RdrName -> RnM (LHsCmdTop Name, FreeVars)
 rnCmdTop = wrapLocFstM rnCmdTop'
  where
-  rnCmdTop' (HsCmdTop cmd _ _ _)
+  rnCmdTop' (HsCmdTop cmd _ _ _ _ _)
    = do { (cmd', fvCmd) <- rnLCmd cmd
         ; let cmd_names = [arrAName, composeAName, firstAName] ++
                           nameSetToList (methodNamesCmd (unLoc cmd'))
         -- Generate the rebindable syntax for the monad
         ; (cmd_names', cmd_fvs) <- lookupSyntaxNames cmd_names
 
-        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_names'),
-                  fvCmd `plusFV` cmd_fvs) }
+        ; (compose_op, fvs1) <- lookupStmtName ArrowExpr composeAName
+        ; (arr_op, fvs2) <- lookupStmtName ArrowExpr arrAName
+
+        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_names') compose_op arr_op,
+                  fvCmd `plusFV` cmd_fvs `plusFV` fvs1 `plusFV` fvs2) }
 
 rnLCmd :: LHsCmd RdrName -> RnM (LHsCmd Name, FreeVars)
 rnLCmd = wrapLocFstM rnCmd
