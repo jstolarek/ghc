@@ -163,14 +163,14 @@ tcRnModuleTcRnM hsc_env hsc_src
         tcg_env <- {-# SCC "tcRnImports" #-}
                    tcRnImports hsc_env (prel_imports ++ import_decls) ;
 
-          -- If the whole module is warned about or deprecated 
+          -- If the whole module is warned about or deprecated
           -- (via mod_deprec) record that in tcg_warns. If we do thereby add
           -- a WarnAll, it will override any subseqent depracations added to tcg_warns
-        let { tcg_env1 = case mod_deprec of 
-                         Just txt -> tcg_env { tcg_warns = WarnAll txt } 
-                         Nothing  -> tcg_env 
+        let { tcg_env1 = case mod_deprec of
+                         Just txt -> tcg_env { tcg_warns = WarnAll txt }
+                         Nothing  -> tcg_env
             } ;
- 
+
         setGblEnv tcg_env1 $ do {
 
                 -- Load the hi-boot interface for this module, if any
@@ -367,7 +367,7 @@ tcRnSrcDecls boot_iface decls
                                    tcg_fords    = fords' } } ;
 
         setGlobalTypeEnv tcg_env' final_type_env
-       
+
    } }
 
 tc_rn_src_decls :: ModDetails
@@ -404,7 +404,7 @@ tc_rn_src_decls boot_details ds
                             -> setSrcSpan loc $
                                addErr (ptext (sLit "Declaration splices are not permitted inside top-level declarations added with addTopDecls"))
                         } ;
-                                         
+
                     -- Rename TH-generated top-level declarations
                     ; (tcg_env, th_rn_decls) <- setGblEnv tcg_env $
                       rnTopSrcDecls extra_deps th_group
@@ -913,7 +913,7 @@ tcTopSrcDecls boot_details
                           foe_binds
 
             ; fo_gres = fi_gres `unionBags` foe_gres
-            ; fo_fvs = foldrBag (\gre fvs -> fvs `addOneFV` gre_name gre) 
+            ; fo_fvs = foldrBag (\gre fvs -> fvs `addOneFV` gre_name gre)
                                 emptyFVs fo_gres
             ; fo_rdr_names :: [RdrName]
             ; fo_rdr_names = foldrBag gre_to_rdr_name [] fo_gres
@@ -951,8 +951,8 @@ tcTopSrcDecls boot_details
                 occName = nameOccName (gre_name gre)
 
 ---------------------------
-tcTyClsInstDecls :: ModDetails 
-                 -> [TyClGroup Name] 
+tcTyClsInstDecls :: ModDetails
+                 -> [TyClGroup Name]
                  -> [LInstDecl Name]
                  -> [LDerivDecl Name]
                  -> TcM (TcGblEnv,            -- The full inst env
@@ -961,7 +961,7 @@ tcTyClsInstDecls :: ModDetails
                           HsValBinds Name)    -- Supporting bindings for derived instances
 
 tcTyClsInstDecls boot_details tycl_decls inst_decls deriv_decls
- = tcExtendKindEnv2 [ (con, APromotionErr FamDataConPE) 
+ = tcExtendKindEnv2 [ (con, APromotionErr FamDataConPE)
                     | lid <- inst_decls, con <- get_cons lid ] $
       -- Note [AFamDataCon: not promoting data family constructors]
    do { tcg_env <- tcTyAndClassDecls boot_details tycl_decls ;
@@ -976,7 +976,7 @@ tcTyClsInstDecls boot_details tycl_decls inst_decls deriv_decls
       = concatMap (get_fi_cons . unLoc) fids
 
     get_fi_cons :: DataFamInstDecl Name -> [Name]
-    get_fi_cons (DataFamInstDecl { dfid_defn = HsDataDefn { dd_cons = cons } }) 
+    get_fi_cons (DataFamInstDecl { dfid_defn = HsDataDefn { dd_cons = cons } })
       = map (unLoc . con_name . unLoc) cons
 \end{code}
 
@@ -1087,7 +1087,7 @@ checkMainExported :: TcGblEnv -> TcM ()
 checkMainExported tcg_env
   = case tcg_main tcg_env of
       Nothing -> return () -- not the main module
-      Just main_name -> 
+      Just main_name ->
          do { dflags <- getDynFlags
             ; let main_mod = mainModIs dflags
             ; checkTc (main_name `elem` concatMap availNames (tcg_exports tcg_env)) $
@@ -1354,7 +1354,7 @@ tcUserStmt rdr_stmt@(L loc _)
 
        ; opt_pr_flag <- goptM Opt_PrintBindResult
        ; let print_result_plan
-               | opt_pr_flag                         -- The flag says "print result"   
+               | opt_pr_flag                         -- The flag says "print result"
                , [v] <- collectLStmtBinders gi_stmt  -- One binder
                            =  [mk_print_result_plan gi_stmt v]
                | otherwise = []
@@ -1448,7 +1448,7 @@ isGHCiMonad hsc_env ty
         case occIO of
             Just [n] -> do
                 let name = gre_name n
-                ghciClass <- tcLookupClass ghciIoClassName 
+                ghciClass <- tcLookupClass ghciIoClassName
                 userTyCon <- tcLookupTyCon name
                 let userTy = mkTyConApp userTyCon []
                 _ <- tcLookupInstance ghciClass [userTy]
@@ -1476,7 +1476,7 @@ tcRnExpr hsc_env rdr_expr
         -- it might have a rank-2 type (e.g. :t runST)
     uniq <- newUnique ;
     let { fresh_it  = itName uniq (getLoc rdr_expr) } ;
-    ((_tc_expr, res_ty), lie) <- captureConstraints $ 
+    ((_tc_expr, res_ty), lie) <- captureConstraints $
                                  tcInferRho rn_expr ;
     ((qtvs, dicts, _, _), lie_top) <- captureConstraints $
                                       {-# SCC "simplifyInfer" #-}
@@ -1588,7 +1588,7 @@ tcRnDeclsi hsc_env local_decls =
                              tcg_fords     = fords' }
 
     setGlobalTypeEnv tcg_env' final_type_env
-    
+
 #endif /* GHCi */
 \end{code}
 

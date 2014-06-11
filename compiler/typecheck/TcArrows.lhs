@@ -33,7 +33,7 @@ import Inst
 import Name
 import Coercion ( Role(..) )
 import TysWiredIn
-import VarSet 
+import VarSet
 import TysPrim
 import BasicTypes( Arity )
 import SrcLoc
@@ -49,7 +49,7 @@ Note [Arrow overivew]
 Here's a summary of arrows and how they typecheck.  First, here's
 a cut-down syntax:
 
-  expr ::= ....  
+  expr ::= ....
         |  proc pat cmd
 
   cmd ::= cmd exp                    -- Arrow application
@@ -63,7 +63,7 @@ a cut-down syntax:
              |  (type, carg_type)
 
 Note that
- * The 'exp' in an arrow form can mention only 
+ * The 'exp' in an arrow form can mention only
    "arrow-local" variables
 
  * An "arrow-local" variable is bound by an enclosing
@@ -79,7 +79,7 @@ Note that
 
 %************************************************************************
 %*									*
-		Proc	
+		Proc
 %*									*
 %************************************************************************
 
@@ -90,7 +90,7 @@ tcProc :: InPat Name -> LHsCmdTop Name		-- proc pat -> expr
 
 tcProc pat cmd exp_ty
   = newArrowScope $
-    do	{ (co, (exp_ty1, res_ty)) <- matchExpectedAppTy exp_ty 
+    do	{ (co, (exp_ty1, res_ty)) <- matchExpectedAppTy exp_ty
 	; (co1, (arr_ty, arg_ty)) <- matchExpectedAppTy exp_ty1
 	; let cmd_env = CmdEnv { cmd_arr = arr_ty }
         ; (pat', cmd') <- tcPat ProcExpr pat arg_ty $
@@ -107,8 +107,8 @@ tcProc pat cmd exp_ty
 %************************************************************************
 
 \begin{code}
--- See Note [Arrow overview]      
-type CmdType    = (CmdArgType, TcTauType)    -- cmd_type 
+-- See Note [Arrow overview]
+type CmdType    = (CmdArgType, TcTauType)    -- cmd_type
 type CmdArgType = TcTauType                  -- carg_type, a nested tuple
 
 data CmdEnv
@@ -120,7 +120,7 @@ mkCmdArrTy :: CmdEnv -> TcTauType -> TcTauType -> TcTauType
 mkCmdArrTy env t1 t2 = mkAppTys (cmd_arr env) [t1, t2]
 
 ---------------------------------------
-tcCmdTop :: CmdEnv 
+tcCmdTop :: CmdEnv
          -> LHsCmdTop Name
          -> CmdType
          -> TcM (LHsCmdTop TcId)
@@ -151,7 +151,7 @@ tc_cmd env (HsCmdLet binds (L body_loc body)) res_ty
 
 tc_cmd env in_cmd@(HsCmdCase scrut matches) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
-      (scrut', scrut_ty) <- tcInferRho scrut 
+      (scrut', scrut_ty) <- tcInferRho scrut
       matches' <- tcMatchesCase match_ctxt scrut_ty matches res_ty
       return (HsCmdCase scrut' matches')
   where
@@ -212,8 +212,8 @@ tc_cmd env cmd@(HsCmdArrApp fun arg _ ho_app lr) (_, res_ty)
 	; return (HsCmdArrApp fun' arg' fun_ty ho_app lr) }
   where
        -- Before type-checking f, use the environment of the enclosing
-       -- proc for the (-<) case.  
-       -- Local bindings, inside the enclosing proc, are not in scope 
+       -- proc for the (-<) case.
+       -- Local bindings, inside the enclosing proc, are not in scope
        -- inside f.  In the higher-order case (-<<), they are.
     select_arrow_scope tc = case ho_app of
         HsHigherOrderApp -> tc
@@ -241,7 +241,7 @@ tc_cmd env cmd@(HsCmdApp fun arg) (cmd_stk, res_ty)
 -- ------------------------------
 -- D;G |-a (\x.cmd) : (t,stk) --> res
 
-tc_cmd env 
+tc_cmd env
        (HsCmdLam (MG { mg_alts = [L mtch_loc (match@(Match pats _maybe_rhs_sig grhss))], mg_origin = origin }))
        (cmd_stk, res_ty)
   = addErrCtxt (pprMatchInCtxt match_ctxt match)	$
@@ -277,7 +277,7 @@ tc_cmd env
 
 tc_cmd env (HsCmdDo stmts _) (cmd_stk, res_ty)
   = do 	{ co <- unifyType unitTy cmd_stk  -- Expecting empty argument stack
-	; stmts' <- tcStmts ArrowExpr (tcArrDoStmt env) stmts res_ty 
+	; stmts' <- tcStmts ArrowExpr (tcArrDoStmt env) stmts res_ty
 	; return (mkHsCmdCast co (HsCmdDo stmts' res_ty)) }
 
 
@@ -295,7 +295,7 @@ tc_cmd env (HsCmdDo stmts _) (cmd_stk, res_ty)
 --	----------------------------------------------
 --	D; G |-a  (| e c1 ... cn |)  :  stk --> t
 
-tc_cmd env cmd@(HsCmdArrForm expr fixity cmd_args) (cmd_stk, res_ty)	
+tc_cmd env cmd@(HsCmdArrForm expr fixity cmd_args) (cmd_stk, res_ty)
   = addErrCtxt (cmdCtxt cmd)	$
     do	{ (cmd_args', cmd_tys) <- mapAndUnzipM tc_cmd_arg cmd_args
         ; let e_ty = mkForAllTy alphaTyVar $   -- We use alphaTyVar for 'w'
@@ -319,15 +319,15 @@ tc_cmd env cmd@(HsCmdArrForm expr fixity cmd_args) (cmd_stk, res_ty)
 -- This is where expressions that aren't commands get rejected
 
 tc_cmd _ cmd _
-  = failWithTc (vcat [ptext (sLit "The expression"), nest 2 (ppr cmd), 
+  = failWithTc (vcat [ptext (sLit "The expression"), nest 2 (ppr cmd),
 		      ptext (sLit "was found where an arrow command was expected")])
 
 
 matchExpectedCmdArgs :: Arity -> TcType -> TcM (TcCoercion, [TcType], TcType)
-matchExpectedCmdArgs 0 ty 
+matchExpectedCmdArgs 0 ty
   = return (mkTcNomReflCo ty, [], ty)
 matchExpectedCmdArgs n ty
-  = do { (co1, [ty1, ty2]) <- matchExpectedTyConApp pairTyCon ty  
+  = do { (co1, [ty1, ty2]) <- matchExpectedTyConApp pairTyCon ty
        ; (co2, tys, res_ty) <- matchExpectedCmdArgs (n-1) ty2
        ; return (mkTcTyConAppCo Nominal pairTyCon [co1, co2], ty1:tys, res_ty) }
 \end{code}
@@ -375,7 +375,7 @@ tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                    zipWithM tcCheckId tup_names tup_elt_tys
 
         ; thing <- thing_inside res_ty
-		-- NB:	The rec_ids for the recursive things 
+		-- NB:	The rec_ids for the recursive things
 		-- 	already scope over this part. This binding may shadow
 		--	some of them with polymorphic things with the same Name
 		--	(see note [RecStmt] in HsExpr)
