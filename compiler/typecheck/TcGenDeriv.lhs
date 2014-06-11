@@ -795,7 +795,7 @@ gen_Ix_binds loc tycon
       where
         stmts = zipWith3Equal "single_con_range" mk_qual as_needed bs_needed cs_needed
 
-        mk_qual a b c = noLoc $ mkBindStmt (nlVarPat c)
+        mk_qual a b c = noLoc $ mkBindStmtMonad (nlVarPat c)
                                  (nlHsApp (nlHsVar range_RDR)
                                           (mkLHsVarTuple [a,b]))
 
@@ -934,7 +934,7 @@ gen_Read_binds get_fixity loc tycon
     read_nullary_cons
       = case nullary_cons of
             []    -> []
-            [con] -> [nlHsDo DoExpr (match_con con ++ [noLoc $ mkLastStmt (result_expr con [])])]
+            [con] -> [nlHsDo DoExpr (match_con con ++ [noLoc $ mkLastStmtMonad (result_expr con [])])]
             _     -> [nlHsApp (nlHsVar choose_RDR)
                               (nlList (map mk_pair nullary_cons))]
         -- NB For operators the parens around (:=:) are matched by the
@@ -1008,7 +1008,7 @@ gen_Read_binds get_fixity loc tycon
     ------------------------------------------------------------------------
     mk_alt e1 e2       = genOpApp e1 alt_RDR e2                         -- e1 +++ e2
     mk_parser p ss b   = nlHsApps prec_RDR [nlHsIntLit p                -- prec p (do { ss ; b })
-                                           , nlHsDo DoExpr (ss ++ [noLoc $ mkLastStmt b])]
+                                           , nlHsDo DoExpr (ss ++ [noLoc $ mkLastStmtMonad b])]
     con_app con as     = nlHsVarApps (getRdrName con) as                -- con as
     result_expr con as = nlHsApp (nlHsVar returnM_RDR) (con_app con as) -- return (con as)
 
@@ -1018,7 +1018,7 @@ gen_Read_binds get_fixity loc tycon
     ident_h_pat s | Just (ss, '#') <- snocView s = [ ident_pat ss, symbol_pat "#" ]
                   | otherwise                    = [ ident_pat s ]
 
-    bindLex pat  = noLoc (mkBodyStmt (nlHsApp (nlHsVar expectP_RDR) pat))  -- expectP p
+    bindLex pat  = noLoc (mkBodyStmtMonad (nlHsApp (nlHsVar expectP_RDR) pat))  -- expectP p
                    -- See Note [Use expectP]
     ident_pat  s = bindLex $ nlHsApps ident_RDR  [nlHsLit (mkHsString s)]  -- expectP (Ident "foo")
     symbol_pat s = bindLex $ nlHsApps symbol_RDR [nlHsLit (mkHsString s)]  -- expectP (Symbol ">>")
@@ -1027,11 +1027,11 @@ gen_Read_binds get_fixity loc tycon
     data_con_str con = occNameString (getOccName con)
 
     read_arg a ty = ASSERT( not (isUnLiftedType ty) )
-                    noLoc (mkBindStmt (nlVarPat a) (nlHsVarApps step_RDR [readPrec_RDR]))
+                    noLoc (mkBindStmtMonad (nlVarPat a) (nlHsVarApps step_RDR [readPrec_RDR]))
 
     read_field lbl a = read_lbl lbl ++
                        [read_punc "=",
-                        noLoc (mkBindStmt (nlVarPat a) (nlHsVarApps reset_RDR [readPrec_RDR]))]
+                        noLoc (mkBindStmtMonad (nlVarPat a) (nlHsVarApps reset_RDR [readPrec_RDR]))]
 
         -- When reading field labels we might encounter
         --      a  = 3

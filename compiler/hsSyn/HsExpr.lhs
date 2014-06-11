@@ -1061,6 +1061,16 @@ data BodyStmtIDs idR = BodyStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
                                      (SyntaxExpr idR) -- arr, arr, compose, compose, first
                        deriving (Data, Typeable)
 
+-- TODO: PUT THESE IN A BETTER PLACE
+mkEmptyArrowBodyStmt :: BodyStmtIDs idR
+mkEmptyArrowBodyStmt = BodyStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+
+mkEmptyArrowBindStmt :: BindStmtIDs idR
+mkEmptyArrowBindStmt = BindStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+
+mkEmptyArrowLastStmt :: LastStmtIDs idR
+mkEmptyArrowLastStmt = LastStmtArrow noSyntaxExpr noSyntaxExpr
+
 -- The SyntaxExprs in here are used *only* for do-notation and monad
 -- comprehensions, which have rebindable syntax. Otherwise they are unused.
 data StmtLR idL idR body -- body should always be (LHs**** idR)

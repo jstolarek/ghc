@@ -350,18 +350,18 @@ tcArrDoStmt :: CmdEnv -> TcCmdStmtChecker
 tcArrDoStmt env _ (LastStmt rhs _) res_ty thing_inside
   = do	{ rhs' <- tcCmd env rhs (unitTy, res_ty)
 	; thing <- thing_inside (panic "tcArrDoStmt")
-	; return (LastStmt rhs' noSyntaxExpr, thing) }
+	; return (LastStmt rhs' mkEmptyArrowLastStmt, thing) }
 
-tcArrDoStmt env _ (BodyStmt rhs _ _ _) res_ty thing_inside
+tcArrDoStmt env _ (BodyStmt rhs _ _) res_ty thing_inside
   = do	{ (rhs', elt_ty) <- tc_arr_rhs env rhs
 	; thing 	 <- thing_inside res_ty
-	; return (BodyStmt rhs' noSyntaxExpr noSyntaxExpr elt_ty, thing) }
+	; return (BodyStmt rhs' mkEmptyArrowBodyStmt elt_ty, thing) }
 
-tcArrDoStmt env ctxt (BindStmt pat rhs _ _) res_ty thing_inside
+tcArrDoStmt env ctxt (BindStmt pat rhs _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat pat_ty $
                             thing_inside res_ty
-	; return (BindStmt pat' rhs' noSyntaxExpr noSyntaxExpr, thing) }
+	; return (BindStmt pat' rhs' mkEmptyArrowBindStmt, thing) }
 
 tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                             , recS_rec_ids = rec_names }) res_ty thing_inside

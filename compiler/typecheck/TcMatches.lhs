@@ -743,12 +743,12 @@ tcMcStmt _ stmt _ _
 
 tcDoStmt :: TcExprStmtChecker
 
+-- TODO: arrow case? But how?
 tcDoStmt _ (LastStmt body _) res_ty thing_inside
   = do { body' <- tcMonoExprNC body res_ty
        ; thing <- thing_inside (panic "tcDoStmt: thing_inside")
        ; return (LastStmt body' (LastStmtMonad noSyntaxExpr), thing) }
 
--- TODO: arrow case? But how?
 
 tcDoStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_inside
   = do	{ 	-- Deal with rebindable syntax:
@@ -778,13 +778,13 @@ tcDoStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_in
 
 	; return (BindStmt pat' rhs' (BindStmtMonad bind_op' fail_op'), thing) }
 
+{-
 -- FIXME: VOODOO CODING HERE
 tcDoStmt ctxt (BindStmt pat rhs (BindStmtArrow c1_op c2_op a1_op a2_op f_op)) res_ty thing_inside
   = do	{ rhs_ty     <- newFlexiTyVarTy liftedTypeKind
         ; pat_ty     <- newFlexiTyVarTy liftedTypeKind
         ; new_res_ty <- newFlexiTyVarTy liftedTypeKind
 
-{-
         pat <- rhs
 	(>>=) :: rhs_ty -> (pat_ty -> new_res_ty) -> res_ty
 	; bind_op'   <- tcSyntaxOp DoOrigin bind_op
@@ -804,12 +804,12 @@ tcDoStmt ctxt (BindStmt pat rhs (BindStmtArrow c1_op c2_op a1_op a2_op f_op)) re
 			     (mkFunTys [rhs_ty, mkFunTy pat_ty new_res_ty] res_ty)
 
         ; rhs' <- tcMonoExprNC rhs rhs_ty
--}
 	; (pat', thing) <- tcPat (StmtCtxt ctxt) pat pat_ty $
                            thing_inside new_res_ty
 
 	; return (BindStmt pat rhs (BindStmtArrow c1_op c2_op a1_op a2_op f_op), thing_inside) }
 
+-}
 
 tcDoStmt _ (BodyStmt rhs (BodyStmtMonad then_op _) _) res_ty thing_inside
   = do	{   	-- Deal with rebindable syntax;
