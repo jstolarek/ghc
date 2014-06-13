@@ -650,30 +650,48 @@ addTickLStmts' isGuard lstmts res
        ; return (lstmts', a) }
 
 addTickStmt :: (Maybe (Bool -> BoxLabel)) -> Stmt Id (LHsExpr Id) -> TM (Stmt Id (LHsExpr Id))
-addTickStmt _isGuard (LastStmt e ids) = do
+addTickStmt _isGuard (LastStmt e return) = do
         liftM2 LastStmt
-                (addTickLHsExpr e)
-                (addTickLastStmtIDs ids)
+               (addTickLHsExpr e)
+               (addTickSyntaxExpr hpcSrcSpan return)
+-- VOODOO: not sure if this code ever gets used
+addTickStmt _isGuard (LastStmtArrow e arr compose) = do
+        liftM3 LastStmtArrow
+               (addTickLHsExpr e)
+               (addTickSyntaxExpr hpcSrcSpan arr)
+               (addTickSyntaxExpr hpcSrcSpan compose)
 addTickStmt _isGuard (BindStmt pat e bind fail) = do
         liftM4 BindStmt
                (addTickLPat pat)
                (addTickLHsExprRHS e)
                (addTickSyntaxExpr hpcSrcSpan bind)
                (addTickSyntaxExpr hpcSrcSpan fail)
-addTickStmt _isGuard (BindStmtArrow pat c arr1 arr2 compose1 compose2 first) = do
+-- VOODOO: not sure if this code ever gets used
+addTickStmt _isGuard (BindStmtArrow pat e arr1 arr2 compose1 compose2 first) = do
         return BindStmtArrow `ap`
                (addTickLPat pat) `ap`
-               (addTickLHsExprRHS c) `ap`
+               (addTickLHsExprRHS e) `ap`
                (addTickSyntaxExpr hpcSrcSpan arr1) `ap`
                (addTickSyntaxExpr hpcSrcSpan arr2) `ap`
                (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
                (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
                (addTickSyntaxExpr hpcSrcSpan first)
-addTickStmt isGuard (BodyStmt e ids ty) = do
-        liftM3 BodyStmt
-                (addTick isGuard e)
-                (addTickBodyStmtIDs ids)
-                (return ty)
+addTickStmt isGuard (BodyStmt e bind guard ty) = do
+        liftM4 BodyStmt
+               (addTick isGuard e)
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan guard)
+               (return ty)
+-- VOODOO: not sure if this code ever gets used
+addTickStmt isGuard (BodyStmtArrow e ty arr1 arr2 compose1 compose2 first) = do
+        return BodyStmtArrow `ap`
+               (addTick isGuard e) `ap`
+               (return ty) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan first)
 addTickStmt _isGuard (LetStmt binds) = do
         liftM LetStmt
                 (addTickHsLocalBinds binds)
@@ -867,29 +885,6 @@ addTickLCmdStmts' lstmts res
         binders = collectLStmtsBinders lstmts
 
 
-addTickLastStmtIDs :: LastStmtIDs Id -> TM (LastStmtIDs Id)
-addTickLastStmtIDs (LastStmtMonad ret) = do
-        liftM  LastStmtMonad
-               (addTickSyntaxExpr hpcSrcSpan ret)
-addTickLastStmtIDs (LastStmtArrow arr  compose) = do
-        liftM2 LastStmtArrow
-               (addTickSyntaxExpr hpcSrcSpan arr)
-               (addTickSyntaxExpr hpcSrcSpan compose)
-
-addTickBodyStmtIDs :: BodyStmtIDs Id -> TM (BodyStmtIDs Id)
-addTickBodyStmtIDs (BodyStmtMonad bind guard) = do
-        liftM2 BodyStmtMonad
-               (addTickSyntaxExpr hpcSrcSpan bind)
-               (addTickSyntaxExpr hpcSrcSpan guard)
-addTickBodyStmtIDs (BodyStmtArrow arr1 arr2 compose1 compose2 first) = do
-        liftM5 BodyStmtArrow
-               (addTickSyntaxExpr hpcSrcSpan arr1)
-               (addTickSyntaxExpr hpcSrcSpan arr2)
-               (addTickSyntaxExpr hpcSrcSpan compose1)
-               (addTickSyntaxExpr hpcSrcSpan compose2)
-               (addTickSyntaxExpr hpcSrcSpan first)
-
-
 addTickCmdStmt :: Stmt Id (LHsCmd Id) -> TM (Stmt Id (LHsCmd Id))
 addTickCmdStmt (BindStmt pat c bind fail) = do
         liftM4 BindStmt
@@ -906,18 +901,33 @@ addTickCmdStmt (BindStmtArrow pat c arr1 arr2 compose1 compose2 first) = do
                (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
                (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
                (addTickSyntaxExpr hpcSrcSpan first)
-addTickCmdStmt (LastStmt c ids) = do
+addTickCmdStmt (LastStmt c return) = do
         liftM2 LastStmt
-                (addTickLHsCmd c)
-                (addTickLastStmtIDs ids)
-addTickCmdStmt (BodyStmt c ids ty) = do
-        liftM3 BodyStmt
-                (addTickLHsCmd c)
-                (addTickBodyStmtIDs ids)
-                (return ty)
+               (addTickLHsCmd c)
+               (addTickSyntaxExpr hpcSrcSpan return)
+addTickCmdStmt (LastStmtArrow c arr compose) = do
+        liftM3 LastStmtArrow
+               (addTickLHsCmd c)
+               (addTickSyntaxExpr hpcSrcSpan arr)
+               (addTickSyntaxExpr hpcSrcSpan compose)
+addTickCmdStmt (BodyStmt c bind fail ty) = do
+        liftM4 BodyStmt
+               (addTickLHsCmd c)
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan fail)
+               (return ty)
+addTickCmdStmt (BodyStmtArrow c ty arr1 arr2 compose1 compose2 first) = do
+        return BodyStmtArrow `ap`
+               (addTickLHsCmd c) `ap`
+               (return ty) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan first)
 addTickCmdStmt (LetStmt binds) = do
         liftM LetStmt
-                (addTickHsLocalBinds binds)
+               (addTickHsLocalBinds binds)
 addTickCmdStmt stmt@(RecStmt {})
   = do { stmts' <- addTickLCmdStmts (recS_stmts stmt)
        ; ret'   <- addTickSyntaxExpr hpcSrcSpan (recS_ret_fn stmt)

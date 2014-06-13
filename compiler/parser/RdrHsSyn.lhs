@@ -926,16 +926,16 @@ checkCmdLStmt :: ExprLStmt RdrName -> P (CmdLStmt RdrName)
 checkCmdLStmt = locMap checkCmdStmt
 
 checkCmdStmt :: SrcSpan -> ExprStmt RdrName -> P (CmdStmt RdrName)
-checkCmdStmt _ (LastStmt e r) =
-    checkCommand e >>= (\c -> return $ LastStmt c r)
--- VOODOO: this does not work. Arrow binds are turned into normal BindStmt
+-- VOODOO: this turns binds, body and last stmts inside an arrow notation into
+-- their arrow equivalents. Please review if this is correct.
+checkCmdStmt _ (LastStmt e _) =
+    checkCommand e >>= (\c -> return $ LastStmtArrow c noSyntaxExpr noSyntaxExpr)
 checkCmdStmt _ (BindStmt pat e _ _) =
     checkCommand e >>= (\c -> return $ BindStmtArrow pat c noSyntaxExpr
                               noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
--- VOODOO: for some reasin here we don't get an arrow body stmt, but an ordinary one.
--- This probably indicates a bug in the parser
-checkCmdStmt _ (BodyStmt e ids ty) =
-    checkCommand e >>= (\c -> return $ BodyStmt c ids ty)
+checkCmdStmt _ (BodyStmt e _ _ ty) =
+    checkCommand e >>= (\c -> return $ BodyStmtArrow c ty noSyntaxExpr
+                              noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
 checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do
     ss <- mapM checkCmdLStmt stmts

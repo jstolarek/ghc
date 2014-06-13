@@ -1058,7 +1058,7 @@ repGuards other
        ; wrapGenSyms (concat xs) gd }
 
 repLGRHS :: LGRHS Name (LHsExpr Name) -> DsM ([GenSymBind], (Core (TH.Q (TH.Guard, TH.Exp))))
-repLGRHS (L _ (GRHS [L _ (BodyStmt e1 _ _)] e2))
+repLGRHS (L _ (GRHS [L _ (BodyStmt e1 _ _ _)] e2))
   = do { guarded <- repLNormalGE e1 e2
        ; return ([], guarded) }
 repLGRHS (L _ (GRHS ss rhs))
@@ -1118,7 +1118,7 @@ repSts (LetStmt bs : ss) =
       ; z <- repLetSt ds
       ; (ss2,zs) <- addBinds ss1 (repSts ss)
       ; return (ss1++ss2, z : zs) }
-repSts (BodyStmt e _ _ : ss) =
+repSts (BodyStmt e _ _ _ : ss) =
    do { e2 <- repLE e
       ; z <- repNoBindSt e2
       ; (ss2,zs) <- repSts ss

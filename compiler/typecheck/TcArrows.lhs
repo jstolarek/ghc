@@ -361,15 +361,16 @@ matchExpectedCmdArgs n ty
 --	(b) no rebindable syntax
 
 tcArrDoStmt :: CmdEnv -> TcCmdStmtChecker
-tcArrDoStmt env _ (LastStmt rhs _) res_ty thing_inside
+tcArrDoStmt env _ (LastStmtArrow rhs _ _) res_ty thing_inside
   = do	{ rhs' <- tcCmd env rhs (unitTy, res_ty)
 	; thing <- thing_inside (panic "tcArrDoStmt")
-	; return (LastStmt rhs' mkEmptyArrowLastStmt, thing) }
+	; return (LastStmtArrow rhs' noSyntaxExpr noSyntaxExpr, thing) }
 
-tcArrDoStmt env _ (BodyStmt rhs _ _) res_ty thing_inside
+tcArrDoStmt env _ (BodyStmtArrow rhs _ _ _ _ _ _) res_ty thing_inside
   = do	{ (rhs', elt_ty) <- tc_arr_rhs env rhs
 	; thing 	 <- thing_inside res_ty
-	; return (BodyStmt rhs' mkEmptyArrowBodyStmt elt_ty, thing) }
+	; return (BodyStmtArrow rhs' elt_ty noSyntaxExpr noSyntaxExpr
+                                noSyntaxExpr noSyntaxExpr noSyntaxExpr, thing) }
 
 tcArrDoStmt env ctxt (BindStmtArrow pat rhs _ _ _ _ _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs

@@ -751,7 +751,7 @@ dsDo stmts
       = ASSERT( null stmts ) dsLExpr body
         -- The 'return' op isn't used for 'do' expressions
 
-    go _ (BodyStmt rhs (BodyStmtMonad then_expr _) _) stmts
+    go _ (BodyStmt rhs then_expr _ _) stmts
       = do { rhs2 <- dsLExpr rhs
            ; warnDiscardedDoBindings rhs (exprType rhs2)
            ; then_expr2 <- dsExpr then_expr
@@ -804,8 +804,9 @@ dsDo stmts
 
     go _ (ParStmt   {}) _ = panic "dsDo ParStmt"
     go _ (TransStmt {}) _ = panic "dsDo TransStmt"
-    go _ (BodyStmt _ (BodyStmtArrow _ _ _ _ _) _) _ = panic "dsDo BodyStmtArrow"
-    go _ (BindStmtArrow {} ) _ = panic "dsDo BindStmtArrow"
+    go _ (LastStmtArrow {}) _ = panic "dsDo LastStmtArrow"
+    go _ (BindStmtArrow {}) _ = panic "dsDo BindStmtArrow"
+    go _ (BodyStmtArrow {}) _ = panic "dsDo BodyStmtArrow"
 
 handle_failure :: LPat Id -> MatchResult -> SyntaxExpr Id -> DsM CoreExpr
     -- In a do expression, pattern-match failure just calls

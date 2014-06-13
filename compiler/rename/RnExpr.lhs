@@ -563,8 +563,10 @@ methodNamesLStmt = methodNamesStmt . unLoc
 
 methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
 methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
-methodNamesStmt (BodyStmt cmd _ _)               = methodNamesLCmd cmd
+methodNamesStmt (BodyStmt cmd _ _ _)             = methodNamesLCmd cmd
 methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
+methodNamesStmt (LastStmtArrow cmd _ _)          = methodNamesLCmd cmd
+methodNamesStmt (BodyStmtArrow cmd _ _ _ _ _ _)  = methodNamesLCmd cmd
 methodNamesStmt (BindStmtArrow _ cmd _ _ _ _ _)  = methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
@@ -663,10 +665,10 @@ rnStmt ctxt rnBody (L loc (LastStmt body _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
         ; (ret_op, fvs1)   <- lookupStmtName ctxt returnMName
         ; (thing,  fvs3)   <- thing_inside []
-        ; return (([L loc (LastStmt body' (LastStmtMonad ret_op))], thing),
+        ; return (([L loc (LastStmt body' ret_op)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs3) }
 
-rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
+rnStmt ctxt rnBody (L loc (BodyStmt body _ _ _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
         ; (then_op, fvs1)  <- lookupStmtName ctxt thenMName
         ; (guard_op, fvs2) <- if isListCompExpr ctxt
@@ -676,7 +678,7 @@ rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
                               -- Also for sub-stmts of same eg [ e | x<-xs, gd | blah ]
                               -- Here "gd" is a guard
         ; (thing, fvs3)    <- thing_inside []
-        ; return (([L loc (BodyStmt body' (BodyStmtMonad then_op guard_op) placeHolderType)], thing),
+        ; return (([L loc (BodyStmt body' then_op guard_op placeHolderType)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }
 
 rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
@@ -691,14 +693,36 @@ rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
        -- fv_expr shouldn't really be filtered by the rnPatsAndThen
         -- but it does not matter because the names are unique
 
-rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _)) thing_inside
-  = do  { (body', fv_expr) <- rnBody body
-                -- The binders do not scope over the expression
-        ; (arr1_op, fvs_arr1)         <- lookupStmtName ctxt arrAName
-        ; (arr2_op, fvs_arr2)         <- lookupStmtName ctxt arrAName
+rnStmt ctxt rnBody (L loc (LastStmtArrow body _ _)) thing_inside
+  = do  { (body'     , fv_expr    ) <- rnBody body
+        ; (arr_op    , fvs_arr    ) <- lookupStmtName ctxt arrAName
+        ; (compose_op, fvs_compose) <- lookupStmtName ctxt composeAName
+        ; (thing     , fvs_inside ) <- thing_inside []
+        ; return (([L loc (LastStmtArrow body' arr_op compose_op)], thing),
+                  fv_expr `plusFV` fvs_arr `plusFV` fvs_compose `plusFV` fvs_inside) }
+
+rnStmt ctxt rnBody (L loc (BodyStmtArrow { bdySArr_body = body })) thing_inside
+  = do  { (body'      , fv_expr     ) <- rnBody body
+        ; (arr1_op    , fvs_arr1    ) <- lookupStmtName ctxt arrAName
+        ; (arr2_op    , fvs_arr2    ) <- lookupStmtName ctxt arrAName
         ; (compose1_op, fvs_compose1) <- lookupStmtName ctxt composeAName
         ; (compose2_op, fvs_compose2) <- lookupStmtName ctxt composeAName
-        ; (first_op, fvs_first)       <- lookupStmtName ctxt firstAName
+        ; (first_op   , fvs_first   ) <- lookupStmtName ctxt firstAName
+        ; (thing      , fvs_inside  ) <- thing_inside []
+        ; return (([L loc (BodyStmtArrow body' placeHolderType arr1_op arr2_op
+                                         compose1_op compose2_op first_op)], thing),
+                  fv_expr `plusFV` fvs_inside `plusFV`
+                  fvs_arr1 `plusFV` fvs_arr2 `plusFV` fvs_compose1 `plusFV`
+                  fvs_compose2 `plusFV` fvs_first) }
+
+rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _)) thing_inside
+  = do  { (body'      , fv_expr     ) <- rnBody body
+                -- The binders do not scope over the expression
+        ; (arr1_op    , fvs_arr1    ) <- lookupStmtName ctxt arrAName
+        ; (arr2_op    , fvs_arr2    ) <- lookupStmtName ctxt arrAName
+        ; (compose1_op, fvs_compose1) <- lookupStmtName ctxt composeAName
+        ; (compose2_op, fvs_compose2) <- lookupStmtName ctxt composeAName
+        ; (first_op   , fvs_first   ) <- lookupStmtName ctxt firstAName
         ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
         { (thing, fvs_inside) <- thing_inside (collectPatBinders pat')
         ; return (([L loc (BindStmtArrow pat' body' arr1_op arr2_op compose1_op
@@ -916,11 +940,11 @@ rn_rec_stmt_lhs :: Outputable body => MiniFixityEnv
                    -- so we don't bother to compute it accurately in the other cases
                 -> RnM [(LStmtLR Name RdrName body, FreeVars)]
 
-rn_rec_stmt_lhs _ (L loc (BodyStmt body ids ty))
-  = return [(L loc (BodyStmt body ids ty), emptyFVs)]
+rn_rec_stmt_lhs _ (L loc (BodyStmt body bind_op guard_op ty))
+  = return [(L loc (BodyStmt body bind_op guard_op ty), emptyFVs)]
 
-rn_rec_stmt_lhs _ (L loc (LastStmt body ids))
-  = return [(L loc (LastStmt body ids), emptyFVs)]
+rn_rec_stmt_lhs _ (L loc (LastStmt body return_op))
+  = return [(L loc (LastStmt body return_op), emptyFVs)]
 
 rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body bind_id fail_id))
   = do
@@ -950,8 +974,12 @@ rn_rec_stmt_lhs _ stmt@(L _ (TransStmt {}))     -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt" (ppr stmt)
 
 -- VOODOO: is this correct?
+rn_rec_stmt_lhs _ stmt@(L _ (LastStmtArrow {}))  -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt LastStmtArrow" (ppr stmt)
 rn_rec_stmt_lhs _ stmt@(L _ (BindStmtArrow {}))  -- Syntactically illegal in mdo
-  = pprPanic "rn_rec_stmt" (ppr stmt)
+  = pprPanic "rn_rec_stmt BindStmtArrow" (ppr stmt)
+rn_rec_stmt_lhs _ stmt@(L _ (BodyStmtArrow {}))  -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt BodyStmtArrow" (ppr stmt)
 
 rn_rec_stmt_lhs _ (L _ (LetStmt EmptyLocalBinds))
   = panic "rn_rec_stmt LetStmt EmptyLocalBinds"
@@ -982,13 +1010,13 @@ rn_rec_stmt rnBody _ (L loc (LastStmt body _)) _
   = do  { (body', fv_expr) <- rnBody body
         ; (ret_op, fvs1)   <- lookupSyntaxName returnMName
         ; return [(emptyNameSet, fv_expr `plusFV` fvs1, emptyNameSet,
-                   L loc (LastStmt body' (LastStmtMonad ret_op)))] }
+                   L loc (LastStmt body' ret_op))] }
 
-rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _)) _
+rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _ _)) _
   = rnBody body `thenM` \ (body', fvs) ->
     lookupSyntaxName thenMName  `thenM` \ (then_op, fvs1) ->
     return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
-              L loc (BodyStmt body' (BodyStmtMonad then_op noSyntaxExpr) placeHolderType))]
+              L loc (BodyStmt body' then_op noSyntaxExpr placeHolderType))]
 
 rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
   = rnBody body         `thenM` \ (body', fv_expr) ->
@@ -1022,8 +1050,16 @@ rn_rec_stmt _ _ stmt@(L _ (TransStmt {})) _     -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt: TransStmt" (ppr stmt)
 
 -- VOODOO
+rn_rec_stmt _ _ stmt@(L _ (LastStmtArrow {})) _  -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt: LastStmtArrow" (ppr stmt)
+
+-- VOODOO
 rn_rec_stmt _ _ stmt@(L _ (BindStmtArrow {})) _  -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt: BindStmtArrow" (ppr stmt)
+
+-- VOODOO
+rn_rec_stmt _ _ stmt@(L _ (BodyStmtArrow {})) _  -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt: BodyStmtArrow" (ppr stmt)
 
 rn_rec_stmt _ _ (L _ (LetStmt EmptyLocalBinds)) _
   = panic "rn_rec_stmt: LetStmt EmptyLocalBinds"
@@ -1252,12 +1288,12 @@ checkLastStmt ctxt lstmt@(L loc stmt)
       _         -> check_other
   where
     check_do    -- Expect BodyStmt, and change it to LastStmt
-      = case (ctxt, stmt) of
+      = case stmt of
           -- VOODOO: is the arrow version correct?
-          (ArrowExpr, BodyStmt e _ _) ->
-              return (L loc (LastStmt e (LastStmtArrow noSyntaxExpr noSyntaxExpr)))
-          (_        , BodyStmt e _ _) -> return (L loc (mkLastStmt e))
-          (_,         LastStmt {}   ) -> return lstmt -- "Deriving" clauses may generate a
+          BodyStmtArrow { bdySArr_body = e } ->
+              return (L loc (LastStmtArrow e noSyntaxExpr noSyntaxExpr))
+          BodyStmt e _ _ _ -> return (L loc (mkLastStmt e))
+          LastStmt {}      -> return lstmt -- "Deriving" clauses may generate a
                                                       -- LastStmt directly (unlike the parser)
           _                -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
     last_error = (ptext (sLit "The last statement in") <+> pprAStmtContext ctxt
@@ -1287,7 +1323,9 @@ checkStmt ctxt (L _ stmt)
 pprStmtCat :: Stmt a body -> SDoc
 pprStmtCat (TransStmt {})     = ptext (sLit "transform")
 pprStmtCat (LastStmt {})      = ptext (sLit "return expression")
+pprStmtCat (LastStmtArrow {}) = ptext (sLit "return expression")
 pprStmtCat (BodyStmt {})      = ptext (sLit "body")
+pprStmtCat (BodyStmtArrow {}) = ptext (sLit "body")
 pprStmtCat (BindStmt {})      = ptext (sLit "binding")
 pprStmtCat (BindStmtArrow {}) = ptext (sLit "binding")
 pprStmtCat (LetStmt {})       = ptext (sLit "let")
@@ -1357,7 +1395,9 @@ okCompStmt dflags _ stmt
        TransStmt {}
          | Opt_TransformListComp `xopt` dflags -> isOK
          | otherwise -> Just (ptext (sLit "Use TransformListComp"))
+       LastStmtArrow {} -> notOK -- VOODOO: no arrow notation in list comprehensions.. I think?
        BindStmtArrow {} -> notOK -- VOODOO: no arrow notation in list comprehensions.. I think?
+       BodyStmtArrow {} -> notOK -- VOODOO: no arrow notation in list comprehensions.. I think?
        RecStmt {}  -> notOK
        LastStmt {} -> notOK  -- Should not happen (dealt with by checkLastStmt)
 
@@ -1370,7 +1410,9 @@ okPArrStmt dflags _ stmt
        ParStmt {}
          | Opt_ParallelListComp `xopt` dflags -> isOK
          | otherwise -> Just (ptext (sLit "Use ParallelListComp"))
+       LastStmtArrow {} -> notOK -- VOODOO: no arrow notation in parallel arrays.. I think?
        BindStmtArrow {} -> notOK -- VOODOO: no arrow notation in parallel arrays.. I think?
+       BodyStmtArrow {} -> notOK -- VOODOO: no arrow notation in parallel arrays.. I think?
        TransStmt {} -> notOK
        RecStmt {}   -> notOK
        LastStmt {}  -> notOK  -- Should not happen (dealt with by checkLastStmt)

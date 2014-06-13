@@ -738,7 +738,7 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
-dsCmdDo ids local_vars res_ty [L _ (LastStmt body (LastStmtArrow arr_id compose_id))] env_ids = do
+dsCmdDo ids local_vars res_ty [L _ (LastStmtArrow body arr_id compose_id)] env_ids = do
     trace "dsCmdDo LastStmt 726" $ return ()
     (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
@@ -798,8 +798,8 @@ dsCmdStmt
 --        ---> premap (\ ((xs)) -> (((xs1),()),(xs')))
 --            (first c >>> arr snd) >>> ss
 
-dsCmdStmt ids local_vars out_ids (BodyStmt cmd (BodyStmtArrow
-              arr1_id arr2_id compose1_id compose2_id first_id) c_ty) env_ids = do
+dsCmdStmt ids local_vars out_ids (BodyStmtArrow cmd c_ty
+              arr1_id arr2_id compose1_id compose2_id first_id) env_ids = do
     trace "BodyStmt 785" $ return ()
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
     core_mux <- matchEnv env_ids
@@ -1236,6 +1236,8 @@ collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []
+collectStmtBinders (BodyStmtArrow {})   = []
+collectStmtBinders (LastStmtArrow {})   = []
 collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [ s | ParStmtBlock ss _ _ <- xs, s <- ss]
 collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts

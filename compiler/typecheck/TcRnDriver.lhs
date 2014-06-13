@@ -1279,7 +1279,7 @@ runPlans (p:ps) = tryTcLIE_ (runPlans ps) p
 tcUserStmt :: GhciLStmt RdrName -> TcM (PlanResult, FixityEnv)
 
 -- An expression typed at the prompt is treated very specially
-tcUserStmt (L loc (BodyStmt expr _ _))
+tcUserStmt (L loc (BodyStmt expr _ _ _))
   = do  { (rn_expr, fvs) <- checkNoErrs (rnLExpr expr)
                -- Don't try to typecheck if the renamer fails!
         ; ghciStep <- getGhciStepIO
@@ -1304,7 +1304,7 @@ tcUserStmt (L loc (BodyStmt expr _ _))
 
               -- [; print it]
               print_it  = L loc $ BodyStmt (nlHsApp (nlHsVar interPrintName) (nlHsVar fresh_it))
-                                           (BodyStmtMonad (HsVar thenIOName) noSyntaxExpr) placeHolderType
+                                           (HsVar thenIOName) noSyntaxExpr placeHolderType
 
         -- The plans are:
         --   A. [it <- e; print it]     but not if it::()
@@ -1372,7 +1372,7 @@ tcUserStmt rdr_stmt@(L loc _)
            ; return stuff }
       where
         print_v  = L loc $ BodyStmt (nlHsApp (nlHsVar printName) (nlHsVar v))
-                                    (BodyStmtMonad (HsVar thenIOName) noSyntaxExpr) placeHolderType
+                                    (HsVar thenIOName) noSyntaxExpr placeHolderType
 
 -- | Typecheck the statements given and then return the results of the
 -- statement in the form 'IO [()]'.

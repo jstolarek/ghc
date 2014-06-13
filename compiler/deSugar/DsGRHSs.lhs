@@ -102,11 +102,11 @@ matchGuards [] _ rhs _
         -- NB:  The success of this clause depends on the typechecker not
         --      wrapping the 'otherwise' in empty HsTyApp or HsWrap constructors
         --      If it does, you'll get bogus overlap warnings
-matchGuards (BodyStmt e _ _ : stmts) ctx rhs rhs_ty
+matchGuards (BodyStmt e _ _ _ : stmts) ctx rhs rhs_ty
   | Just addTicks <- isTrueLHsExpr e = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     return (adjustMatchResultDs addTicks match_result)
-matchGuards (BodyStmt expr _ _ : stmts) ctx rhs rhs_ty = do
+matchGuards (BodyStmt expr _ _ _ : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     pred_expr <- dsLExpr expr
     return (mkGuardedMatchResult pred_expr match_result)
@@ -130,6 +130,8 @@ matchGuards (TransStmt {} : _) _ _ _ = panic "matchGuards TransStmt"
 matchGuards (RecStmt   {} : _) _ _ _ = panic "matchGuards RecStmt"
 -- VOODOO: is this correct? If not then we should do the same as for BindStmt
 matchGuards (BindStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
+matchGuards (BodyStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
+matchGuards (LastStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
 
 isTrueLHsExpr :: LHsExpr Id -> Maybe (CoreExpr -> DsM CoreExpr)
 

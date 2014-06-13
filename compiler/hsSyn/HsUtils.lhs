@@ -237,8 +237,8 @@ mkTransformByStmt  ss u b = emptyTransStmt { trS_form = ThenForm,  trS_stmts = s
 mkGroupUsingStmt   ss u   = emptyTransStmt { trS_form = GroupForm, trS_stmts = ss, trS_using = u }
 mkGroupByUsingStmt ss b u = emptyTransStmt { trS_form = GroupForm, trS_stmts = ss, trS_using = u, trS_by = Just b }
 
-mkLastStmt body     = LastStmt body (LastStmtMonad noSyntaxExpr)
-mkBodyStmt body     = BodyStmt body (BodyStmtMonad noSyntaxExpr noSyntaxExpr) placeHolderType
+mkLastStmt body     = LastStmt body noSyntaxExpr
+mkBodyStmt body     = BodyStmt body noSyntaxExpr noSyntaxExpr placeHolderType
 mkBindStmt pat body = BindStmt pat body noSyntaxExpr noSyntaxExpr
 
 emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
