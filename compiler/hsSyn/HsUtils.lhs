@@ -53,7 +53,6 @@ module HsUtils(
   -- Stmts
   mkTransformStmt, mkTransformByStmt,
   mkBodyStmt, mkBindStmt, mkLastStmt,
-  mkLastStmtArrow,
   emptyTransStmt, mkGroupUsingStmt, mkGroupByUsingStmt,
   emptyRecStmt, mkRecStmt,
 
@@ -195,7 +194,6 @@ mkNPlusKPat :: Located id -> HsOverLit id -> Pat id
 mkLastStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBodyStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBindStmt :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
-mkLastStmtArrow :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 
 emptyRecStmt :: StmtLR idL idR bodyR
 mkRecStmt    :: [LStmtLR idL idR bodyR] -> StmtLR idL idR bodyR
@@ -242,7 +240,6 @@ mkGroupByUsingStmt ss b u = emptyTransStmt { trS_form = GroupForm, trS_stmts = s
 mkLastStmt body     = LastStmt body (LastStmtMonad noSyntaxExpr)
 mkBodyStmt body     = BodyStmt body (BodyStmtMonad noSyntaxExpr noSyntaxExpr) placeHolderType
 mkBindStmt pat body = BindStmt pat body (BindStmtMonad noSyntaxExpr noSyntaxExpr)
-mkLastStmtArrow body     = LastStmt body (LastStmtArrow noSyntaxExpr noSyntaxExpr)
 
 emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_ret_fn = noSyntaxExpr, recS_mfix_fn = noSyntaxExpr
