@@ -81,7 +81,7 @@ dsListComp lquals res_ty = do
 -- and the type of the elements that it outputs (tuples of binders)
 dsInnerListComp :: (ParStmtBlock Id Id) -> DsM (CoreExpr, Type)
 dsInnerListComp (ParStmtBlock stmts bndrs _)
-  = do { expr <- dsListComp (stmts ++ [noLoc $ mkLastStmtMonad (mkBigLHsVarTup bndrs)])
+  = do { expr <- dsListComp (stmts ++ [noLoc $ mkLastStmt (mkBigLHsVarTup bndrs)])
                             (mkListTy bndrs_tuple_type)
        ; return (expr, bndrs_tuple_type) }
   where
@@ -612,7 +612,7 @@ dePArrParComp qss quals = do
       panic "DsListComp.dePArrComp: Empty parallel list comprehension"
     deParStmt (ParStmtBlock qs xs _:qss) = do        -- first statement
       let res_expr = mkLHsVarTuple xs
-      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmtMonad res_expr])
+      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmt res_expr])
       parStmts qss (mkLHsVarPatTup xs) cqs
     ---
     parStmts []             pa cea = return (pa, cea)
@@ -621,7 +621,7 @@ dePArrParComp qss quals = do
       let pa'      = mkLHsPatTup [pa, mkLHsVarPatTup xs]
           ty'cea   = parrElemType cea
           res_expr = mkLHsVarTuple xs
-      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmtMonad res_expr])
+      cqs <- dsPArrComp (map unLoc qs ++ [mkLastStmt res_expr])
       let ty'cqs = parrElemType cqs
           cea'   = mkApps (Var zipP) [Type ty'cea, Type ty'cqs, cea, cqs]
       parStmts qss pa' cea'

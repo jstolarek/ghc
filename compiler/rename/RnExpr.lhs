@@ -1229,7 +1229,7 @@ checkLastStmt ctxt lstmt@(L loc stmt)
     check_do    -- Expect BodyStmt, and change it to LastStmt
       = case (ctxt, stmt) of
           (ArrowExpr, BodyStmt e _ _) -> return (L loc (mkLastStmtArrow e))
-          (_        , BodyStmt e _ _) -> return (L loc (mkLastStmtMonad e))
+          (_        , BodyStmt e _ _) -> return (L loc (mkLastStmt e))
           (_,         LastStmt {}   ) -> return lstmt -- "Deriving" clauses may generate a
                                                       -- LastStmt directly (unlike the parser)
           _                -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }

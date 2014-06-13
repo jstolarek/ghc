@@ -797,13 +797,15 @@ dsDo stmts
         mfix_pat     = noLoc $ LazyPat $ mkBigLHsPatTup rec_tup_pats
         body         = noLoc $ HsDo DoExpr (rec_stmts ++ [ret_stmt]) body_ty
         ret_app      = nlHsApp (noLoc return_op) (mkBigLHsTup rets)
-        ret_stmt     = noLoc $ mkLastStmtMonad ret_app
+        ret_stmt     = noLoc $ mkLastStmt ret_app
                      -- This LastStmt will be desugared with dsDo,
                      -- which ignores the return_op in the LastStmt,
                      -- so we must apply the return_op explicitly
 
     go _ (ParStmt   {}) _ = panic "dsDo ParStmt"
     go _ (TransStmt {}) _ = panic "dsDo TransStmt"
+    go _ (BodyStmt _ (BodyStmtArrow _ _ _ _ _) _) _ = panic "dsDo BodyStmtArrow"
+    go_ (BindStmt _ _ (BindStmtArrow _ _ _ _ _)) _ = panic "dsDo BinStmtArrow"
 
 handle_failure :: LPat Id -> MatchResult -> SyntaxExpr Id -> DsM CoreExpr
     -- In a do expression, pattern-match failure just calls

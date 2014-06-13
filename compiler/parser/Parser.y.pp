@@ -1853,8 +1853,8 @@ stmt  :: { LStmt RdrName (LHsExpr RdrName) }
         | 'rec' stmtlist                { LL $ mkRecStmt (unLoc $2) }
 
 qual  :: { LStmt RdrName (LHsExpr RdrName) }
-    : bindpat '<-' exp                  { LL $ mkBindStmtMonad $1 $3 }
-    | exp                               { L1 $ mkBodyStmtMonad $1 }
+    : bindpat '<-' exp                  { LL $ mkBindStmt $1 $3 }
+    | exp                               { L1 $ mkBodyStmt $1 }
     | 'let' binds                       { LL $ LetStmt (unLoc $2) }
 
 -----------------------------------------------------------------------------

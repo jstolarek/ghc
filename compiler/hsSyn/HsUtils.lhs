@@ -52,8 +52,8 @@ module HsUtils(
 
   -- Stmts
   mkTransformStmt, mkTransformByStmt,
-  mkBodyStmtMonad, mkBindStmtMonad, mkLastStmtMonad,
-  mkBodyStmtArrow, mkBindStmtArrow, mkLastStmtArrow,
+  mkBodyStmt, mkBindStmt, mkLastStmt,
+  mkLastStmtArrow,
   emptyTransStmt, mkGroupUsingStmt, mkGroupByUsingStmt,
   emptyRecStmt, mkRecStmt,
 
@@ -192,12 +192,10 @@ mkHsComp       :: HsStmtContext Name -> [ExprLStmt id] -> LHsExpr id -> HsExpr i
 mkNPat      :: HsOverLit id -> Maybe (SyntaxExpr id) -> Pat id
 mkNPlusKPat :: Located id -> HsOverLit id -> Pat id
 
-mkLastStmtMonad :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
-mkBodyStmtMonad :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
-mkBindStmtMonad :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
+mkLastStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
+mkBodyStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
+mkBindStmt :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkLastStmtArrow :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
-mkBodyStmtArrow :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
-mkBindStmtArrow :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 
 emptyRecStmt :: StmtLR idL idR bodyR
 mkRecStmt    :: [LStmtLR idL idR bodyR] -> StmtLR idL idR bodyR
@@ -213,7 +211,7 @@ noRebindableInfo = error "noRebindableInfo" 	-- Just another placeholder;
 mkHsDo ctxt stmts = HsDo ctxt stmts placeHolderType
 mkHsComp ctxt stmts expr = mkHsDo ctxt (stmts ++ [last_stmt])
   where
-    last_stmt = L (getLoc expr) $ mkLastStmtMonad expr
+    last_stmt = L (getLoc expr) $ mkLastStmt expr
 
 mkHsIf :: LHsExpr id -> LHsExpr id -> LHsExpr id -> HsExpr id
 mkHsIf c a b = HsIf (Just noSyntaxExpr) c a b
@@ -241,12 +239,10 @@ mkTransformByStmt  ss u b = emptyTransStmt { trS_form = ThenForm,  trS_stmts = s
 mkGroupUsingStmt   ss u   = emptyTransStmt { trS_form = GroupForm, trS_stmts = ss, trS_using = u }
 mkGroupByUsingStmt ss b u = emptyTransStmt { trS_form = GroupForm, trS_stmts = ss, trS_using = u, trS_by = Just b }
 
-mkLastStmtMonad body     = LastStmt body (LastStmtMonad noSyntaxExpr)
-mkBodyStmtMonad body     = BodyStmt body (BodyStmtMonad noSyntaxExpr noSyntaxExpr) placeHolderType
-mkBindStmtMonad pat body = BindStmt pat body (BindStmtMonad noSyntaxExpr noSyntaxExpr)
+mkLastStmt body     = LastStmt body (LastStmtMonad noSyntaxExpr)
+mkBodyStmt body     = BodyStmt body (BodyStmtMonad noSyntaxExpr noSyntaxExpr) placeHolderType
+mkBindStmt pat body = BindStmt pat body (BindStmtMonad noSyntaxExpr noSyntaxExpr)
 mkLastStmtArrow body     = LastStmt body (LastStmtArrow noSyntaxExpr noSyntaxExpr)
-mkBodyStmtArrow body     = BodyStmt body (BodyStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr) placeHolderType
-mkBindStmtArrow pat body = BindStmt pat body (BindStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
 
 emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_ret_fn = noSyntaxExpr, recS_mfix_fn = noSyntaxExpr

@@ -1416,7 +1416,7 @@ tcGhciStmts stmts
                        (noLoc $ ExplicitList unitTy Nothing (map mk_item ids)) ;
             mk_item id = nlHsApp (nlHsTyApp unsafeCoerceId [idType id, unitTy])
                                  (nlHsVar id) ;
-            stmts = tc_stmts ++ [noLoc (mkLastStmtMonad ret_expr)]
+            stmts = tc_stmts ++ [noLoc (mkLastStmt ret_expr)]
         } ;
         return (ids, mkHsDictLet (EvBinds const_binds) $
                      noLoc (HsDo GhciStmtCtxt stmts io_ret_ty))
