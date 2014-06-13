@@ -92,7 +92,7 @@ do_compose ids b_ty c_ty d_ty f g
   = trace "do_compose" $ mkApps (compose_id ids) [Type b_ty, Type c_ty, Type d_ty, f, g]
 
 do_compose2 :: CoreExpr -> Type -> Type -> Type ->
-              CoreExpr -> CoreExpr -> CoreExpr
+               CoreExpr -> CoreExpr -> CoreExpr
 do_compose2 compose_id b_ty c_ty d_ty f g
   = trace "do_compose2" $ mkApps compose_id [Type b_ty, Type c_ty, Type d_ty, f, g]
 
@@ -343,7 +343,7 @@ dsCmd   :: DsCmdEnv        -- arrow combinators
 --        ---> premap (\ ((xs), _stk) -> arg) fun
 
 dsCmd ids local_vars stack_ty res_ty
-        (HsCmdArrApp arrow arg arrow_ty HsFirstOrderApp _)
+        (HsCmdArrApp arrow arg arrow_ty HsFirstOrderApp _ arr_op compose_op _)
         env_ids = do
     trace "HsCmdArrApp first order" $ return ()
     let
@@ -352,8 +352,10 @@ dsCmd ids local_vars stack_ty res_ty
     core_arrow <- dsLExpr arrow
     core_arg   <- dsLExpr arg
     stack_id   <- newSysLocalDs stack_ty
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
     core_make_arg <- matchEnvStack env_ids stack_id core_arg
-    return (do_premap ids
+    return (do_premap2 arr compose
               (envStackType env_ids stack_ty)
               arg_ty
               res_ty
@@ -369,7 +371,7 @@ dsCmd ids local_vars stack_ty res_ty
 --        ---> premap (\ ((xs), _stk) -> (fun, arg)) app
 
 dsCmd ids local_vars stack_ty res_ty
-        (HsCmdArrApp arrow arg arrow_ty HsHigherOrderApp _)
+        (HsCmdArrApp arrow arg arrow_ty HsHigherOrderApp _ arr_op compose_op app_op)
         env_ids = do
     trace "HsCmdArrApp" $ return ()
     let
@@ -379,15 +381,18 @@ dsCmd ids local_vars stack_ty res_ty
     core_arrow <- dsLExpr arrow
     core_arg   <- dsLExpr arg
     stack_id   <- newSysLocalDs stack_ty
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
+    app        <- dsExpr app_op
     core_make_pair <- matchEnvStack env_ids stack_id
           (mkCorePairExpr core_arrow core_arg)
 
-    return (do_premap ids
+    return (do_premap2 arr compose
               (envStackType env_ids stack_ty)
               (mkCorePairTy arrow_ty arg_ty)
               res_ty
               core_make_pair
-              (do_app ids arg_ty res_ty),
+              (do_app2 app arg_ty res_ty),
             (exprFreeIds core_arrow `unionVarSet` exprFreeIds core_arg)
               `intersectVarSet` local_vars)
 
@@ -398,7 +403,7 @@ dsCmd ids local_vars stack_ty res_ty
 --
 --        ---> premap (\ ((xs),stk) -> ((ys),(e,stk))) cmd
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg) env_ids = do
+dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg arr_op compose_op) env_ids = do
     trace "HsCmdApp" $ return ()
     core_arg <- dsLExpr arg
     let
@@ -416,7 +421,10 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg) env_ids = do
 
     -- match the environment and stack against the input
     core_map <- matchEnvStack env_ids stack_id core_body
-    return (do_premap ids
+
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
+    return (do_premap2 arr compose
                       (envStackType env_ids stack_ty)
                       (envStackType env_ids' stack_ty')
                       res_ty
@@ -432,7 +440,7 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg) env_ids = do
 --        ---> premap (\ ((xs), (p1, ... (pk,stk)...)) -> ((ys),stk)) cmd
 
 dsCmd ids local_vars stack_ty res_ty
-        (HsCmdLam (MG { mg_alts = [L _ (Match pats _ (GRHSs [L _ (GRHS [] body)] _ ))] }))
+        (HsCmdLam (MG { mg_alts = [L _ (Match pats _ (GRHSs [L _ (GRHS [] body)] _ ))] }) arr_op compose_op)
         env_ids = do
     trace "HsCmdLam" $ return ()
     let
@@ -459,7 +467,10 @@ dsCmd ids local_vars stack_ty res_ty
     (stack_id, param_code) <- matchVarStack param_ids stack_id' match_code
     -- match the old environment and stack against the input
     select_code <- matchEnvStack env_ids stack_id param_code
-    return (do_premap ids in_ty in_ty' res_ty select_code core_body,
+    -- desugar arr and >>> operators
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
+    return (do_premap2 arr compose in_ty in_ty' res_ty select_code core_body,
             free_vars `minusVarSet` pat_vars)
 
 dsCmd ids local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
@@ -475,7 +486,7 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
 --             if e then Left ((xs1),stk) else Right ((xs2),stk))
 --               (c1 ||| c2)
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd)
+dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd arr_op compose_op)
         env_ids = do
     trace "HsCmdIf" $ return ()
     core_cond <- dsLExpr cond
@@ -485,6 +496,9 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd)
     either_con <- dsLookupTyCon eitherTyConName
     left_con   <- dsLookupDataCon leftDataConName
     right_con  <- dsLookupDataCon rightDataConName
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
+    choice     <- dsExpr choice_op
 
     let mk_left_expr ty1 ty2 e = mkConApp left_con [Type ty1, Type ty2, e]
         mk_right_expr ty1 ty2 e = mkConApp right_con [Type ty1, Type ty2, e]
@@ -505,9 +519,9 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd)
        Nothing  -> matchEnvStack env_ids stack_id $
                    mkIfThenElse core_cond core_left core_right
 
-    return (do_premap ids in_ty sum_ty res_ty
+    return (do_premap2 arr compose ids in_ty sum_ty res_ty
                 core_if
-                (do_choice ids then_ty else_ty res_ty core_then core_else),
+                (do_choice2 choice then_ty else_ty res_ty core_then core_else),
         fvs_cond `unionVarSet` fvs_then `unionVarSet` fvs_else)
 \end{code}
 
@@ -597,7 +611,7 @@ dsCmd ids local_vars stack_ty res_ty
 --
 --        ---> premap (\ ((xs),stk) -> let binds in ((ys),stk)) c
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body) env_ids = do
+dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body arr_op compose_op) env_ids = do
     trace "HsCmdLet" $ return ()
     let
         defined_vars = mkVarSet (collectLocalBinders binds)
@@ -609,7 +623,10 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body) env_ids = do
     core_binds <- dsLocalBinds binds (buildEnvStack env_ids' stack_id)
     -- match the old environment and stack against the input
     core_map <- matchEnvStack env_ids stack_id core_binds
-    return (do_premap ids
+    -- desugar arr and >>> operators
+    arr        <- dsExpr arr_op
+    compose    <- dsExpr compose_op
+    return (do_premap2 arr compose
                         (envStackType env_ids stack_ty)
                         (envStackType env_ids' stack_ty)
                         res_ty

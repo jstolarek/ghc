@@ -722,6 +722,9 @@ data HsCmd id
         HsArrAppType    -- higher-order (-<<) or first-order (-<)
         Bool            -- True => right-to-left (f -< arg)
                         -- False => left-to-right (arg >- f)
+        (SyntaxExpr id) -- arr operator
+        (SyntaxExpr id) -- compose operator
+        (SyntaxExpr id) -- app operator (for higher-order arrow application)
 
   | HsCmdArrForm        -- Command formation,  (| e cmd1 .. cmdn |)
         (LHsExpr id)    -- the operator
@@ -733,8 +736,12 @@ data HsCmd id
 
   | HsCmdApp    (LHsCmd id)
                 (LHsExpr id)
+                (SyntaxExpr id) -- arr operator
+                (SyntaxExpr id) -- compose operator
 
   | HsCmdLam    (MatchGroup id (LHsCmd id))     -- kappa
+                (SyntaxExpr id) -- arr operator
+                (SyntaxExpr id) -- compose operator
 
   | HsCmdPar    (LHsCmd id)                     -- parenthesised command
 
@@ -745,9 +752,14 @@ data HsCmd id
                 (LHsExpr id)                    -- predicate
                 (LHsCmd id)                     -- then part
                 (LHsCmd id)                     -- else part
+                (SyntaxExpr id)                 -- arr operator
+                (SyntaxExpr id)                 -- compose operator
+                (SyntaxExpr id)                 -- choice operator
 
   | HsCmdLet    (HsLocalBinds id)               -- let(rec)
                 (LHsCmd  id)
+                (SyntaxExpr id)                 -- arr operator
+                (SyntaxExpr id)                 -- compose operator
 
   | HsCmdDo     [CmdLStmt id]
                 PostTcType                      -- Type of the whole expression
