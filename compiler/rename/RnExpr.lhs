@@ -691,6 +691,22 @@ rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
        -- fv_expr shouldn't really be filtered by the rnPatsAndThen
         -- but it does not matter because the names are unique
 
+rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _)) thing_inside
+  = do  { (body', fv_expr) <- rnBody body
+                -- The binders do not scope over the expression
+        ; (arr1_op, fvs_arr1)         <- lookupStmtName ctxt arrAName
+        ; (arr2_op, fvs_arr2)         <- lookupStmtName ctxt arrAName
+        ; (compose1_op, fvs_compose1) <- lookupStmtName ctxt composeAName
+        ; (compose2_op, fvs_compose2) <- lookupStmtName ctxt composeAName
+        ; (first_op, fvs_first)       <- lookupStmtName ctxt firstAName
+        ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
+        { (thing, fvs_inside) <- thing_inside (collectPatBinders pat')
+        ; return (([L loc (BindStmtArrow pat' body' arr1_op arr2_op compose1_op
+                                         compose2_op first_op)], thing),
+                  fv_expr `plusFV` fvs_inside `plusFV`
+                  fvs_arr1 `plusFV` fvs_arr2 `plusFV` fvs_compose1 `plusFV`
+                  fvs_compose2 `plusFV` fvs_first) }}
+
 rnStmt _ _ (L loc (LetStmt binds)) thing_inside
   = do  { rnLocalBindsAndThen binds $ \binds' -> do
         { (thing, fvs) <- thing_inside (collectLocalBinders binds')
@@ -1005,6 +1021,10 @@ rn_rec_stmt _ _ stmt@(L _ (ParStmt {})) _       -- Syntactically illegal in mdo
 rn_rec_stmt _ _ stmt@(L _ (TransStmt {})) _     -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt: TransStmt" (ppr stmt)
 
+-- VOODOO
+rn_rec_stmt _ _ stmt@(L _ (BindStmtArrow {})) _  -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt: BindStmtArrow" (ppr stmt)
+
 rn_rec_stmt _ _ (L _ (LetStmt EmptyLocalBinds)) _
   = panic "rn_rec_stmt: LetStmt EmptyLocalBinds"
 
@@ -1269,6 +1289,7 @@ pprStmtCat (TransStmt {})     = ptext (sLit "transform")
 pprStmtCat (LastStmt {})      = ptext (sLit "return expression")
 pprStmtCat (BodyStmt {})      = ptext (sLit "body")
 pprStmtCat (BindStmt {})      = ptext (sLit "binding")
+pprStmtCat (BindStmtArrow {}) = ptext (sLit "binding")
 pprStmtCat (LetStmt {})       = ptext (sLit "let")
 pprStmtCat (RecStmt {})       = ptext (sLit "rec")
 pprStmtCat (ParStmt {})       = ptext (sLit "parallel")
@@ -1319,10 +1340,10 @@ okDoStmt dflags ctxt stmt
          | Opt_RecursiveDo `xopt` dflags -> isOK
          | ArrowExpr <- ctxt -> isOK    -- Arrows allows 'rec'
          | otherwise         -> Just (ptext (sLit "Use RecursiveDo"))
-       BindStmt {} -> isOK
-       LetStmt {}  -> isOK
-       BodyStmt {} -> isOK
-       _           -> notOK
+       BindStmtArrow {} -> isOK
+       LetStmt {}       -> isOK
+       BodyStmt {}      -> isOK
+       _                -> notOK
 
 ----------------
 okCompStmt dflags _ stmt
@@ -1336,6 +1357,7 @@ okCompStmt dflags _ stmt
        TransStmt {}
          | Opt_TransformListComp `xopt` dflags -> isOK
          | otherwise -> Just (ptext (sLit "Use TransformListComp"))
+       BindStmtArrow {} -> notOK -- VOODOO: no arrow notation in list comprehensions.. I think?
        RecStmt {}  -> notOK
        LastStmt {} -> notOK  -- Should not happen (dealt with by checkLastStmt)
 
@@ -1348,6 +1370,7 @@ okPArrStmt dflags _ stmt
        ParStmt {}
          | Opt_ParallelListComp `xopt` dflags -> isOK
          | otherwise -> Just (ptext (sLit "Use ParallelListComp"))
+       BindStmtArrow {} -> notOK -- VOODOO: no arrow notation in parallel arrays.. I think?
        TransStmt {} -> notOK
        RecStmt {}   -> notOK
        LastStmt {}  -> notOK  -- Should not happen (dealt with by checkLastStmt)
