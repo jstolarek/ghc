@@ -819,9 +819,11 @@ addTickHsCmd (HsCmdLet binds c) =
         liftM2 HsCmdLet
                 (addTickHsLocalBinds binds) -- to think about: !patterns.
                 (addTickLHsCmd c)
-addTickHsCmd (HsCmdDo stmts srcloc)
+addTickHsCmd (HsCmdDo stmts srcloc arr_op compose_op)
   = do { (stmts', _) <- addTickLCmdStmts' stmts (return ())
-       ; return (HsCmdDo stmts' srcloc) }
+       ; new_arr     <- addTickSyntaxExpr hpcSrcSpan arr_op
+       ; new_compose <- addTickSyntaxExpr hpcSrcSpan compose_op
+       ; return (HsCmdDo stmts' srcloc new_arr new_compose) }
 
 addTickHsCmd (HsCmdArrApp   e1 e2 ty1 arr_ty lr) =
         liftM5 HsCmdArrApp

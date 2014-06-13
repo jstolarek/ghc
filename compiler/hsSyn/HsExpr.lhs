@@ -751,6 +751,8 @@ data HsCmd id
 
   | HsCmdDo     [CmdLStmt id]
                 PostTcType                      -- Type of the whole expression
+                (SyntaxExpr id)                 -- arr operator
+                (SyntaxExpr id)                 -- compose operator
 
   | HsCmdCast   TcCoercion     -- A simpler version of HsWrap in HsExpr
                 (HsCmd id)     -- If   cmd :: arg1 --> res
@@ -842,9 +844,9 @@ ppr_cmd (HsCmdLet binds cmd)
   = sep [hang (ptext (sLit "let")) 2 (pprBinds binds),
          hang (ptext (sLit "in"))  2 (ppr cmd)]
 
-ppr_cmd (HsCmdDo stmts _)  = pprDo ArrowExpr stmts
-ppr_cmd (HsCmdCast co cmd) = sep [ ppr_cmd cmd
-                                 , ptext (sLit "|>") <+> ppr co ]
+ppr_cmd (HsCmdDo stmts _ _ _)  = pprDo ArrowExpr stmts
+ppr_cmd (HsCmdCast co cmd)     = sep [ ppr_cmd cmd
+                                     , ptext (sLit "|>") <+> ppr co ]
 
 ppr_cmd (HsCmdArrApp arrow arg _ HsFirstOrderApp True)
   = hsep [ppr_lexpr arrow, ptext (sLit "-<"), ppr_lexpr arg]

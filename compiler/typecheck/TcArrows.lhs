@@ -289,10 +289,13 @@ tc_cmd env
 -------------------------------------------
 -- 		Do notation
 
-tc_cmd env (HsCmdDo stmts _) (cmd_stk, res_ty)
+-- VOODOO: I'm ignoring existing arr and compose operators here and just creating
+-- noSyntaxExprs. I think this is wrong and I should in fact typecheck both
+-- operators (as in tcCmdTop)
+tc_cmd env (HsCmdDo stmts _ _ _) (cmd_stk, res_ty)
   = do 	{ co <- unifyType unitTy cmd_stk  -- Expecting empty argument stack
 	; stmts' <- tcStmts ArrowExpr (tcArrDoStmt env) stmts res_ty
-	; return (mkHsCmdCast co (HsCmdDo stmts' res_ty)) }
+	; return (mkHsCmdCast co (HsCmdDo stmts' res_ty noSyntaxExpr noSyntaxExpr)) }
 
 
 -----------------------------------------------------------------

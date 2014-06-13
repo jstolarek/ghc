@@ -910,7 +910,7 @@ checkCmd _ (HsIf cf ep et ee) = do
 checkCmd _ (HsLet lb e) =
     checkCommand e >>= (\c -> return $ HsCmdLet lb c)
 checkCmd _ (HsDo DoExpr stmts ty) =
-    mapM checkCmdLStmt stmts >>= (\ss -> return $ HsCmdDo ss ty)
+    mapM checkCmdLStmt stmts >>= (\ss -> return $ HsCmdDo ss ty noSyntaxExpr noSyntaxExpr)
 
 checkCmd _ (OpApp eLeft op fixity eRight) = do
     -- OpApp becomes a HsCmdArrForm with a (Just fixity) in it

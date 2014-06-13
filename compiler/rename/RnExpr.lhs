@@ -419,7 +419,7 @@ rnCmdTop = wrapLocFstM rnCmdTop'
         ; (cmd_names', cmd_fvs) <- lookupSyntaxNames cmd_names
 
         ; (compose_op, fvs1) <- lookupStmtName ArrowExpr composeAName
-        ; (arr_op, fvs2) <- lookupStmtName ArrowExpr arrAName
+        ; (arr_op    , fvs2) <- lookupStmtName ArrowExpr arrAName
 
         ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_names') compose_op arr_op,
                   fvCmd `plusFV` cmd_fvs `plusFV` fvs1 `plusFV` fvs2) }
@@ -495,9 +495,12 @@ rnCmd (HsCmdLet binds cmd)
     rnLCmd cmd                         `thenM` \ (cmd',fvExpr) ->
     return (HsCmdLet binds' cmd', fvExpr)
 
-rnCmd (HsCmdDo stmts _)
-  = do  { ((stmts', _), fvs) <- rnStmts ArrowExpr rnLCmd stmts (\ _ -> return ((), emptyFVs))
-        ; return ( HsCmdDo stmts' placeHolderType, fvs ) }
+rnCmd (HsCmdDo stmts _ _ _)
+  = do  { ((stmts', _), fvs1) <- rnStmts ArrowExpr rnLCmd stmts (\ _ -> return ((), emptyFVs))
+        ; (arr_op     , fvs2) <- lookupStmtName ArrowExpr arrAName
+        ; (compose_op , fvs3) <- lookupStmtName ArrowExpr composeAName
+        ; return ( HsCmdDo stmts' placeHolderType arr_op compose_op
+                 , fvs1 `plusFV` fvs2 `plusFV` fvs3 ) }
 
 rnCmd cmd@(HsCmdCast {}) = pprPanic "rnCmd" (ppr cmd)
 
@@ -523,10 +526,10 @@ methodNamesCmd (HsCmdPar c) = methodNamesLCmd c
 methodNamesCmd (HsCmdIf _ _ c1 c2)
   = methodNamesLCmd c1 `plusFV` methodNamesLCmd c2 `addOneFV` choiceAName
 
-methodNamesCmd (HsCmdLet _ c)      = methodNamesLCmd c
-methodNamesCmd (HsCmdDo stmts _) = methodNamesStmts stmts
-methodNamesCmd (HsCmdApp c _)      = methodNamesLCmd c
-methodNamesCmd (HsCmdLam match)    = methodNamesMatch match
+methodNamesCmd (HsCmdLet _ c)        = methodNamesLCmd c
+methodNamesCmd (HsCmdDo stmts _ _ _) = methodNamesStmts stmts
+methodNamesCmd (HsCmdApp c _)        = methodNamesLCmd c
+methodNamesCmd (HsCmdLam match)      = methodNamesMatch match
 
 methodNamesCmd (HsCmdCase _ matches)
   = methodNamesMatch matches `addOneFV` choiceAName
@@ -1294,7 +1297,7 @@ checkLastStmt ctxt lstmt@(L loc stmt)
               return (L loc (LastStmtArrow e noSyntaxExpr noSyntaxExpr))
           BodyStmt e _ _ _ -> return (L loc (mkLastStmt e))
           LastStmt {}      -> return lstmt -- "Deriving" clauses may generate a
-                                                      -- LastStmt directly (unlike the parser)
+                                           -- LastStmt directly (unlike the parser)
           _                -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
     last_error = (ptext (sLit "The last statement in") <+> pprAStmtContext ctxt
                   <+> ptext (sLit "must be an expression"))

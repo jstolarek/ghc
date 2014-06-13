@@ -623,12 +623,14 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body) env_ids = do
 --
 --        ---> premap (\ (env,stk) -> env) c
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _) env_ids = do
+dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _ arr_op compose_op) env_ids = do
     trace "HsCmdDo" $ return ()
     (core_stmts, env_ids') <- dsCmdDo ids local_vars res_ty stmts env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     core_fst <- mkFstExpr env_ty stack_ty
-    return (do_premap ids
+    arr     <- dsExpr arr_op
+    compose <- dsExpr compose_op
+    return (do_premap2 arr compose
               (mkCorePairTy env_ty stack_ty)
               env_ty
               res_ty

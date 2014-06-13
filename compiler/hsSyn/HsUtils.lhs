@@ -610,6 +610,8 @@ collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []
+collectStmtBinders (BodyStmtArrow {})   = []
+collectStmtBinders (LastStmtArrow {})   = []
 collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [s | ParStmtBlock ss _ _ <- xs, s <- ss]
 collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts
@@ -799,6 +801,8 @@ lStmtsImplicits = hs_lstmts
     hs_stmt (LetStmt binds)      = hs_local_binds binds
     hs_stmt (BodyStmt {})        = emptyNameSet
     hs_stmt (LastStmt {})        = emptyNameSet
+    hs_stmt (BodyStmtArrow {})   = emptyNameSet
+    hs_stmt (LastStmtArrow {})   = emptyNameSet
     hs_stmt (ParStmt xs _ _)     = hs_lstmts [s | ParStmtBlock ss _ _ <- xs, s <- ss]
     hs_stmt (TransStmt { trS_stmts = stmts }) = hs_lstmts stmts
     hs_stmt (RecStmt { recS_stmts = ss })     = hs_lstmts ss

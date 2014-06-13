@@ -784,12 +784,12 @@ zonkCmd env (HsCmdLet binds cmd)
        new_cmd <- zonkLCmd new_env cmd
        return (HsCmdLet new_binds new_cmd)
 
-zonkCmd env (HsCmdDo stmts ty)
+zonkCmd env (HsCmdDo stmts ty arr_op compose_op)
   = do (_, new_stmts) <- zonkStmts env zonkLCmd stmts
        new_ty <- zonkTcTypeToType env ty
-       return (HsCmdDo new_stmts new_ty)
-
-
+       new_arr      <- zonkExpr env arr_op
+       new_compose  <- zonkExpr env compose_op
+       return (HsCmdDo new_stmts new_ty new_arr new_compose)
 
 
 
