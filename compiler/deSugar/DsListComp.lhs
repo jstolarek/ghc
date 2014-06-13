@@ -230,7 +230,7 @@ deListComp (stmt@(TransStmt {}) : quals) list = do
     (inner_list_expr, pat) <- dsTransStmt stmt
     deBindComp pat inner_list_expr quals list
 
-deListComp (BindStmt pat list1 _ : quals) core_list2 = do -- rule A' above
+deListComp (BindStmt pat list1 _ _ : quals) core_list2 = do -- rule A' above
     core_list1 <- dsLExpr list1
     deBindComp pat core_list1 quals core_list2
 
@@ -251,6 +251,7 @@ deListComp (ParStmt stmtss_w_bndrs _ _ : quals) list
         pats = map mkBigLHsVarPatTup bndrs_s
 
 deListComp (RecStmt {} : _) _ = panic "deListComp RecStmt"
+deListComp (BindStmtArrow {} : _) _ = panic "deListComp BindStmtArrow"
 \end{code}
 
 
@@ -337,7 +338,7 @@ dfListComp c_id n_id (stmt@(TransStmt {}) : quals) = do
     -- Anyway, we bind the newly grouped list via the generic binding function
     dfBindComp c_id n_id (pat, inner_list_expr) quals
 
-dfListComp c_id n_id (BindStmt pat list1 _ : quals) = do
+dfListComp c_id n_id (BindStmt pat list1 _ _ : quals) = do
     -- evaluate the two lists
     core_list1 <- dsLExpr list1
 
@@ -346,6 +347,7 @@ dfListComp c_id n_id (BindStmt pat list1 _ : quals) = do
 
 dfListComp _ _ (ParStmt {} : _) = panic "dfListComp ParStmt"
 dfListComp _ _ (RecStmt {} : _) = panic "dfListComp RecStmt"
+dfListComp _ _ (BindStmtArrow {} : _) = panic "dfListComp BindStmtArrow"
 
 dfBindComp :: Id -> Id          -- 'c' and 'n'
            -> (LPat Id, CoreExpr)
@@ -485,7 +487,7 @@ dsPArrComp (ParStmt qss _ _ : quals) = dePArrParComp qss quals
 --  <<[:e' | p <- e, qs:]>> =
 --    <<[:e' | qs:]>> p (filterP (\x -> case x of {p -> True; _ -> False}) e)
 --
-dsPArrComp (BindStmt p e _ : qs) = do
+dsPArrComp (BindStmt p e _ _ : qs) = do
     filterP <- dsDPHBuiltin filterPVar
     ce <- dsLExpr e
     let ety'ce  = parrElemType ce
@@ -544,7 +546,7 @@ dePArrComp (BodyStmt b _ _ : qs) pa cea = do
 --    in
 --    <<[:e' | qs:]>> (pa, p) (crossMapP ea ef)
 --
-dePArrComp (BindStmt p e _ : qs) pa cea = do
+dePArrComp (BindStmt p e _ _ : qs) pa cea = do
     filterP <- dsDPHBuiltin filterPVar
     crossMapP <- dsDPHBuiltin crossMapPVar
     ce <- dsLExpr e
@@ -595,6 +597,7 @@ dePArrComp (ParStmt {} : _) _ _ =
   panic "DsListComp.dePArrComp: malformed comprehension AST: ParStmt"
 dePArrComp (TransStmt {} : _) _ _ = panic "DsListComp.dePArrComp: TransStmt"
 dePArrComp (RecStmt   {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmt"
+dePArrComp (BindStmtArrow {} : _) _ _ = panic "DsListComp.dePArrComp: BindStmtArrow"
 
 --  <<[:e' | qs | qss:]>> pa ea =
 --    <<[:e' | qss:]>> (pa, (x_1, ..., x_n))
@@ -686,7 +689,7 @@ dsMcStmt (LetStmt binds) stmts
        ; dsLocalBinds binds rest }
 
 --   [ .. | a <- m, stmts ]
-dsMcStmt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) stmts
+dsMcStmt (BindStmt pat rhs bind_op fail_op) stmts
   = do { rhs' <- dsLExpr rhs
        ; dsMcBindStmt pat rhs' bind_op fail_op stmts }
 

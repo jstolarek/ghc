@@ -940,12 +940,22 @@ zonkStmt env _ (LetStmt binds)
   = do (env1, new_binds) <- zonkLocalBinds env binds
        return (env1, LetStmt new_binds)
 
-zonkStmt env zBody (BindStmt pat body ids)
+zonkStmt env zBody (BindStmt pat body bind_op fail_op)
   = do  { new_body <- zBody env body
         ; (env1, new_pat) <- zonkPat env pat
-        ; new_ids <- zonkBindStmtIDs env ids
-        ; return (env1, BindStmt new_pat new_body new_ids) }
-
+        ; new_bind <- zonkExpr env bind_op
+        ; new_fail <- zonkExpr env fail_op
+        ; return (env1, BindStmt new_pat new_body new_bind new_fail) }
+zonkStmt env zBody (BindStmtArrow pat body arr1_op arr2_op compose1_op compose2_op first_op)
+  = do  { new_body <- zBody env body
+        ; (env1, new_pat) <- zonkPat env pat
+        ; new_arr1     <- zonkExpr env arr1_op
+        ; new_arr2     <- zonkExpr env arr2_op
+        ; new_compose1 <- zonkExpr env compose1_op
+        ; new_compose2 <- zonkExpr env compose2_op
+        ; new_first    <- zonkExpr env first_op
+        ; return (env1, BindStmtArrow new_pat new_body new_arr1 new_arr2
+                                      new_compose1 new_compose2 new_first) }
 zonkLastStmtIDs :: ZonkEnv -> LastStmtIDs TcId -> TcM (LastStmtIDs TcId)
 zonkLastStmtIDs env (LastStmtMonad return_op)
   = do  { new_return <- zonkExpr env return_op
@@ -954,20 +964,6 @@ zonkLastStmtIDs env (LastStmtArrow arr_op compose_op)
   = do  { new_arr     <- zonkExpr env arr_op
         ; new_compose <- zonkExpr env compose_op
         ; return (LastStmtArrow new_arr new_compose) }
-
-zonkBindStmtIDs :: ZonkEnv -> BindStmtIDs TcId -> TcM (BindStmtIDs TcId)
-zonkBindStmtIDs env (BindStmtMonad bind_op fail_op)
-  = do  { new_bind <- zonkExpr env bind_op
-        ; new_fail <- zonkExpr env fail_op
-        ; return (BindStmtMonad new_bind new_fail) }
-zonkBindStmtIDs env (BindStmtArrow arr1_op arr2_op compose1_op compose2_op first_op)
-  = do  { new_arr1     <- zonkExpr env arr1_op
-        ; new_arr2     <- zonkExpr env arr2_op
-        ; new_compose1 <- zonkExpr env compose1_op
-        ; new_compose2 <- zonkExpr env compose2_op
-        ; new_first    <- zonkExpr env first_op
-        ; return (BindStmtArrow new_arr1 new_arr2
-                                new_compose1 new_compose2 new_first) }
 
 zonkBodyStmtIDs :: ZonkEnv -> BodyStmtIDs TcId -> TcM (BodyStmtIDs TcId)
 zonkBodyStmtIDs env (BodyStmtMonad then_op guard_op)

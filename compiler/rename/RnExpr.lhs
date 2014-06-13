@@ -564,7 +564,8 @@ methodNamesLStmt = methodNamesStmt . unLoc
 methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
 methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
 methodNamesStmt (BodyStmt cmd _ _)               = methodNamesLCmd cmd
-methodNamesStmt (BindStmt _ cmd _)               = methodNamesLCmd cmd
+methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
+methodNamesStmt (BindStmtArrow _ cmd _ _ _ _ _)  = methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
 methodNamesStmt (ParStmt {})                     = emptyFVs
@@ -678,14 +679,14 @@ rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
         ; return (([L loc (BodyStmt body' (BodyStmtMonad then_op guard_op) placeHolderType)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }
 
-rnStmt ctxt rnBody (L loc (BindStmt pat body _)) thing_inside
+rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
                 -- The binders do not scope over the expression
         ; (bind_op, fvs1) <- lookupStmtName ctxt bindMName
         ; (fail_op, fvs2) <- lookupStmtName ctxt failMName
         ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
         { (thing, fvs3) <- thing_inside (collectPatBinders pat')
-        ; return (([L loc (BindStmt pat' body' (BindStmtMonad bind_op fail_op))], thing),
+        ; return (([L loc (BindStmt pat' body' bind_op fail_op)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }}
        -- fv_expr shouldn't really be filtered by the rnPatsAndThen
         -- but it does not matter because the names are unique
@@ -905,11 +906,11 @@ rn_rec_stmt_lhs _ (L loc (BodyStmt body ids ty))
 rn_rec_stmt_lhs _ (L loc (LastStmt body ids))
   = return [(L loc (LastStmt body ids), emptyFVs)]
 
-rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body ids))
+rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body bind_id fail_id))
   = do
       -- should the ctxt be MDo instead?
       (pat', fv_pat) <- rnBindPat (localRecNameMaker fix_env) pat
-      return [(L loc (BindStmt pat' body ids),
+      return [(L loc (BindStmt pat' body bind_id fail_id),
                fv_pat)]
 
 rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _)))
@@ -930,6 +931,10 @@ rn_rec_stmt_lhs _ stmt@(L _ (ParStmt {}))       -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt" (ppr stmt)
 
 rn_rec_stmt_lhs _ stmt@(L _ (TransStmt {}))     -- Syntactically illegal in mdo
+  = pprPanic "rn_rec_stmt" (ppr stmt)
+
+-- VOODOO: is this correct?
+rn_rec_stmt_lhs _ stmt@(L _ (BindStmtArrow {}))  -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt" (ppr stmt)
 
 rn_rec_stmt_lhs _ (L _ (LetStmt EmptyLocalBinds))
@@ -969,7 +974,7 @@ rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _)) _
     return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
               L loc (BodyStmt body' (BodyStmtMonad then_op noSyntaxExpr) placeHolderType))]
 
-rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _)) fv_pat
+rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
   = rnBody body         `thenM` \ (body', fv_expr) ->
     lookupSyntaxName bindMName  `thenM` \ (bind_op, fvs1) ->
     lookupSyntaxName failMName  `thenM` \ (fail_op, fvs2) ->
@@ -978,7 +983,7 @@ rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _)) fv_pat
         fvs   = fv_expr `plusFV` fv_pat `plusFV` fvs1 `plusFV` fvs2
     in
     return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
-              L loc (BindStmt pat' body' (BindStmtMonad bind_op fail_op)))]
+              L loc (BindStmt pat' body' bind_op fail_op))]
 
 rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _))) _
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)

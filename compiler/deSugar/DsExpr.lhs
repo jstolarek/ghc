@@ -762,7 +762,7 @@ dsDo stmts
       = do { rest <- goL stmts
            ; dsLocalBinds binds rest }
 
-    go _ (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) stmts
+    go _ (BindStmt pat rhs bind_op fail_op) stmts
       = do  { body     <- goL stmts
             ; rhs'     <- dsLExpr rhs
             ; bind_op' <- dsExpr bind_op
@@ -782,7 +782,7 @@ dsDo stmts
       where
         new_bind_stmt = L loc $ BindStmt (mkBigLHsPatTup later_pats)
                                          mfix_app
-                                         (BindStmtMonad bind_op noSyntaxExpr)
+                                         bind_op noSyntaxExpr
                                          -- Tuple cannot fail
 
         tup_ids      = rec_ids ++ filterOut (`elem` rec_ids) later_ids
@@ -805,7 +805,7 @@ dsDo stmts
     go _ (ParStmt   {}) _ = panic "dsDo ParStmt"
     go _ (TransStmt {}) _ = panic "dsDo TransStmt"
     go _ (BodyStmt _ (BodyStmtArrow _ _ _ _ _) _) _ = panic "dsDo BodyStmtArrow"
-    go_ (BindStmt _ _ (BindStmtArrow _ _ _ _ _)) _ = panic "dsDo BinStmtArrow"
+    go _ (BindStmtArrow {} ) _ = panic "dsDo BindStmtArrow"
 
 handle_failure :: LPat Id -> MatchResult -> SyntaxExpr Id -> DsM CoreExpr
     -- In a do expression, pattern-match failure just calls

@@ -371,11 +371,12 @@ tcArrDoStmt env _ (BodyStmt rhs _ _) res_ty thing_inside
 	; thing 	 <- thing_inside res_ty
 	; return (BodyStmt rhs' mkEmptyArrowBodyStmt elt_ty, thing) }
 
-tcArrDoStmt env ctxt (BindStmt pat rhs _) res_ty thing_inside
+tcArrDoStmt env ctxt (BindStmtArrow pat rhs _ _ _ _ _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat pat_ty $
                             thing_inside res_ty
-	; return (BindStmt pat' rhs' mkEmptyArrowBindStmt, thing) }
+	; return (BindStmtArrow pat' rhs' noSyntaxExpr noSyntaxExpr noSyntaxExpr
+                                          noSyntaxExpr noSyntaxExpr, thing) }
 
 tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                             , recS_rec_ids = rec_names }) res_ty thing_inside

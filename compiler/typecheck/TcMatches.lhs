@@ -360,11 +360,11 @@ tcGuardStmt _ (BodyStmt guard _ _) res_ty thing_inside
 	; thing  <- thing_inside res_ty
 	; return (BodyStmt guard' (BodyStmtMonad noSyntaxExpr noSyntaxExpr) boolTy, thing) }
 
-tcGuardStmt ctxt (BindStmt pat rhs _) res_ty thing_inside
+tcGuardStmt ctxt (BindStmt pat rhs _ _) res_ty thing_inside
   = do	{ (rhs', rhs_ty) <- tcInferRhoNC rhs	-- Stmt has a context already
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat rhs_ty $
                             thing_inside res_ty
-	; return (BindStmt pat' rhs' (BindStmtMonad noSyntaxExpr noSyntaxExpr), thing) }
+	; return (BindStmt pat' rhs' noSyntaxExpr noSyntaxExpr, thing) }
 
 tcGuardStmt _ stmt _ _
   = pprPanic "tcGuardStmt: unexpected Stmt" (ppr stmt)
@@ -393,12 +393,12 @@ tcLcStmt _ _ (LastStmt body _) elt_ty thing_inside
        ; return (LastStmt body' (LastStmtMonad noSyntaxExpr), thing) }
 
 -- A generator, pat <- rhs
-tcLcStmt m_tc ctxt (BindStmt pat rhs _) elt_ty thing_inside
+tcLcStmt m_tc ctxt (BindStmt pat rhs _ _) elt_ty thing_inside
  = do	{ pat_ty <- newFlexiTyVarTy liftedTypeKind
         ; rhs'   <- tcMonoExpr rhs (mkTyConApp m_tc [pat_ty])
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat pat_ty $
                             thing_inside elt_ty
-	; return (BindStmt pat' rhs' (BindStmtMonad noSyntaxExpr noSyntaxExpr), thing) }
+	; return (BindStmt pat' rhs' noSyntaxExpr noSyntaxExpr, thing) }
 
 -- A boolean guard
 tcLcStmt _ _ (BodyStmt rhs _ _) elt_ty thing_inside
@@ -508,7 +508,7 @@ tcMcStmt _ (LastStmt body (LastStmtMonad return_op)) res_ty thing_inside
 --                            q   ::   a
 --
 
-tcMcStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_inside
+tcMcStmt ctxt (BindStmt pat rhs bind_op fail_op) res_ty thing_inside
  = do   { rhs_ty     <- newFlexiTyVarTy liftedTypeKind
         ; pat_ty     <- newFlexiTyVarTy liftedTypeKind
         ; new_res_ty <- newFlexiTyVarTy liftedTypeKind
@@ -526,7 +526,7 @@ tcMcStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_in
         ; (pat', thing) <- tcPat (StmtCtxt ctxt) pat pat_ty $
                            thing_inside new_res_ty
 
-        ; return (BindStmt pat' rhs' (BindStmtMonad bind_op' fail_op'), thing) }
+        ; return (BindStmt pat' rhs' bind_op' fail_op', thing) }
 
 -- Boolean expressions.
 --
@@ -750,7 +750,7 @@ tcDoStmt _ (LastStmt body _) res_ty thing_inside
        ; return (LastStmt body' (LastStmtMonad noSyntaxExpr), thing) }
 
 
-tcDoStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_inside
+tcDoStmt ctxt (BindStmt pat rhs bind_op fail_op) res_ty thing_inside
   = do	{ 	-- Deal with rebindable syntax:
 		--	 (>>=) :: rhs_ty -> (pat_ty -> new_res_ty) -> res_ty
 		-- This level of generality is needed for using do-notation
@@ -776,7 +776,7 @@ tcDoStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_in
 	; (pat', thing) <- tcPat (StmtCtxt ctxt) pat pat_ty $
                            thing_inside new_res_ty
 
-	; return (BindStmt pat' rhs' (BindStmtMonad bind_op' fail_op'), thing) }
+	; return (BindStmt pat' rhs' bind_op' fail_op', thing) }
 
 tcDoStmt _ (BodyStmt rhs (BodyStmtMonad then_op _) _) res_ty thing_inside
   = do	{   	-- Deal with rebindable syntax;

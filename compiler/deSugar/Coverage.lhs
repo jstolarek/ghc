@@ -654,11 +654,21 @@ addTickStmt _isGuard (LastStmt e ids) = do
         liftM2 LastStmt
                 (addTickLHsExpr e)
                 (addTickLastStmtIDs ids)
-addTickStmt _isGuard (BindStmt pat e ids) = do
-        liftM3 BindStmt
-                (addTickLPat pat)
-                (addTickLHsExprRHS e)
-                (addTickBindStmtIDs ids)
+addTickStmt _isGuard (BindStmt pat e bind fail) = do
+        liftM4 BindStmt
+               (addTickLPat pat)
+               (addTickLHsExprRHS e)
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan fail)
+addTickStmt _isGuard (BindStmtArrow pat c arr1 arr2 compose1 compose2 first) = do
+        return BindStmtArrow `ap`
+               (addTickLPat pat) `ap`
+               (addTickLHsExprRHS c) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan first)
 addTickStmt isGuard (BodyStmt e ids ty) = do
         liftM3 BodyStmt
                 (addTick isGuard e)
@@ -866,20 +876,6 @@ addTickLastStmtIDs (LastStmtArrow arr  compose) = do
                (addTickSyntaxExpr hpcSrcSpan arr)
                (addTickSyntaxExpr hpcSrcSpan compose)
 
-
-addTickBindStmtIDs :: BindStmtIDs Id -> TM (BindStmtIDs Id)
-addTickBindStmtIDs (BindStmtMonad bind fail) = do
-        liftM2 BindStmtMonad
-               (addTickSyntaxExpr hpcSrcSpan bind)
-               (addTickSyntaxExpr hpcSrcSpan fail)
-addTickBindStmtIDs (BindStmtArrow arr1 arr2 compose1 compose2 first) = do
-        liftM5 BindStmtArrow
-               (addTickSyntaxExpr hpcSrcSpan arr1)
-               (addTickSyntaxExpr hpcSrcSpan arr2)
-               (addTickSyntaxExpr hpcSrcSpan compose1)
-               (addTickSyntaxExpr hpcSrcSpan compose2)
-               (addTickSyntaxExpr hpcSrcSpan first)
-
 addTickBodyStmtIDs :: BodyStmtIDs Id -> TM (BodyStmtIDs Id)
 addTickBodyStmtIDs (BodyStmtMonad bind guard) = do
         liftM2 BodyStmtMonad
@@ -895,11 +891,21 @@ addTickBodyStmtIDs (BodyStmtArrow arr1 arr2 compose1 compose2 first) = do
 
 
 addTickCmdStmt :: Stmt Id (LHsCmd Id) -> TM (Stmt Id (LHsCmd Id))
-addTickCmdStmt (BindStmt pat c ids) = do
-        liftM3 BindStmt
-                (addTickLPat pat)
-                (addTickLHsCmd c)
-                (addTickBindStmtIDs ids)
+addTickCmdStmt (BindStmt pat c bind fail) = do
+        liftM4 BindStmt
+               (addTickLPat pat)
+               (addTickLHsCmd c)
+               (addTickSyntaxExpr hpcSrcSpan bind)
+               (addTickSyntaxExpr hpcSrcSpan fail)
+addTickCmdStmt (BindStmtArrow pat c arr1 arr2 compose1 compose2 first) = do
+        return BindStmtArrow `ap`
+               (addTickLPat pat) `ap`
+               (addTickLHsCmd c) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan arr2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose1) `ap`
+               (addTickSyntaxExpr hpcSrcSpan compose2) `ap`
+               (addTickSyntaxExpr hpcSrcSpan first)
 addTickCmdStmt (LastStmt c ids) = do
         liftM2 LastStmt
                 (addTickLHsCmd c)

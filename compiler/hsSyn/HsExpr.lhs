@@ -1052,11 +1052,6 @@ type GhciStmt   id = Stmt  id (LHsExpr id)
 data LastStmtIDs idR = LastStmtMonad (SyntaxExpr idR)
                      | LastStmtArrow (SyntaxExpr idR) (SyntaxExpr idR) -- arr, compose
                        deriving (Data, Typeable)
-data BindStmtIDs idR = BindStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
-                     | BindStmtArrow (SyntaxExpr idR) (SyntaxExpr idR)
-                                     (SyntaxExpr idR) (SyntaxExpr idR)
-                                     (SyntaxExpr idR) -- arr, arr, compose, compose, first
-                       deriving (Data, Typeable)
 data BodyStmtIDs idR = BodyStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
                      | BodyStmtArrow (SyntaxExpr idR) (SyntaxExpr idR)
                                      (SyntaxExpr idR) (SyntaxExpr idR)
@@ -1066,9 +1061,6 @@ data BodyStmtIDs idR = BodyStmtMonad (SyntaxExpr idR) (SyntaxExpr idR)
 -- TODO: PUT THESE IN A BETTER PLACE
 mkEmptyArrowBodyStmt :: BodyStmtIDs idR
 mkEmptyArrowBodyStmt = BodyStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
-
-mkEmptyArrowBindStmt :: BindStmtIDs idR
-mkEmptyArrowBindStmt = BindStmtArrow noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
 
 mkEmptyArrowLastStmt :: LastStmtIDs idR
 mkEmptyArrowLastStmt = LastStmtArrow noSyntaxExpr noSyntaxExpr
@@ -1086,10 +1078,18 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
                                   -- See Note [Monad Comprehensions]
   | BindStmt (LPat idL)
              body
-             (BindStmtIDs idR) -- The (>>=) operator; see Note [The type of bind]
-                               -- The fail operator
-                               -- The fail operator is noSyntaxExpr
-                               -- if the pattern match can't fail
+             (SyntaxExpr idR) -- The (>>=) operator; see Note [The type of bind]
+             (SyntaxExpr idR) -- The fail operator
+             -- The fail operator is noSyntaxExpr
+             -- if the pattern match can't fail
+
+  | BindStmtArrow (LPat idL)
+             body
+             (SyntaxExpr idR) -- arr operator
+             (SyntaxExpr idR) -- arr operator
+             (SyntaxExpr idR) -- >>> operator
+             (SyntaxExpr idR) -- >>> operator
+             (SyntaxExpr idR) -- first
 
   | BodyStmt body              -- See Note [BodyStmt]
              (BodyStmtIDs idR) -- The (>>) operator
@@ -1323,7 +1323,9 @@ instance (OutputableBndr idL, OutputableBndr idR, Outputable body)
 pprStmt :: (OutputableBndr idL, OutputableBndr idR, Outputable body)
         => (StmtLR idL idR body) -> SDoc
 pprStmt (LastStmt expr _)         = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
-pprStmt (BindStmt pat expr _)     = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
+pprStmt (BindStmt pat expr _ _)   = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
+pprStmt (BindStmtArrow pat expr _ _ _ _ _)
+                                  = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
 pprStmt (LetStmt binds)           = hsep [ptext (sLit "let"), pprBinds binds]
 pprStmt (BodyStmt expr _ _)       = ppr expr
 pprStmt (ParStmt stmtss _ _)      = sep (punctuate (ptext (sLit " | ")) (map ppr stmtss))

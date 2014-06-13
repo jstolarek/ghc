@@ -928,9 +928,15 @@ checkCmdLStmt = locMap checkCmdStmt
 checkCmdStmt :: SrcSpan -> ExprStmt RdrName -> P (CmdStmt RdrName)
 checkCmdStmt _ (LastStmt e r) =
     checkCommand e >>= (\c -> return $ LastStmt c r)
-checkCmdStmt _ (BindStmt pat e ids@(BindStmtArrow _ _ _ _ _)) =
-    checkCommand e >>= (\c -> return $ BindStmt pat c ids)
-checkCmdStmt _ (BodyStmt e ids@(BodyStmtArrow _ _ _ _ _) ty) =
+-- VOODOO: this does not work. Arrow binds are turned into normal BindStmt
+checkCmdStmt _ (BindStmtArrow pat e arr1_id arr2_id compose1_id compose2_id first_id) =
+    checkCommand e >>= (\c -> return $ BindStmtArrow pat c
+                              arr1_id arr2_id compose1_id compose2_id first_id)
+checkCmdStmt _ (BindStmt pat e bind_op fail_op) =
+    checkCommand e >>= (\c -> return $ BindStmt pat c bind_op fail_op)
+-- VOODOO: for some reasin here we don't get an arrow body stmt, but an ordinary one.
+-- This probably indicates a bug in the parser
+checkCmdStmt _ (BodyStmt e ids ty) =
     checkCommand e >>= (\c -> return $ BodyStmt c ids ty)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
 checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do

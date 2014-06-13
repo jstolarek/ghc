@@ -1300,7 +1300,7 @@ tcUserStmt (L loc (BodyStmt expr _ _))
               -- [it <- e]
               bind_stmt = L loc $ BindStmt (L loc (VarPat fresh_it))
                                            (nlHsApp ghciStep rn_expr)
-                                           (BindStmtMonad (HsVar bindIOName) noSyntaxExpr)
+                                           (HsVar bindIOName) noSyntaxExpr
 
               -- [; print it]
               print_it  = L loc $ BodyStmt (nlHsApp (nlHsVar interPrintName) (nlHsVar fresh_it))
@@ -1348,8 +1348,8 @@ tcUserStmt rdr_stmt@(L loc _)
 
        ; ghciStep <- getGhciStepIO
        ; let gi_stmt
-               | (L loc (BindStmt pat expr (BindStmtMonad op1 op2))) <- rn_stmt
-                           = L loc $ BindStmt pat (nlHsApp ghciStep expr) (BindStmtMonad op1 op2)
+               | (L loc (BindStmt pat expr op1 op2)) <- rn_stmt
+                           = L loc $ BindStmt pat (nlHsApp ghciStep expr) op1 op2
                | otherwise = rn_stmt
 
        ; opt_pr_flag <- goptM Opt_PrintBindResult

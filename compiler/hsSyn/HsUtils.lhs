@@ -239,7 +239,7 @@ mkGroupByUsingStmt ss b u = emptyTransStmt { trS_form = GroupForm, trS_stmts = s
 
 mkLastStmt body     = LastStmt body (LastStmtMonad noSyntaxExpr)
 mkBodyStmt body     = BodyStmt body (BodyStmtMonad noSyntaxExpr noSyntaxExpr) placeHolderType
-mkBindStmt pat body = BindStmt pat body (BindStmtMonad noSyntaxExpr noSyntaxExpr)
+mkBindStmt pat body = BindStmt pat body noSyntaxExpr noSyntaxExpr
 
 emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_ret_fn = noSyntaxExpr, recS_mfix_fn = noSyntaxExpr
@@ -604,7 +604,9 @@ collectLStmtBinders = collectStmtBinders . unLoc
 
 collectStmtBinders :: StmtLR idL idR body -> [idL]
   -- Id Binders for a Stmt... [but what about pattern-sig type vars]?
-collectStmtBinders (BindStmt pat _ _)   = collectPatBinders pat
+collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
+collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
+                                        = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []
@@ -791,7 +793,9 @@ lStmtsImplicits = hs_lstmts
     hs_lstmts :: [LStmtLR Name idR (Located (body idR))] -> NameSet
     hs_lstmts = foldr (\stmt rest -> unionNameSets (hs_stmt (unLoc stmt)) rest) emptyNameSet
 
-    hs_stmt (BindStmt pat _ _)   = lPatImplicits pat
+    hs_stmt (BindStmt pat _ _ _) = lPatImplicits pat
+    hs_stmt (BindStmtArrow pat _ _ _ _ _ _)
+                                 = lPatImplicits pat
     hs_stmt (LetStmt binds)      = hs_local_binds binds
     hs_stmt (BodyStmt {})        = emptyNameSet
     hs_stmt (LastStmt {})        = emptyNameSet

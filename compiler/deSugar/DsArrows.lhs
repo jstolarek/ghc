@@ -834,8 +834,8 @@ dsCmdStmt ids local_vars out_ids (BodyStmt cmd (BodyStmtArrow
 -- It would be simpler and more consistent to do this using second,
 -- but that's likely to be defined in terms of first.
 
-dsCmdStmt ids local_vars out_ids (BindStmt pat cmd (BindStmtArrow
-              arr1_id arr2_id compose1_id compose2_id first_id)) env_ids = do
+dsCmdStmt ids local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
+                                 compose1_id compose2_id first_id) env_ids = do
     trace "BindStmt 825" $ return ()
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
     let pat_ty   = hsLPatType pat
@@ -1230,7 +1230,9 @@ collectLStmtBinders :: LStmt Id body -> [Id]
 collectLStmtBinders = collectStmtBinders . unLoc
 
 collectStmtBinders :: Stmt Id body -> [Id]
-collectStmtBinders (BindStmt pat _ _)   = collectPatBinders pat
+collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
+collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
+                                        = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []

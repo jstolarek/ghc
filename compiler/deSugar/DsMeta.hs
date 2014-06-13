@@ -1105,7 +1105,7 @@ repLSts :: [LStmt Name (LHsExpr Name)] -> DsM ([GenSymBind], [Core TH.StmtQ])
 repLSts stmts = repSts (map unLoc stmts)
 
 repSts :: [Stmt Name (LHsExpr Name)] -> DsM ([GenSymBind], [Core TH.StmtQ])
-repSts (BindStmt p e _ : ss) =
+repSts (BindStmt p e _ _ : ss) =
    do { e2 <- repLE e
       ; ss1 <- mkGenSyms (collectPatBinders p)
       ; addBinds ss1 $ do {
@@ -1141,6 +1141,7 @@ repSts [LastStmt e _]
        ; z <- repNoBindSt e2
        ; return ([], [z]) }
 repSts []    = return ([],[])
+-- VOODOO: BindStmtArrow ignored on purpose - not sure if correct?
 repSts other = notHandled "Exotic statement" (ppr other)
 
 

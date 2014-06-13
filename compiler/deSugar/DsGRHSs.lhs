@@ -119,7 +119,7 @@ matchGuards (LetStmt binds : stmts) ctx rhs rhs_ty = do
         --         so we can't desugar the bindings without the
         --         body expression in hand
 
-matchGuards (BindStmt pat bind_rhs _  : stmts) ctx rhs rhs_ty = do
+matchGuards (BindStmt pat bind_rhs _ _  : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     core_rhs <- dsLExpr bind_rhs
     matchSinglePat core_rhs (StmtCtxt ctx) pat rhs_ty match_result
@@ -128,6 +128,8 @@ matchGuards (LastStmt  {} : _) _ _ _ = panic "matchGuards LastStmt"
 matchGuards (ParStmt   {} : _) _ _ _ = panic "matchGuards ParStmt"
 matchGuards (TransStmt {} : _) _ _ _ = panic "matchGuards TransStmt"
 matchGuards (RecStmt   {} : _) _ _ _ = panic "matchGuards RecStmt"
+-- VOODOO: is this correct? If not then we should do the same as for BindStmt
+matchGuards (BindStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
 
 isTrueLHsExpr :: LHsExpr Id -> Maybe (CoreExpr -> DsM CoreExpr)
 
