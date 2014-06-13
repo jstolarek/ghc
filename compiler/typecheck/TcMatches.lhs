@@ -778,39 +778,6 @@ tcDoStmt ctxt (BindStmt pat rhs (BindStmtMonad bind_op fail_op)) res_ty thing_in
 
 	; return (BindStmt pat' rhs' (BindStmtMonad bind_op' fail_op'), thing) }
 
-{-
--- FIXME: VOODOO CODING HERE
-tcDoStmt ctxt (BindStmt pat rhs (BindStmtArrow c1_op c2_op a1_op a2_op f_op)) res_ty thing_inside
-  = do	{ rhs_ty     <- newFlexiTyVarTy liftedTypeKind
-        ; pat_ty     <- newFlexiTyVarTy liftedTypeKind
-        ; new_res_ty <- newFlexiTyVarTy liftedTypeKind
-
-        pat <- rhs
-	(>>=) :: rhs_ty -> (pat_ty -> new_res_ty) -> res_ty
-	; bind_op'   <- tcSyntaxOp DoOrigin bind_op
-			     (mkFunTys [rhs_ty, mkFunTy pat_ty new_res_ty] res_ty)
-
-
--- D; xs1 |-a c : () --> t
--- D; xs' |-a do { ss } : t'   xs2 = xs' - defs(p)
--- -----------------------------------
--- D; xs  |-a do { p <- c; ss } : t'
---
---        ---> premap (\ (xs) -> (((xs1),()),(xs2)))
---            (first c >>> arr (\ (p, (xs2)) -> (xs'))) >>> ss
-
-
-	; c1_op'   <- tcSyntaxOp DoOrigin c1_op
-			     (mkFunTys [rhs_ty, mkFunTy pat_ty new_res_ty] res_ty)
-
-        ; rhs' <- tcMonoExprNC rhs rhs_ty
-	; (pat', thing) <- tcPat (StmtCtxt ctxt) pat pat_ty $
-                           thing_inside new_res_ty
-
-	; return (BindStmt pat rhs (BindStmtArrow c1_op c2_op a1_op a2_op f_op), thing_inside) }
-
--}
-
 tcDoStmt _ (BodyStmt rhs (BodyStmtMonad then_op _) _) res_ty thing_inside
   = do	{   	-- Deal with rebindable syntax;
                 --   (>>) :: rhs_ty -> new_res_ty -> res_ty
@@ -823,8 +790,6 @@ tcDoStmt _ (BodyStmt rhs (BodyStmtMonad then_op _) _) res_ty thing_inside
         ; rhs' <- tcMonoExprNC rhs rhs_ty
 	; thing <- thing_inside new_res_ty
 	; return (BodyStmt rhs' (BodyStmtMonad then_op' noSyntaxExpr) rhs_ty, thing) }
-
--- TODO: Arrow body stmt?
 
 tcDoStmt ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                        , recS_rec_ids = rec_names, recS_ret_fn = ret_op

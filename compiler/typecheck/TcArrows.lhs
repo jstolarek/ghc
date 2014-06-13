@@ -44,7 +44,7 @@ import Util
 import Control.Monad
 \end{code}
 
-Note [Arrow overivew]
+Note [Arrow overview]
 ~~~~~~~~~~~~~~~~~~~~~
 Here's a summary of arrows and how they typecheck.  First, here's
 a cut-down syntax:
@@ -125,11 +125,25 @@ tcCmdTop :: CmdEnv
          -> CmdType
          -> TcM (LHsCmdTop TcId)
 
-tcCmdTop env (L loc (HsCmdTop cmd _ _ names c a)) cmd_ty@(cmd_stk, res_ty)
+tcCmdTop env (L loc (HsCmdTop cmd _ _ names compose_op arr_op)) cmd_ty@(cmd_stk, res_ty)
   = setSrcSpan loc $
     do	{ cmd'   <- tcCmd env cmd cmd_ty
 	; names' <- mapM (tcSyntaxName ProcOrigin (cmd_arr env)) names
-	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty names' c' a') }
+        -- VOODOO CODING based on typechecking of >>= in TcMatches
+        -- is it correct to use b and c variables for typechecking in both
+        -- arr and compose?
+        ; a       <- newFlexiTyVarTy liftedTypeKind
+        ; b       <- newFlexiTyVarTy liftedTypeKind
+        ; c       <- newFlexiTyVarTy liftedTypeKind
+        ; d       <- newFlexiTyVarTy liftedTypeKind
+        ; e       <- newFlexiTyVarTy liftedTypeKind
+
+	; arr_op' <- tcSyntaxOp ProcOrigin arr_op
+                                (mkFunTy (mkFunTy d e) (mkCmdArrTy env d e))
+
+        ; compose_op' <- tcSyntaxOp ProcOrigin compose_op
+                                (mkFunTys [mkCmdArrTy env a b, mkCmdArrTy env b c] (mkCmdArrTy env a c))
+	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty names' compose_op' arr_op') }
 ----------------------------------------
 tcCmd  :: CmdEnv -> LHsCmd Name -> CmdType -> TcM (LHsCmd TcId)
 	-- The main recursive function
