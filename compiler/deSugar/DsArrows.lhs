@@ -109,6 +109,9 @@ do_first2 first_id b_ty c_ty d_ty f
 do_app :: DsCmdEnv -> Type -> Type -> CoreExpr
 do_app ids b_ty c_ty = mkApps (app_id ids) [Type b_ty, Type c_ty]
 
+do_app2 :: CoreExpr -> Type -> Type -> CoreExpr
+do_app2 app_id b_ty c_ty = mkApps app_id [Type b_ty, Type c_ty]
+
 -- (|||) :: forall b d c. a b d -> a c d -> a (Either b c) d
 -- note the swapping of d and c
 do_choice :: DsCmdEnv -> Type -> Type -> Type ->
@@ -116,11 +119,20 @@ do_choice :: DsCmdEnv -> Type -> Type -> Type ->
 do_choice ids b_ty c_ty d_ty f g
   = mkApps (choice_id ids) [Type b_ty, Type d_ty, Type c_ty, f, g]
 
+do_choice2 :: CoreExpr -> Type -> Type -> Type ->
+             CoreExpr -> CoreExpr -> CoreExpr
+do_choice2 choice_id b_ty c_ty d_ty f g
+  = mkApps choice_id [Type b_ty, Type d_ty, Type c_ty, f, g]
+
 -- loop :: forall b d c. a (b,d) (c,d) -> a b c
 -- note the swapping of d and c
 do_loop :: DsCmdEnv -> Type -> Type -> Type -> CoreExpr -> CoreExpr
 do_loop ids b_ty c_ty d_ty f
   = mkApps (loop_id ids) [Type b_ty, Type d_ty, Type c_ty, f]
+
+do_loop2 :: CoreExpr -> Type -> Type -> Type -> CoreExpr -> CoreExpr
+do_loop2 loop_id b_ty c_ty d_ty f
+  = mkApps loop_id [Type b_ty, Type d_ty, Type c_ty, f]
 
 -- premap :: forall b c d. (b -> c) -> a c d -> a b d
 -- premap f g = arr f >>> g
@@ -486,8 +498,8 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
 --             if e then Left ((xs1),stk) else Right ((xs2),stk))
 --               (c1 ||| c2)
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd arr_op compose_op)
-        env_ids = do
+dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd
+                                              arr_op compose_op choice_op) env_ids = do
     trace "HsCmdIf" $ return ()
     core_cond <- dsLExpr cond
     (core_then, fvs_then, then_ids) <- dsfixCmd ids local_vars stack_ty res_ty then_cmd
@@ -519,7 +531,7 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd arr_
        Nothing  -> matchEnvStack env_ids stack_id $
                    mkIfThenElse core_cond core_left core_right
 
-    return (do_premap2 arr compose ids in_ty sum_ty res_ty
+    return (do_premap2 arr compose in_ty sum_ty res_ty
                 core_if
                 (do_choice2 choice then_ty else_ty res_ty core_then core_else),
         fvs_cond `unionVarSet` fvs_then `unionVarSet` fvs_else)

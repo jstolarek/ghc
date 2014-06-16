@@ -892,13 +892,13 @@ locMap f (L l a) = f l a >>= (\b -> return $ L l b)
 
 checkCmd :: SrcSpan -> HsExpr RdrName -> P (HsCmd RdrName)
 checkCmd _ (HsArrApp e1 e2 ptt haat b) =
-    return $ HsCmdArrApp e1 e2 ptt haat b
+    return $ HsCmdArrApp e1 e2 ptt haat b noSyntaxExpr noSyntaxExpr noSyntaxExpr
 checkCmd _ (HsArrForm e mf args) =
     return $ HsCmdArrForm e mf args
 checkCmd _ (HsApp e1 e2) =
-    checkCommand e1 >>= (\c -> return $ HsCmdApp c e2)
+    checkCommand e1 >>= (\c -> return $ HsCmdApp c e2 noSyntaxExpr noSyntaxExpr)
 checkCmd _ (HsLam mg) =
-    checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdLam mg')
+    checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdLam mg' noSyntaxExpr noSyntaxExpr)
 checkCmd _ (HsPar e) =
     checkCommand e >>= (\c -> return $ HsCmdPar c)
 checkCmd _ (HsCase e mg) =
@@ -906,9 +906,9 @@ checkCmd _ (HsCase e mg) =
 checkCmd _ (HsIf cf ep et ee) = do
     pt <- checkCommand et
     pe <- checkCommand ee
-    return $ HsCmdIf cf ep pt pe
+    return $ HsCmdIf cf ep pt pe noSyntaxExpr noSyntaxExpr noSyntaxExpr
 checkCmd _ (HsLet lb e) =
-    checkCommand e >>= (\c -> return $ HsCmdLet lb c)
+    checkCommand e >>= (\c -> return $ HsCmdLet lb c noSyntaxExpr noSyntaxExpr)
 checkCmd _ (HsDo DoExpr stmts ty) =
     mapM checkCmdLStmt stmts >>= (\ss -> return $ HsCmdDo ss ty noSyntaxExpr noSyntaxExpr)
 

@@ -792,10 +792,17 @@ addTickLHsCmd (L pos c0) = do
         return $ L pos c1
 
 addTickHsCmd :: HsCmd Id -> TM (HsCmd Id)
-addTickHsCmd (HsCmdLam matchgroup) =
-        liftM HsCmdLam (addTickCmdMatchGroup matchgroup)
-addTickHsCmd (HsCmdApp c e) =
-        liftM2 HsCmdApp (addTickLHsCmd c) (addTickLHsExpr e)
+addTickHsCmd (HsCmdLam matchgroup arr compose) =
+        liftM3 HsCmdLam
+               (addTickCmdMatchGroup matchgroup)
+               (addTickSyntaxExpr hpcSrcSpan arr)
+               (addTickSyntaxExpr hpcSrcSpan compose)
+addTickHsCmd (HsCmdApp c e arr compose) =
+        liftM4 HsCmdApp
+               (addTickLHsCmd c)
+               (addTickLHsExpr e)
+               (addTickSyntaxExpr hpcSrcSpan arr)
+               (addTickSyntaxExpr hpcSrcSpan compose)
 {-
 addTickHsCmd (OpApp e1 c2 fix c3) =
         liftM4 OpApp
@@ -809,29 +816,37 @@ addTickHsCmd (HsCmdCase e mgs) =
         liftM2 HsCmdCase
                 (addTickLHsExpr e)
                 (addTickCmdMatchGroup mgs)
-addTickHsCmd (HsCmdIf cnd e1 c2 c3) =
-        liftM3 (HsCmdIf cnd)
-                (addBinTickLHsExpr (BinBox CondBinBox) e1)
-                (addTickLHsCmd c2)
-                (addTickLHsCmd c3)
-addTickHsCmd (HsCmdLet binds c) =
+addTickHsCmd (HsCmdIf cnd e1 c2 c3 arr compose choice) =
+        return (HsCmdIf cnd) `ap`
+                 (addBinTickLHsExpr (BinBox CondBinBox) e1) `ap`
+                 (addTickLHsCmd c2) `ap`
+                 (addTickLHsCmd c3) `ap`
+                 (addTickSyntaxExpr hpcSrcSpan arr) `ap`
+                 (addTickSyntaxExpr hpcSrcSpan compose) `ap`
+                 (addTickSyntaxExpr hpcSrcSpan choice)
+addTickHsCmd (HsCmdLet binds c arr compose) =
         bindLocals (collectLocalBinders binds) $
-        liftM2 HsCmdLet
+        liftM4 HsCmdLet
                 (addTickHsLocalBinds binds) -- to think about: !patterns.
                 (addTickLHsCmd c)
+                (addTickSyntaxExpr hpcSrcSpan arr)
+                (addTickSyntaxExpr hpcSrcSpan compose)
 addTickHsCmd (HsCmdDo stmts srcloc arr_op compose_op)
   = do { (stmts', _) <- addTickLCmdStmts' stmts (return ())
        ; new_arr     <- addTickSyntaxExpr hpcSrcSpan arr_op
        ; new_compose <- addTickSyntaxExpr hpcSrcSpan compose_op
        ; return (HsCmdDo stmts' srcloc new_arr new_compose) }
 
-addTickHsCmd (HsCmdArrApp   e1 e2 ty1 arr_ty lr) =
-        liftM5 HsCmdArrApp
-               (addTickLHsExpr e1)
-               (addTickLHsExpr e2)
-               (return ty1)
-               (return arr_ty)
-               (return lr)
+addTickHsCmd (HsCmdArrApp e1 e2 ty1 arr_ty lr arr compose app) =
+        return HsCmdArrApp `ap`
+                (addTickLHsExpr e1) `ap`
+                (addTickLHsExpr e2) `ap`
+                (return ty1) `ap`
+                (return arr_ty) `ap`
+                (return lr) `ap`
+                (addTickSyntaxExpr hpcSrcSpan arr) `ap`
+                (addTickSyntaxExpr hpcSrcSpan compose) `ap`
+                (addTickSyntaxExpr hpcSrcSpan app)
 addTickHsCmd (HsCmdArrForm e fix cmdtop) =
         liftM3 HsCmdArrForm
                (addTickLHsExpr e)

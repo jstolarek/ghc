@@ -816,8 +816,8 @@ isQuietHsCmd :: HsCmd id -> Bool
 -- like (...)
 isQuietHsCmd (HsCmdPar _) = True
 -- applications don't display anything themselves
-isQuietHsCmd (HsCmdApp _ _) = True
-isQuietHsCmd _ = False
+isQuietHsCmd (HsCmdApp _ _ _ _) = True
+isQuietHsCmd _                  = False
 
 -----------------------
 ppr_lcmd :: OutputableBndr id => LHsCmd id -> SDoc
@@ -826,33 +826,33 @@ ppr_lcmd c = ppr_cmd (unLoc c)
 ppr_cmd :: forall id. OutputableBndr id => HsCmd id -> SDoc
 ppr_cmd (HsCmdPar c) = parens (ppr_lcmd c)
 
-ppr_cmd (HsCmdApp c e)
+ppr_cmd (HsCmdApp c e _ _)
   = let (fun, args) = collect_args c [e] in
     hang (ppr_lcmd fun) 2 (sep (map pprParendExpr args))
   where
-    collect_args (L _ (HsCmdApp fun arg)) args = collect_args fun (arg:args)
+    collect_args (L _ (HsCmdApp fun arg _ _)) args = collect_args fun (arg:args)
     collect_args fun args = (fun, args)
 
 --avoid using PatternSignatures for stage1 code portability
-ppr_cmd (HsCmdLam matches)
+ppr_cmd (HsCmdLam matches _ _)
   = pprMatches (LambdaExpr :: HsMatchContext id) matches
 
 ppr_cmd (HsCmdCase expr matches)
   = sep [ sep [ptext (sLit "case"), nest 4 (ppr expr), ptext (sLit "of {")],
           nest 2 (pprMatches (CaseAlt :: HsMatchContext id) matches <+> char '}') ]
 
-ppr_cmd (HsCmdIf _ e ct ce)
+ppr_cmd (HsCmdIf _ e ct ce _ _ _)
   = sep [hsep [ptext (sLit "if"), nest 2 (ppr e), ptext (sLit "then")],
          nest 4 (ppr ct),
          ptext (sLit "else"),
          nest 4 (ppr ce)]
 
 -- special case: let ... in let ...
-ppr_cmd (HsCmdLet binds cmd@(L _ (HsCmdLet _ _)))
+ppr_cmd (HsCmdLet binds cmd@(L _ (HsCmdLet _ _ _ _)) _ _)
   = sep [hang (ptext (sLit "let")) 2 (hsep [pprBinds binds, ptext (sLit "in")]),
          ppr_lcmd cmd]
 
-ppr_cmd (HsCmdLet binds cmd)
+ppr_cmd (HsCmdLet binds cmd _ _)
   = sep [hang (ptext (sLit "let")) 2 (pprBinds binds),
          hang (ptext (sLit "in"))  2 (ppr cmd)]
 
@@ -860,13 +860,13 @@ ppr_cmd (HsCmdDo stmts _ _ _)  = pprDo ArrowExpr stmts
 ppr_cmd (HsCmdCast co cmd)     = sep [ ppr_cmd cmd
                                      , ptext (sLit "|>") <+> ppr co ]
 
-ppr_cmd (HsCmdArrApp arrow arg _ HsFirstOrderApp True)
+ppr_cmd (HsCmdArrApp arrow arg _ HsFirstOrderApp True _ _ _)
   = hsep [ppr_lexpr arrow, ptext (sLit "-<"), ppr_lexpr arg]
-ppr_cmd (HsCmdArrApp arrow arg _ HsFirstOrderApp False)
+ppr_cmd (HsCmdArrApp arrow arg _ HsFirstOrderApp False _ _ _)
   = hsep [ppr_lexpr arg, ptext (sLit ">-"), ppr_lexpr arrow]
-ppr_cmd (HsCmdArrApp arrow arg _ HsHigherOrderApp True)
+ppr_cmd (HsCmdArrApp arrow arg _ HsHigherOrderApp True _ _ _)
   = hsep [ppr_lexpr arrow, ptext (sLit "-<<"), ppr_lexpr arg]
-ppr_cmd (HsCmdArrApp arrow arg _ HsHigherOrderApp False)
+ppr_cmd (HsCmdArrApp arrow arg _ HsHigherOrderApp False _ _ _)
   = hsep [ppr_lexpr arg, ptext (sLit ">>-"), ppr_lexpr arrow]
 
 ppr_cmd (HsCmdArrForm (L _ (HsVar v)) (Just _) [arg1, arg2])

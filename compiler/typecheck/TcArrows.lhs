@@ -157,11 +157,12 @@ tc_cmd env (HsCmdPar cmd) res_ty
   = do	{ cmd' <- tcCmd env cmd res_ty
 	; return (HsCmdPar cmd') }
 
-tc_cmd env (HsCmdLet binds (L body_loc body)) res_ty
+-- VOODOO
+tc_cmd env (HsCmdLet binds (L body_loc body) _ _) res_ty
   = do	{ (binds', body') <- tcLocalBinds binds		$
 			     setSrcSpan body_loc 	$
 			     tc_cmd env body res_ty
-	; return (HsCmdLet binds' (L body_loc body')) }
+	; return (HsCmdLet binds' (L body_loc body') noSyntaxExpr noSyntaxExpr) }
 
 tc_cmd env in_cmd@(HsCmdCase scrut matches) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
@@ -173,14 +174,16 @@ tc_cmd env in_cmd@(HsCmdCase scrut matches) (stk, res_ty)
                       mc_body = mc_body }
     mc_body body res_ty' = tcCmd env body (stk, res_ty')
 
-tc_cmd env (HsCmdIf Nothing pred b1 b2) res_ty    -- Ordinary 'if'
+-- VOODOO
+tc_cmd env (HsCmdIf Nothing pred b1 b2 _ _ _) res_ty    -- Ordinary 'if'
   = do  { pred' <- tcMonoExpr pred boolTy
         ; b1'   <- tcCmd env b1 res_ty
         ; b2'   <- tcCmd env b2 res_ty
-        ; return (HsCmdIf Nothing pred' b1' b2')
+        ; return (HsCmdIf Nothing pred' b1' b2' noSyntaxExpr noSyntaxExpr noSyntaxExpr)
     }
 
-tc_cmd env (HsCmdIf (Just fun) pred b1 b2) res_ty -- Rebindable syntax for if
+-- VOODOO
+tc_cmd env (HsCmdIf (Just fun) pred b1 b2 _ _ _) res_ty -- Rebindable syntax for if
   = do 	{ pred_ty <- newFlexiTyVarTy openTypeKind
         -- For arrows, need ifThenElse :: forall r. T -> r -> r -> r
         -- because we're going to apply it to the environment, not
@@ -194,7 +197,7 @@ tc_cmd env (HsCmdIf (Just fun) pred b1 b2) res_ty -- Rebindable syntax for if
   	; pred' <- tcMonoExpr pred pred_ty
 	; b1'   <- tcCmd env b1 res_ty
 	; b2'   <- tcCmd env b2 res_ty
-        ; return (HsCmdIf (Just fun') pred' b1' b2')
+        ; return (HsCmdIf (Just fun') pred' b1' b2' noSyntaxExpr noSyntaxExpr noSyntaxExpr)
     }
 
 -------------------------------------------
@@ -213,7 +216,8 @@ tc_cmd env (HsCmdIf (Just fun) pred b1 b2) res_ty -- Rebindable syntax for if
 --
 -- (plus -<< requires ArrowApply)
 
-tc_cmd env cmd@(HsCmdArrApp fun arg _ ho_app lr) (_, res_ty)
+-- VOODOO
+tc_cmd env cmd@(HsCmdArrApp fun arg _ ho_app lr _ _ _) (_, res_ty)
   = addErrCtxt (cmdCtxt cmd)	$
     do  { arg_ty <- newFlexiTyVarTy openTypeKind
 	; let fun_ty = mkCmdArrTy env arg_ty res_ty
@@ -223,7 +227,7 @@ tc_cmd env cmd@(HsCmdArrApp fun arg _ ho_app lr) (_, res_ty)
 
 	; arg' <- tcMonoExpr arg arg_ty
 
-	; return (HsCmdArrApp fun' arg' fun_ty ho_app lr) }
+	; return (HsCmdArrApp fun' arg' fun_ty ho_app lr noSyntaxExpr noSyntaxExpr noSyntaxExpr) }
   where
        -- Before type-checking f, use the environment of the enclosing
        -- proc for the (-<) case.
@@ -241,12 +245,13 @@ tc_cmd env cmd@(HsCmdArrApp fun arg _ ho_app lr) (_, res_ty)
 -- -----------------------------
 -- D;G |-a cmd exp : stk --> res
 
-tc_cmd env cmd@(HsCmdApp fun arg) (cmd_stk, res_ty)
+-- VOODOO
+tc_cmd env cmd@(HsCmdApp fun arg _ _) (cmd_stk, res_ty)
   = addErrCtxt (cmdCtxt cmd)	$
     do  { arg_ty <- newFlexiTyVarTy openTypeKind
 	; fun'   <- tcCmd env fun (mkPairTy arg_ty cmd_stk, res_ty)
 	; arg'   <- tcMonoExpr arg arg_ty
-	; return (HsCmdApp fun' arg') }
+	; return (HsCmdApp fun' arg' noSyntaxExpr noSyntaxExpr) }
 
 -------------------------------------------
 -- 		Lambda
@@ -255,8 +260,9 @@ tc_cmd env cmd@(HsCmdApp fun arg) (cmd_stk, res_ty)
 -- ------------------------------
 -- D;G |-a (\x.cmd) : (t,stk) --> res
 
+-- VOODOO
 tc_cmd env
-       (HsCmdLam (MG { mg_alts = [L mtch_loc (match@(Match pats _maybe_rhs_sig grhss))], mg_origin = origin }))
+       (HsCmdLam (MG { mg_alts = [L mtch_loc (match@(Match pats _maybe_rhs_sig grhss))], mg_origin = origin }) _ _)
        (cmd_stk, res_ty)
   = addErrCtxt (pprMatchInCtxt match_ctxt match)	$
     do	{ (co, arg_tys, cmd_stk') <- matchExpectedCmdArgs n_pats cmd_stk
@@ -269,7 +275,7 @@ tc_cmd env
 	; let match' = L mtch_loc (Match pats' Nothing grhss')
               arg_tys = map hsLPatType pats'
               cmd' = HsCmdLam (MG { mg_alts = [match'], mg_arg_tys = arg_tys
-                                  , mg_res_ty = res_ty, mg_origin = origin })
+                                  , mg_res_ty = res_ty, mg_origin = origin }) noSyntaxExpr noSyntaxExpr
 	; return (mkHsCmdCast co cmd') }
   where
     n_pats     = length pats
@@ -289,8 +295,8 @@ tc_cmd env
 -------------------------------------------
 -- 		Do notation
 
--- VOODOO: I'm ignoring existing arr and compose operators here and just creating
--- noSyntaxExprs. I think this is wrong and I should in fact typecheck both
+-- VOODOO: I'm ignoring existing arr and compose operators here and just
+-- creating noSyntaxExprs. This is wrong and I should in fact typecheck both
 -- operators (as in tcCmdTop)
 tc_cmd env (HsCmdDo stmts _ _ _) (cmd_stk, res_ty)
   = do 	{ co <- unifyType unitTy cmd_stk  -- Expecting empty argument stack

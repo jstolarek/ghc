@@ -429,11 +429,14 @@ rnLCmd = wrapLocFstM rnCmd
 
 rnCmd :: HsCmd RdrName -> RnM (HsCmd Name, FreeVars)
 
-rnCmd (HsCmdArrApp arrow arg _ ho rtl)
+rnCmd (HsCmdArrApp arrow arg _ ho rtl _ _ _)
   = select_arrow_scope (rnLExpr arrow)  `thenM` \ (arrow',fvArrow) ->
-    rnLExpr arg                         `thenM` \ (arg',fvArg) ->
-    return (HsCmdArrApp arrow' arg' placeHolderType ho rtl,
-             fvArrow `plusFV` fvArg)
+    rnLExpr arg                         `thenM` \ (arg',fvArg) -> do
+    (arr_op     , fvs1) <- lookupStmtName ArrowExpr arrAName
+    (compose_op , fvs2) <- lookupStmtName ArrowExpr composeAName
+    (app_op     , fvs3) <- lookupStmtName ArrowExpr appAName
+    return ( HsCmdArrApp arrow' arg' placeHolderType ho rtl arr_op compose_op app_op
+           , plusFVs [ fvArrow, fvArg, fvs1, fvs2, fvs3] )
   where
     select_arrow_scope tc = case ho of
         HsHigherOrderApp -> tc
@@ -465,14 +468,20 @@ rnCmd (HsCmdArrForm op fixity cmds)
     rnCmdArgs cmds                      `thenM` \ (cmds',fvCmds) ->
     return (HsCmdArrForm op' fixity cmds', fvOp `plusFV` fvCmds)
 
-rnCmd (HsCmdApp fun arg)
+rnCmd (HsCmdApp fun arg _ _)
   = rnLCmd  fun         `thenM` \ (fun',fvFun) ->
-    rnLExpr arg         `thenM` \ (arg',fvArg) ->
-    return (HsCmdApp fun' arg', fvFun `plusFV` fvArg)
+    rnLExpr arg         `thenM` \ (arg',fvArg) -> do
+    (arr_op    , fvs1) <- lookupStmtName ArrowExpr arrAName
+    (compose_op, fvs2) <- lookupStmtName ArrowExpr composeAName
+    return ( HsCmdApp fun' arg' arr_op compose_op
+           , plusFVs [fvFun, fvArg, fvs1, fvs2])
 
-rnCmd (HsCmdLam matches)
-  = rnMatchGroup LambdaExpr rnLCmd matches     `thenM` \ (matches', fvMatch) ->
-    return (HsCmdLam matches', fvMatch)
+rnCmd (HsCmdLam matches _ _)
+  = rnMatchGroup LambdaExpr rnLCmd matches     `thenM` \ (matches', fvMatch) -> do
+    (arr_op    , fvs1) <- lookupStmtName ArrowExpr arrAName
+    (compose_op, fvs2) <- lookupStmtName ArrowExpr composeAName
+    return ( HsCmdLam matches' arr_op compose_op
+           , fvMatch `plusFV` fvs1 `plusFV` fvs2)
 
 rnCmd (HsCmdPar e)
   = do  { (e', fvs_e) <- rnLCmd e
@@ -483,17 +492,24 @@ rnCmd (HsCmdCase expr matches)
     rnMatchGroup CaseAlt rnLCmd matches `thenM` \ (new_matches, ms_fvs) ->
     return (HsCmdCase new_expr new_matches, e_fvs `plusFV` ms_fvs)
 
-rnCmd (HsCmdIf _ p b1 b2)
-  = do { (p', fvP) <- rnLExpr p
-       ; (b1', fvB1) <- rnLCmd b1
-       ; (b2', fvB2) <- rnLCmd b2
-       ; (mb_ite, fvITE) <- lookupIfThenElse
-       ; return (HsCmdIf mb_ite p' b1' b2', plusFVs [fvITE, fvP, fvB1, fvB2]) }
+rnCmd (HsCmdIf _ p b1 b2 _ _ _)
+  = do (p', fvP)   <- rnLExpr p
+       (b1', fvB1) <- rnLCmd b1
+       (b2', fvB2) <- rnLCmd b2
+       (mb_ite, fvITE) <- lookupIfThenElse
+       (arr_op    , fvs1) <- lookupStmtName ArrowExpr arrAName
+       (compose_op, fvs2) <- lookupStmtName ArrowExpr composeAName
+       (choice_op , fvs3) <- lookupStmtName ArrowExpr choiceAName
+       return ( HsCmdIf mb_ite p' b1' b2' arr_op compose_op choice_op
+              , plusFVs [fvITE, fvP, fvB1, fvB2, fvs1, fvs2, fvs3])
 
-rnCmd (HsCmdLet binds cmd)
+rnCmd (HsCmdLet binds cmd _ _)
   = rnLocalBindsAndThen binds           $ \ binds' ->
-    rnLCmd cmd                         `thenM` \ (cmd',fvExpr) ->
-    return (HsCmdLet binds' cmd', fvExpr)
+    rnLCmd cmd                         `thenM` \ (cmd',fvExpr) -> do
+    (arr_op    , fvs1) <- lookupStmtName ArrowExpr arrAName
+    (compose_op, fvs2) <- lookupStmtName ArrowExpr composeAName
+    return ( HsCmdLet binds' cmd' arr_op compose_op
+           , fvExpr `plusFV` fvs1 `plusFV` fvs2 )
 
 rnCmd (HsCmdDo stmts _ _ _)
   = do  { ((stmts', _), fvs1) <- rnStmts ArrowExpr rnLCmd stmts (\ _ -> return ((), emptyFVs))
@@ -513,23 +529,24 @@ methodNamesLCmd :: LHsCmd Name -> CmdNeeds
 methodNamesLCmd = methodNamesCmd . unLoc
 
 methodNamesCmd :: HsCmd Name -> CmdNeeds
-
-methodNamesCmd (HsCmdArrApp _arrow _arg _ HsFirstOrderApp _rtl)
+-- VOODOO: Is it ok to use generic appAName, choiceAName etc., or should
+-- we extract actual names from the fields of HsCmd?
+methodNamesCmd (HsCmdArrApp _arrow _arg _ HsFirstOrderApp _rtl _ _ _)
   = emptyFVs
-methodNamesCmd (HsCmdArrApp _arrow _arg _ HsHigherOrderApp _rtl)
+methodNamesCmd (HsCmdArrApp _arrow _arg _ HsHigherOrderApp _rtl _ _ _)
   = unitFV appAName
 methodNamesCmd (HsCmdArrForm {}) = emptyFVs
 methodNamesCmd (HsCmdCast _ cmd) = methodNamesCmd cmd
 
 methodNamesCmd (HsCmdPar c) = methodNamesLCmd c
 
-methodNamesCmd (HsCmdIf _ _ c1 c2)
+methodNamesCmd (HsCmdIf _ _ c1 c2 _ _ _)
   = methodNamesLCmd c1 `plusFV` methodNamesLCmd c2 `addOneFV` choiceAName
 
-methodNamesCmd (HsCmdLet _ c)        = methodNamesLCmd c
+methodNamesCmd (HsCmdLet _ c _ _)    = methodNamesLCmd c
 methodNamesCmd (HsCmdDo stmts _ _ _) = methodNamesStmts stmts
-methodNamesCmd (HsCmdApp c _)        = methodNamesLCmd c
-methodNamesCmd (HsCmdLam match)      = methodNamesMatch match
+methodNamesCmd (HsCmdApp c _ _ _)    = methodNamesLCmd c
+methodNamesCmd (HsCmdLam match _ _)  = methodNamesMatch match
 
 methodNamesCmd (HsCmdCase _ matches)
   = methodNamesMatch matches `addOneFV` choiceAName

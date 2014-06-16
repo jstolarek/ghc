@@ -743,25 +743,32 @@ zonkCmd env (HsCmdCast co cmd)
   = do { co' <- zonkTcCoToCo env co
        ; cmd' <- zonkCmd env cmd
        ; return (HsCmdCast co' cmd') }
-zonkCmd env (HsCmdArrApp e1 e2 ty ho rl)
+zonkCmd env (HsCmdArrApp e1 e2 ty ho rl arr compose app)
   = do new_e1 <- zonkLExpr env e1
        new_e2 <- zonkLExpr env e2
        new_ty <- zonkTcTypeToType env ty
-       return (HsCmdArrApp new_e1 new_e2 new_ty ho rl)
+       new_arr     <- zonkExpr env arr
+       new_compose <- zonkExpr env compose
+       new_app     <- zonkExpr env app
+       return (HsCmdArrApp new_e1 new_e2 new_ty ho rl new_app new_compose new_arr)
 
 zonkCmd env (HsCmdArrForm op fixity args)
   = do new_op <- zonkLExpr env op
        new_args <- mapM (zonkCmdTop env) args
        return (HsCmdArrForm new_op fixity new_args)
 
-zonkCmd env (HsCmdApp c e)
+zonkCmd env (HsCmdApp c e arr compose)
   = do new_c <- zonkLCmd env c
        new_e <- zonkLExpr env e
-       return (HsCmdApp new_c new_e)
+       new_arr     <- zonkExpr env arr
+       new_compose <- zonkExpr env compose
+       return (HsCmdApp new_c new_e new_arr new_compose)
 
-zonkCmd env (HsCmdLam matches)
+zonkCmd env (HsCmdLam matches arr compose)
   = do new_matches <- zonkMatchGroup env zonkLCmd matches
-       return (HsCmdLam new_matches)
+       new_arr     <- zonkExpr env arr
+       new_compose <- zonkExpr env compose
+       return (HsCmdLam new_matches new_arr new_compose)
 
 zonkCmd env (HsCmdPar c)
   = do new_c <- zonkLCmd env c
@@ -772,23 +779,29 @@ zonkCmd env (HsCmdCase expr ms)
        new_ms <- zonkMatchGroup env zonkLCmd ms
        return (HsCmdCase new_expr new_ms)
 
-zonkCmd env (HsCmdIf eCond ePred cThen cElse)
-  = do { new_eCond <- fmapMaybeM (zonkExpr env) eCond
-       ; new_ePred <- zonkLExpr env ePred
-       ; new_cThen <- zonkLCmd env cThen
-       ; new_cElse <- zonkLCmd env cElse
-       ; return (HsCmdIf new_eCond new_ePred new_cThen new_cElse) }
+zonkCmd env (HsCmdIf eCond ePred cThen cElse arr compose choice)
+  = do new_eCond <- fmapMaybeM (zonkExpr env) eCond
+       new_ePred <- zonkLExpr env ePred
+       new_cThen <- zonkLCmd env cThen
+       new_cElse <- zonkLCmd env cElse
+       new_arr     <- zonkExpr env arr
+       new_compose <- zonkExpr env compose
+       new_choice  <- zonkExpr env choice
+       return (HsCmdIf new_eCond new_ePred new_cThen new_cElse
+                        new_arr new_compose new_choice)
 
-zonkCmd env (HsCmdLet binds cmd)
+zonkCmd env (HsCmdLet binds cmd arr compose)
   = do (new_env, new_binds) <- zonkLocalBinds env binds
        new_cmd <- zonkLCmd new_env cmd
-       return (HsCmdLet new_binds new_cmd)
+       new_arr     <- zonkExpr env arr
+       new_compose <- zonkExpr env compose
+       return (HsCmdLet new_binds new_cmd new_arr new_compose)
 
-zonkCmd env (HsCmdDo stmts ty arr_op compose_op)
+zonkCmd env (HsCmdDo stmts ty arr compose)
   = do (_, new_stmts) <- zonkStmts env zonkLCmd stmts
        new_ty <- zonkTcTypeToType env ty
-       new_arr      <- zonkExpr env arr_op
-       new_compose  <- zonkExpr env compose_op
+       new_arr      <- zonkExpr env arr
+       new_compose  <- zonkExpr env compose
        return (HsCmdDo new_stmts new_ty new_arr new_compose)
 
 
