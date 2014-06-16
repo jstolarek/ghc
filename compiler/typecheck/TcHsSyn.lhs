@@ -804,8 +804,6 @@ zonkCmd env (HsCmdDo stmts ty arr compose)
        new_compose  <- zonkExpr env compose
        return (HsCmdDo new_stmts new_ty new_arr new_compose)
 
-
-
 zonkCmdTop :: ZonkEnv -> LHsCmdTop TcId -> TcM (LHsCmdTop Id)
 zonkCmdTop env cmd = wrapLocM (zonk_cmd_top env) cmd
 
@@ -917,6 +915,46 @@ zonkStmt env zBody (RecStmt { recS_stmts = segStmts, recS_later_ids = lvs, recS_
                          , recS_mfix_fn = new_mfix_id, recS_bind_fn = new_bind_id
                          , recS_later_rets = new_later_rets
                          , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
+
+zonkStmt env zBody (RecStmtArrow
+                     { recS_stmts = segStmts, recS_later_ids = lvs, recS_rec_ids = rvs
+                     , recS_arr1_fn     = arr1_id    , recS_arr2_fn     = arr2_id
+                     , recS_compose1_fn = compose1_id, recS_compose2_fn = compose2_id
+                     , recS_arr1_rec_fn = arr1_rec_id, recS_arr2_rec_fn = arr2_rec_id
+                     , recS_first_fn    = first_id   , recS_loop_rec_fn = loop_rec_id
+                     , recS_compose1_rec_fn = compose1_rec_id
+                     , recS_compose2_rec_fn = compose2_rec_id
+                     , recS_later_rets = later_rets, recS_rec_rets = rec_rets
+                     , recS_ret_ty = ret_ty })
+  = do { new_rvs <- zonkIdBndrs env rvs
+       ; new_lvs <- zonkIdBndrs env lvs
+       ; new_ret_ty  <- zonkTcTypeToType env ret_ty
+       ; new_arr1_id <- zonkExpr env arr1_id
+       ; new_arr2_id <- zonkExpr env arr2_id
+       ; new_compose1_id <- zonkExpr env compose1_id
+       ; new_compose2_id <- zonkExpr env compose2_id
+       ; new_arr1_rec_id <- zonkExpr env arr1_rec_id
+       ; new_arr2_rec_id <- zonkExpr env arr2_rec_id
+       ; new_compose1_rec_id <- zonkExpr env compose1_rec_id
+       ; new_compose2_rec_id <- zonkExpr env compose2_rec_id
+       ; new_first_id <- zonkExpr env first_id
+       ; new_loop_id  <- zonkExpr env loop_rec_id
+       ; let env1 = extendIdZonkEnv env new_rvs
+       ; (env2, new_segStmts) <- zonkStmts env1 zBody segStmts
+        -- Zonk the ret-expressions in an envt that
+        -- has the polymorphic bindings in the envt
+       ; new_later_rets <- mapM (zonkExpr env2) later_rets
+       ; new_rec_rets <- mapM (zonkExpr env2) rec_rets
+       ; return (extendIdZonkEnv env new_lvs,     -- Only the lvs are needed
+                 RecStmtArrow
+                     { recS_stmts = new_segStmts, recS_later_ids = new_lvs
+                     , recS_rec_ids = new_rvs, recS_arr1_fn = new_arr1_id
+                     , recS_arr2_fn = new_arr2_id, recS_compose1_fn = new_compose1_id
+                     , recS_compose2_fn = new_compose2_id, recS_arr1_rec_fn = new_arr1_rec_id
+                     , recS_arr2_rec_fn = new_arr2_rec_id, recS_first_fn = new_first_id
+                     , recS_loop_rec_fn = new_loop_id, recS_compose1_rec_fn = new_compose1_rec_id
+                     , recS_compose2_rec_fn = new_compose2_rec_id, recS_later_rets = new_later_rets
+                     , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
 
 zonkStmt env zBody (BodyStmt body bind guard ty)
   = do new_body  <- zBody env body

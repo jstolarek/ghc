@@ -54,7 +54,7 @@ module HsUtils(
   mkTransformStmt, mkTransformByStmt,
   mkBodyStmt, mkBindStmt, mkLastStmt,
   emptyTransStmt, mkGroupUsingStmt, mkGroupByUsingStmt,
-  emptyRecStmt, mkRecStmt,
+  emptyRecStmt, emptyRecStmtArrow, mkRecStmt,
 
   -- Template Haskell
   mkHsSpliceTy, mkHsSpliceE, mkHsSpliceTE, mkHsSplice,
@@ -196,6 +196,7 @@ mkBodyStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBindStmt :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 
 emptyRecStmt :: StmtLR idL idR bodyR
+emptyRecStmtArrow :: StmtLR idL idR bodyR
 mkRecStmt    :: [LStmtLR idL idR bodyR] -> StmtLR idL idR bodyR
 
 
@@ -245,6 +246,17 @@ emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_ret_fn = noSyntaxExpr, recS_mfix_fn = noSyntaxExpr
                        , recS_bind_fn = noSyntaxExpr, recS_later_rets = []
                        , recS_rec_rets = [], recS_ret_ty = placeHolderType }
+
+emptyRecStmtArrow =
+    RecStmtArrow
+      { recS_stmts           = []          , recS_later_ids       = []
+      , recS_arr1_fn         = noSyntaxExpr, recS_arr2_fn         = noSyntaxExpr
+      , recS_compose1_fn     = noSyntaxExpr, recS_compose2_fn     = noSyntaxExpr
+      , recS_arr1_rec_fn     = noSyntaxExpr, recS_arr2_rec_fn     = noSyntaxExpr
+      , recS_compose1_rec_fn = noSyntaxExpr, recS_compose2_rec_fn = noSyntaxExpr
+      , recS_first_fn        = noSyntaxExpr, recS_loop_rec_fn     = noSyntaxExpr
+      , recS_later_rets      = []          , recS_rec_rets        = []
+      , recS_rec_ids         = []          , recS_ret_ty          = placeHolderType }
 
 mkRecStmt stmts = emptyRecStmt { recS_stmts = stmts }
 
@@ -614,8 +626,9 @@ collectStmtBinders (BodyStmtArrow {})   = []
 collectStmtBinders (LastStmtArrow {})   = []
 collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [s | ParStmtBlock ss _ _ <- xs, s <- ss]
-collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts
-collectStmtBinders (RecStmt { recS_stmts = ss })     = collectLStmtsBinders ss
+collectStmtBinders (TransStmt { trS_stmts = stmts })  = collectLStmtsBinders stmts
+collectStmtBinders (RecStmt { recS_stmts = ss })      = collectLStmtsBinders ss
+collectStmtBinders (RecStmtArrow { recS_stmts = ss }) = collectLStmtsBinders ss
 
 
 ----------------- Patterns --------------------------
@@ -804,8 +817,9 @@ lStmtsImplicits = hs_lstmts
     hs_stmt (BodyStmtArrow {})   = emptyNameSet
     hs_stmt (LastStmtArrow {})   = emptyNameSet
     hs_stmt (ParStmt xs _ _)     = hs_lstmts [s | ParStmtBlock ss _ _ <- xs, s <- ss]
-    hs_stmt (TransStmt { trS_stmts = stmts }) = hs_lstmts stmts
-    hs_stmt (RecStmt { recS_stmts = ss })     = hs_lstmts ss
+    hs_stmt (TransStmt { trS_stmts = stmts })  = hs_lstmts stmts
+    hs_stmt (RecStmt { recS_stmts = ss })      = hs_lstmts ss
+    hs_stmt (RecStmtArrow { recS_stmts = ss }) = hs_lstmts ss
 
     hs_local_binds (HsValBinds val_binds) = hsValBindsImplicits val_binds
     hs_local_binds (HsIPBinds _)         = emptyNameSet

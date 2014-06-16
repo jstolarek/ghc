@@ -722,6 +722,25 @@ addTickStmt isGuard stmt@(RecStmt {})
        ; return (stmt { recS_stmts = stmts', recS_ret_fn = ret'
                       , recS_mfix_fn = mfix', recS_bind_fn = bind' }) }
 
+addTickStmt isGuard stmt@(RecStmtArrow {})
+  = do { stmts'     <- addTickLStmts isGuard (recS_stmts stmt)
+       ; arr1       <- addTickSyntaxExpr hpcSrcSpan (recS_arr1_fn stmt)
+       ; arr2       <- addTickSyntaxExpr hpcSrcSpan (recS_arr2_fn stmt)
+       ; compose1   <- addTickSyntaxExpr hpcSrcSpan (recS_compose1_fn stmt)
+       ; compose2   <- addTickSyntaxExpr hpcSrcSpan (recS_compose2_fn stmt)
+       ; arr1_r     <- addTickSyntaxExpr hpcSrcSpan (recS_arr1_rec_fn stmt)
+       ; arr2_r     <- addTickSyntaxExpr hpcSrcSpan (recS_arr2_rec_fn stmt)
+       ; compose1_r <- addTickSyntaxExpr hpcSrcSpan (recS_compose1_rec_fn stmt)
+       ; compose2_r <- addTickSyntaxExpr hpcSrcSpan (recS_compose2_rec_fn stmt)
+       ; first      <- addTickSyntaxExpr hpcSrcSpan (recS_first_fn stmt)
+       ; loop       <- addTickSyntaxExpr hpcSrcSpan (recS_loop_rec_fn stmt)
+       ; return (stmt { recS_stmts = stmts', recS_arr1_fn = arr1
+                      , recS_arr2_fn = arr2, recS_compose1_fn = compose1
+                      , recS_compose2_fn = compose2, recS_arr1_rec_fn = arr1_r
+                      , recS_arr2_rec_fn = arr2_r, recS_compose1_rec_fn = compose1_r
+                      , recS_compose2_rec_fn = compose2_r, recS_first_fn = first
+                      , recS_loop_rec_fn = loop }) }
+
 addTick :: Maybe (Bool -> BoxLabel) -> LHsExpr Id -> TM (LHsExpr Id)
 addTick isGuard e | Just fn <- isGuard = addBinTickLHsExpr fn e
                   | otherwise          = addTickLHsExprRHS e

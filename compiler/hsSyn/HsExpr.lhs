@@ -1173,6 +1173,50 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
       , recS_ret_ty :: PostTcType    -- The type of of do { stmts; return (a,b,c) }
                                      -- With rebindable syntax the type might not
                                      -- be quite as simple as (m (tya, tyb, tyc)).
+  }
+
+  -- Recursive statement for arrow do-notation. Identical to above, except for
+  -- rebindable syntax operators.
+  | RecStmtArrow
+     { recS_stmts :: [LStmtLR idL idR body]
+
+        -- The next two fields are only valid after renaming
+     , recS_later_ids :: [idR] -- The ids are a subset of the variables bound by the
+                               -- stmts that are used in stmts that follow the RecStmt
+
+     , recS_rec_ids :: [idR]   -- Ditto, but these variables are the "recursive" ones,
+                               -- that are used before they are bound in the stmts of
+                               -- the RecStmt.
+        -- An Id can be in both groups
+        -- Both sets of Ids are (now) treated monomorphically
+        -- See Note [How RecStmt works] for why they are separate
+
+        -- Rebindable syntax
+     , recS_arr1_fn         :: SyntaxExpr idR -- The arr function
+     , recS_arr2_fn         :: SyntaxExpr idR -- The arr function
+     , recS_compose1_fn     :: SyntaxExpr idR -- The >>> function
+     , recS_compose2_fn     :: SyntaxExpr idR -- The >>> function
+     , recS_arr1_rec_fn     :: SyntaxExpr idR -- The arr function for dsRecCmd
+     , recS_arr2_rec_fn     :: SyntaxExpr idR -- The arr function for dsRecCmd
+     , recS_compose1_rec_fn :: SyntaxExpr idR -- The >>> function for dsRecCmd
+     , recS_compose2_rec_fn :: SyntaxExpr idR -- The >>> function for dsRecCmd
+     , recS_first_fn        :: SyntaxExpr idR -- The first function
+     , recS_loop_rec_fn     :: SyntaxExpr idR -- The loop function for dsRecCmd
+
+        -- These fields are only valid after typechecking
+     , recS_later_rets :: [PostTcExpr] -- (only used in the arrow version)
+     , recS_rec_rets :: [PostTcExpr] -- These expressions correspond 1-to-1
+                                     -- with recS_later_ids and recS_rec_ids,
+                                     -- and are the expressions that should be
+                                     -- returned by the recursion.
+                                     -- They may not quite be the Ids themselves,
+                                     -- because the Id may be *polymorphic*, but
+                                     -- the returned thing has to be *monomorphic*,
+                                     -- so they may be type applications
+
+      , recS_ret_ty :: PostTcType    -- The type of of do { stmts; return (a,b,c) }
+                                     -- With rebindable syntax the type might not
+                                     -- be quite as simple as (m (tya, tyb, tyc)).
       }
   deriving (Data, Typeable)
 
@@ -1352,6 +1396,12 @@ pprStmt (TransStmt { trS_stmts = stmts, trS_by = by, trS_using = using, trS_form
 
 pprStmt (RecStmt { recS_stmts = segment, recS_rec_ids = rec_ids
                  , recS_later_ids = later_ids })
+  = ptext (sLit "rec") <+>
+    vcat [ ppr_do_stmts segment
+         , ifPprDebug (vcat [ ptext (sLit "rec_ids=") <> ppr rec_ids
+                            , ptext (sLit "later_ids=") <> ppr later_ids])]
+pprStmt (RecStmtArrow { recS_stmts = segment, recS_rec_ids = rec_ids
+                      , recS_later_ids = later_ids })
   = ptext (sLit "rec") <+>
     vcat [ ppr_do_stmts segment
          , ifPprDebug (vcat [ ptext (sLit "rec_ids=") <> ppr rec_ids

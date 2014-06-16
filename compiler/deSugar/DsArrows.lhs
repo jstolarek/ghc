@@ -97,18 +97,11 @@ do_compose2 compose_id b_ty c_ty d_ty f g
   = trace "do_compose2" $ mkApps compose_id [Type b_ty, Type c_ty, Type d_ty, f, g]
 
 -- first :: forall b c d. a b c -> a (b,d) (c,d)
-do_first :: DsCmdEnv -> Type -> Type -> Type -> CoreExpr -> CoreExpr
-do_first ids b_ty c_ty d_ty f
-  = trace "do_first" $ mkApps (first_id ids) [Type b_ty, Type c_ty, Type d_ty, f]
-
 do_first2 :: CoreExpr -> Type -> Type -> Type -> CoreExpr -> CoreExpr
 do_first2 first_id b_ty c_ty d_ty f
   = trace "do_first2" $ mkApps first_id [Type b_ty, Type c_ty, Type d_ty, f]
 
 -- app :: forall b c. a (a b c, b) c
-do_app :: DsCmdEnv -> Type -> Type -> CoreExpr
-do_app ids b_ty c_ty = mkApps (app_id ids) [Type b_ty, Type c_ty]
-
 do_app2 :: CoreExpr -> Type -> Type -> CoreExpr
 do_app2 app_id b_ty c_ty = mkApps app_id [Type b_ty, Type c_ty]
 
@@ -126,10 +119,6 @@ do_choice2 choice_id b_ty c_ty d_ty f g
 
 -- loop :: forall b d c. a (b,d) (c,d) -> a b c
 -- note the swapping of d and c
-do_loop :: DsCmdEnv -> Type -> Type -> Type -> CoreExpr -> CoreExpr
-do_loop ids b_ty c_ty d_ty f
-  = mkApps (loop_id ids) [Type b_ty, Type d_ty, Type c_ty, f]
-
 do_loop2 :: CoreExpr -> Type -> Type -> Type -> CoreExpr -> CoreExpr
 do_loop2 loop_id b_ty c_ty d_ty f
   = mkApps loop_id [Type b_ty, Type d_ty, Type c_ty, f]
@@ -944,10 +933,16 @@ dsCmdStmt ids local_vars out_ids (LetStmt binds) env_ids = do
 --            first (loop (arr (\((ys1),~(ys2)) -> (ys)) >>> ss)) >>>
 --            arr (\((xs1),(xs2)) -> (xs')) >>> ss'
 
-dsCmdStmt ids local_vars out_ids
-        (RecStmt { recS_stmts = stmts
-                 , recS_later_ids = later_ids, recS_rec_ids = rec_ids
-                 , recS_later_rets = later_rets, recS_rec_rets = rec_rets })
+dsCmdStmt ids local_vars out_ids (RecStmtArrow
+           { recS_stmts       = stmts      , recS_later_ids   = later_ids
+           , recS_rec_ids     = rec_ids    , recS_later_rets  = later_rets
+           , recS_rec_rets    = rec_rets
+           , recS_arr1_fn     = arr1_id    , recS_arr2_fn     = arr2_id
+           , recS_compose1_fn = compose1_id, recS_compose2_fn = compose2_id
+           , recS_arr1_rec_fn = arr1_recOp , recS_arr2_rec_fn = arr2_recOp
+           , recS_first_fn    = first_id   , recS_loop_rec_fn = loop_recOp
+           , recS_compose1_rec_fn = compose1_recOp
+           , recS_compose2_rec_fn = compose2_recOp })
         env_ids = do
     trace "RecStmt 906" $ return ()
     let env2_id_set = mkVarSet out_ids `minusVarSet` mkVarSet later_ids
@@ -969,6 +964,7 @@ dsCmdStmt ids local_vars out_ids
 
     (core_loop, env1_id_set, env1_ids)
                <- dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets
+                           arr1_recOp arr2_recOp compose1_recOp compose2_recOp loop_recOp
 
     -- pre_loop_fn = \(env_ids) -> ((env1_ids),(env2_ids))
 
@@ -980,17 +976,24 @@ dsCmdStmt ids local_vars out_ids
 
     pre_loop_fn <- matchEnv env_ids pre_loop_body
 
-    -- arr pre_loop_fn >>> first (loop (...)) >>> arr post_loop_fn
+    -- desugar arrow operators
 
+    compose1 <- dsExpr compose1_id
+    compose2 <- dsExpr compose2_id
+    arr2     <- dsExpr arr2_id
+    arr1     <- dsExpr arr1_id
+    first    <- dsExpr first_id
+
+    -- arr pre_loop_fn >>> first (loop (...)) >>> arr post_loop_fn
     let
         env_ty = mkBigCoreVarTupTy env_ids
         out_ty = mkBigCoreVarTupTy out_ids
-        core_body = do_premap ids env_ty pre_pair_ty out_ty
+        core_body = do_premap2 compose1 arr1 env_ty pre_pair_ty out_ty
                 pre_loop_fn
-                (do_compose ids pre_pair_ty post_pair_ty out_ty
-                        (do_first ids env1_ty later_ty env2_ty
+                (do_compose2 compose2 pre_pair_ty post_pair_ty out_ty
+                        (do_first2 first env1_ty later_ty env2_ty
                                 core_loop)
-                        (do_arr ids post_pair_ty out_ty
+                        (do_arr2 arr2 post_pair_ty out_ty
                                 post_loop_fn))
 
     return (core_body, env1_id_set `unionVarSet` env2_id_set)
@@ -1008,12 +1011,18 @@ dsRecCmd
         -> [HsExpr Id]    -- expressions corresponding to later_ids
         -> [Id]           -- list of vars fed back through the loop
         -> [HsExpr Id]    -- expressions corresponding to rec_ids
+        -> HsExpr Id      -- arr arrow operator
+        -> HsExpr Id      -- arr arrow operator
+        -> HsExpr Id      -- >>> arrow operator
+        -> HsExpr Id      -- >>> arrow operator
+        -> HsExpr Id      -- loop arrow operator
         -> DsM (CoreExpr, -- desugared statement
                 IdSet,    -- subset of local vars that occur free
                 [Id])     -- same local vars as a list
 
-dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets = do
-    trace "dsRecCmd 968" $ return ()
+dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets
+         arr1_id arr2_id compose1_id compose2_id loop_id = do
+    trace "dsRecCmd" $ return ()
     let
         later_id_set = mkVarSet later_ids
         rec_id_set = mkVarSet rec_ids
@@ -1060,16 +1069,23 @@ dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets = do
 
     squash_pair_fn <- matchEnvStack env1_ids rec_id core_body
 
+    -- desugar arrow operators
+    arr1     <- dsExpr arr1_id
+    arr2     <- dsExpr arr2_id
+    compose1 <- dsExpr compose1_id
+    compose2 <- dsExpr compose2_id
+    loop     <- dsExpr loop_id
+
     -- loop (premap squash_pair_fn (ss >>> arr mk_pair_fn))
 
     let
         env_ty = mkBigCoreVarTupTy env_ids
-        core_loop = do_loop ids env1_ty later_ty rec_ty
-                (do_premap ids in_pair_ty env_ty out_pair_ty
+        core_loop = do_loop2 loop env1_ty later_ty rec_ty
+                (do_premap2 compose1 arr1 in_pair_ty env_ty out_pair_ty
                         squash_pair_fn
-                        (do_compose ids env_ty out_ty out_pair_ty
+                        (do_compose2 compose2 env_ty out_ty out_pair_ty
                                 core_stmts
-                                (do_arr ids out_ty out_pair_ty mk_pair_fn)))
+                                (do_arr2 arr2 out_ty out_pair_ty mk_pair_fn)))
 
     return (core_loop, env1_id_set, env1_ids)
 
@@ -1273,5 +1289,6 @@ collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [ s | ParStmtBlock ss _ _ <- xs, s <- ss]
 collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts
 collectStmtBinders (RecStmt { recS_later_ids = later_ids }) = later_ids
+collectStmtBinders (RecStmtArrow { recS_later_ids = later_ids }) = later_ids
 
 \end{code}

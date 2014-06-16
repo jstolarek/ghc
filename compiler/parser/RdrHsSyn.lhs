@@ -937,9 +937,14 @@ checkCmdStmt _ (BodyStmt e _ _ ty) =
     checkCommand e >>= (\c -> return $ BodyStmtArrow c ty noSyntaxExpr
                               noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
-checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do
+checkCmdStmt _ (RecStmt { recS_stmts = stmts, recS_later_ids = later_ids
+                        , recS_rec_ids = rec_ids, recS_later_rets = later_rets
+                        , recS_rec_rets = rec_rets, recS_ret_ty = ret_ty }) = do
     ss <- mapM checkCmdLStmt stmts
-    return $ stmt { recS_stmts = ss }
+    return $ RecStmtArrow ss           later_ids    rec_ids      noSyntaxExpr
+                          noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+                          noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+                          noSyntaxExpr later_rets   rec_rets     ret_ty
 checkCmdStmt l stmt = cmdStmtFail l stmt
 
 checkCmdMatchGroup :: MatchGroup RdrName (LHsExpr RdrName) -> P (MatchGroup RdrName (LHsCmd RdrName))

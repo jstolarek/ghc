@@ -804,6 +804,7 @@ dsDo stmts
 
     go _ (ParStmt   {}) _ = panic "dsDo ParStmt"
     go _ (TransStmt {}) _ = panic "dsDo TransStmt"
+    go _ (RecStmtArrow  {}) _ = panic "dsDo RecStmtArrow"
     go _ (LastStmtArrow {}) _ = panic "dsDo LastStmtArrow"
     go _ (BindStmtArrow {}) _ = panic "dsDo BindStmtArrow"
     go _ (BodyStmtArrow {}) _ = panic "dsDo BodyStmtArrow"

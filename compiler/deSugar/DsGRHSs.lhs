@@ -128,10 +128,11 @@ matchGuards (LastStmt  {} : _) _ _ _ = panic "matchGuards LastStmt"
 matchGuards (ParStmt   {} : _) _ _ _ = panic "matchGuards ParStmt"
 matchGuards (TransStmt {} : _) _ _ _ = panic "matchGuards TransStmt"
 matchGuards (RecStmt   {} : _) _ _ _ = panic "matchGuards RecStmt"
+matchGuards (RecStmtArrow   {} : _) _ _ _ = panic "matchGuards RecStmtArrow"
 -- VOODOO: is this correct? If not then we should do the same as for BindStmt
 matchGuards (BindStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
-matchGuards (BodyStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
-matchGuards (LastStmtArrow  {} : _) _ _ _ = panic "matchGuards BindStmtArrow"
+matchGuards (BodyStmtArrow  {} : _) _ _ _ = panic "matchGuards BodyStmtArrow"
+matchGuards (LastStmtArrow  {} : _) _ _ _ = panic "matchGuards LastStmtArrow"
 
 isTrueLHsExpr :: LHsExpr Id -> Maybe (CoreExpr -> DsM CoreExpr)
 

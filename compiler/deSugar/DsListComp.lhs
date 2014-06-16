@@ -251,6 +251,7 @@ deListComp (ParStmt stmtss_w_bndrs _ _ : quals) list
         pats = map mkBigLHsVarPatTup bndrs_s
 
 deListComp (RecStmt {} : _) _ = panic "deListComp RecStmt"
+deListComp (RecStmtArrow {}  : _) _ = panic "deListComp RecStmtArrow"
 deListComp (LastStmtArrow {} : _) _ = panic "deListComp LastStmtArrow"
 deListComp (BindStmtArrow {} : _) _ = panic "deListComp BindStmtArrow"
 deListComp (BodyStmtArrow {} : _) _ = panic "deListComp BodyStmtArrow"
@@ -349,6 +350,7 @@ dfListComp c_id n_id (BindStmt pat list1 _ _ : quals) = do
 
 dfListComp _ _ (ParStmt {} : _) = panic "dfListComp ParStmt"
 dfListComp _ _ (RecStmt {} : _) = panic "dfListComp RecStmt"
+dfListComp _ _ (RecStmtArrow  {} : _) = panic "dfListComp RecStmtArrow"
 dfListComp _ _ (LastStmtArrow {} : _) = panic "dfListComp LastStmtArrow"
 dfListComp _ _ (BindStmtArrow {} : _) = panic "dfListComp BindStmtArrow"
 dfListComp _ _ (BodyStmtArrow {} : _) = panic "dfListComp BodyStmtArrow"
@@ -601,6 +603,7 @@ dePArrComp (ParStmt {} : _) _ _ =
   panic "DsListComp.dePArrComp: malformed comprehension AST: ParStmt"
 dePArrComp (TransStmt {} : _) _ _ = panic "DsListComp.dePArrComp: TransStmt"
 dePArrComp (RecStmt   {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmt"
+dePArrComp (RecStmtArrow  {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmtArrow"
 dePArrComp (LastStmtArrow {} : _) _ _ = panic "DsListComp.dePArrComp: LastStmtArrow"
 dePArrComp (BindStmtArrow {} : _) _ _ = panic "DsListComp.dePArrComp: BindStmtArrow"
 dePArrComp (BodyStmtArrow {} : _) _ _ = panic "DsListComp.dePArrComp: BodyStmtArrow"
