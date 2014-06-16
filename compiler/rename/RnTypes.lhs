@@ -663,7 +663,7 @@ mkOpFormRn :: LHsCmdTop Name            -- Left operand; already rearranged
           -> RnM (HsCmd Name)
 
 -- (e11 `op1` e12) `op2` e2
-mkOpFormRn a1@(L loc (HsCmdTop (L _ (HsCmdArrForm op1 (Just fix1) [a11,a12])) _ _ _ c a))
+mkOpFormRn a1@(L loc (HsCmdTop (L _ (HsCmdArrForm op1 (Just fix1) [a11,a12])) _ _ c a))
         op2 fix2 a2
   | nofix_error
   = do precParseErr (get_op op1,fix1) (get_op op2,fix2)
@@ -672,7 +672,7 @@ mkOpFormRn a1@(L loc (HsCmdTop (L _ (HsCmdArrForm op1 (Just fix1) [a11,a12])) _ 
   | associate_right
   = do new_c <- mkOpFormRn a12 op2 fix2 a2
        return (HsCmdArrForm op1 (Just fix1)
-                  [a11, L loc (HsCmdTop (L loc new_c) placeHolderType placeHolderType [] c a)]) -- VOODOO CODING HERE. noSyntaxExpr?
+                  [a11, L loc (HsCmdTop (L loc new_c) placeHolderType placeHolderType c a)]) -- VOODOO CODING HERE. noSyntaxExpr?
         -- TODO: locs are wrong
   where
     (nofix_error, associate_right) = compareFixity fix1 fix2

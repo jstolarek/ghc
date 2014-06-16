@@ -46,38 +46,10 @@ import Outputable
 import Bag
 import VarSet
 import SrcLoc
-import ListSetOps( assocDefault )
-import FastString
 import Data.List
 \end{code}
 
 \begin{code}
-data DsCmdEnv = DsCmdEnv {
-       arr_id, compose_id, first_id, app_id, choice_id, loop_id :: CoreExpr
-    }
-
-mkCmdEnv :: CmdSyntaxTable Id -> DsM ([CoreBind], DsCmdEnv)
--- See Note [CmdSyntaxTable] in HsExpr
-mkCmdEnv tc_meths
-  = do { (meth_binds, prs) <- mapAndUnzipM mk_bind tc_meths
-       ; return (meth_binds, DsCmdEnv {
-               arr_id     = Var (find_meth prs arrAName),
-               compose_id = Var (find_meth prs composeAName),
-               first_id   = Var (find_meth prs firstAName),
-               app_id     = Var (find_meth prs appAName),
-               choice_id  = Var (find_meth prs choiceAName),
-               loop_id    = Var (find_meth prs loopAName)
-             }) }
-  where
-    mk_bind (std_name, expr)
-      = do { rhs <- dsExpr expr
-           ; id <- newSysLocalDs (exprType rhs)
-           ; return (NonRec id rhs, (std_name, id)) }
-
-    find_meth prs std_name
-      = assocDefault (mk_panic std_name) prs std_name
-    mk_panic std_name = pprPanic "mkCmdEnv" (ptext (sLit "Not found:") <+> ppr std_name)
-
 -- arr :: forall b c. (b -> c) -> a b c
 do_arr :: CoreExpr -> Type -> Type -> CoreExpr -> CoreExpr
 do_arr arr_id b_ty c_ty f = trace "do_arr" $ mkApps arr_id [Type b_ty, Type c_ty, f]
@@ -273,11 +245,10 @@ dsProcExpr
        :: LPat Id
        -> LHsCmdTop Id
        -> DsM CoreExpr
-dsProcExpr pat (L _ (HsCmdTop cmd _unitTy cmd_ty ids compose_id arr_id)) = do
+dsProcExpr pat (L _ (HsCmdTop cmd _unitTy cmd_ty compose_id arr_id)) = do
     trace "HsCmdTop" $ return ()
-    (meth_binds, meth_ids) <- mkCmdEnv ids
     let locals = mkVarSet (collectPatBinders pat)
-    (core_cmd, _free_vars, env_ids) <- dsfixCmd meth_ids locals unitTy cmd_ty cmd
+    (core_cmd, _free_vars, env_ids) <- dsfixCmd locals unitTy cmd_ty cmd
     let env_ty = mkBigCoreVarTupTy env_ids
     let env_stk_ty = mkCorePairTy env_ty unitTy
     let env_stk_expr = mkCorePairExpr (mkBigCoreVarTup env_ids) mkCoreUnitExpr
@@ -290,7 +261,7 @@ dsProcExpr pat (L _ (HsCmdTop cmd _unitTy cmd_ty ids compose_id arr_id)) = do
         proc_code = do_premap compose arr pat_ty env_stk_ty cmd_ty
                     (Lam var match_code)
                     core_cmd
-    return (mkLets meth_binds proc_code)
+    return proc_code
 \end{code}
 
 Translation of a command judgement of the form
@@ -302,13 +273,12 @@ to an expression e such that
     D |- e :: a (xs, stk) t
 
 \begin{code}
-dsLCmd :: DsCmdEnv -> IdSet -> Type -> Type -> LHsCmd Id -> [Id]
+dsLCmd :: IdSet -> Type -> Type -> LHsCmd Id -> [Id]
        -> DsM (CoreExpr, IdSet)
-dsLCmd ids local_vars stk_ty res_ty cmd env_ids
-  = dsCmd ids local_vars stk_ty res_ty (unLoc cmd) env_ids
+dsLCmd local_vars stk_ty res_ty cmd env_ids
+  = dsCmd local_vars stk_ty res_ty (unLoc cmd) env_ids
 
-dsCmd   :: DsCmdEnv        -- arrow combinators
-        -> IdSet           -- set of local vars available to this command
+dsCmd   :: IdSet           -- set of local vars available to this command
         -> Type            -- type of the stack (right-nested tuple)
         -> Type            -- return type of the command
         -> HsCmd Id        -- command to desugar
@@ -325,7 +295,7 @@ dsCmd   :: DsCmdEnv        -- arrow combinators
 --
 --        ---> premap (\ ((xs), _stk) -> arg) fun
 
-dsCmd ids local_vars stack_ty res_ty
+dsCmd local_vars stack_ty res_ty
         (HsCmdArrApp arrow arg arrow_ty HsFirstOrderApp _ arr_op compose_op _)
         env_ids = do
     trace "HsCmdArrApp first order" $ return ()
@@ -353,7 +323,7 @@ dsCmd ids local_vars stack_ty res_ty
 --
 --        ---> premap (\ ((xs), _stk) -> (fun, arg)) app
 
-dsCmd ids local_vars stack_ty res_ty
+dsCmd local_vars stack_ty res_ty
         (HsCmdArrApp arrow arg arrow_ty HsHigherOrderApp _ arr_op compose_op app_op)
         env_ids = do
     trace "HsCmdArrApp" $ return ()
@@ -386,14 +356,14 @@ dsCmd ids local_vars stack_ty res_ty
 --
 --        ---> premap (\ ((xs),stk) -> ((ys),(e,stk))) cmd
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg arr_op compose_op) env_ids = do
+dsCmd local_vars stack_ty res_ty (HsCmdApp cmd arg arr_op compose_op) env_ids = do
     trace "HsCmdApp" $ return ()
     core_arg <- dsLExpr arg
     let
         arg_ty = exprType core_arg
         stack_ty' = mkCorePairTy arg_ty stack_ty
     (core_cmd, free_vars, env_ids')
-             <- dsfixCmd ids local_vars stack_ty' res_ty cmd
+             <- dsfixCmd local_vars stack_ty' res_ty cmd
     stack_id <- newSysLocalDs stack_ty
     arg_id <- newSysLocalDs arg_ty
     -- push the argument expression onto the stack
@@ -422,7 +392,7 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdApp cmd arg arr_op compose_op) env_id
 --
 --        ---> premap (\ ((xs), (p1, ... (pk,stk)...)) -> ((ys),stk)) cmd
 
-dsCmd ids local_vars stack_ty res_ty
+dsCmd local_vars stack_ty res_ty
         (HsCmdLam (MG { mg_alts = [L _ (Match pats _ (GRHSs [L _ (GRHS [] body)] _ ))] }) arr_op compose_op)
         env_ids = do
     trace "HsCmdLam" $ return ()
@@ -430,7 +400,7 @@ dsCmd ids local_vars stack_ty res_ty
         pat_vars = mkVarSet (collectPatsBinders pats)
         local_vars' = pat_vars `unionVarSet` local_vars
         (pat_tys, stack_ty') = splitTypeAt (length pats) stack_ty
-    (core_body, free_vars, env_ids') <- dsfixCmd ids local_vars' stack_ty' res_ty body
+    (core_body, free_vars, env_ids') <- dsfixCmd local_vars' stack_ty' res_ty body
     param_ids <- mapM newSysLocalDs pat_tys
     stack_id' <- newSysLocalDs stack_ty'
 
@@ -456,8 +426,8 @@ dsCmd ids local_vars stack_ty res_ty
     return (do_premap arr compose in_ty in_ty' res_ty select_code core_body,
             free_vars `minusVarSet` pat_vars)
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
-  =     trace "HsCmdPar" $ dsLCmd ids local_vars stack_ty res_ty cmd env_ids
+dsCmd local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
+  =     trace "HsCmdPar" $ dsLCmd local_vars stack_ty res_ty cmd env_ids
 
 -- D, xs |- e :: Bool
 -- D; xs1 |-a c1 : stk --> t
@@ -469,12 +439,12 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdPar cmd) env_ids
 --             if e then Left ((xs1),stk) else Right ((xs2),stk))
 --               (c1 ||| c2)
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd
+dsCmd local_vars stack_ty res_ty (HsCmdIf mb_fun cond then_cmd else_cmd
                                               arr_op compose_op choice_op) env_ids = do
     trace "HsCmdIf" $ return ()
     core_cond <- dsLExpr cond
-    (core_then, fvs_then, then_ids) <- dsfixCmd ids local_vars stack_ty res_ty then_cmd
-    (core_else, fvs_else, else_ids) <- dsfixCmd ids local_vars stack_ty res_ty else_cmd
+    (core_then, fvs_then, then_ids) <- dsfixCmd local_vars stack_ty res_ty then_cmd
+    (core_else, fvs_else, else_ids) <- dsfixCmd local_vars stack_ty res_ty else_cmd
     stack_id   <- newSysLocalDs stack_ty
     either_con <- dsLookupTyCon eitherTyConName
     left_con   <- dsLookupDataCon leftDataConName
@@ -534,7 +504,7 @@ case bodies, containing the following fields:
    bodies with |||.
 
 \begin{code}
-dsCmd ids local_vars stack_ty res_ty
+dsCmd local_vars stack_ty res_ty
       (HsCmdCase exp (MG { mg_alts = matches, mg_arg_tys = arg_tys, mg_origin = origin })
                  arr_id compose_id choice_ids)
       env_ids = do
@@ -548,7 +518,7 @@ dsCmd ids local_vars stack_ty res_ty
         leaves = concatMap leavesMatch matches
         make_branch ((leaf, bound_vars), choice_id) = do
             (core_leaf, _fvs, leaf_ids) <-
-                  dsfixCmd ids (bound_vars `unionVarSet` local_vars) stack_ty res_ty leaf
+                  dsfixCmd (bound_vars `unionVarSet` local_vars) stack_ty res_ty leaf
             return ([mkHsEnvStackExpr leaf_ids stack_id],
                     envStackType leaf_ids stack_ty,
                     core_leaf, choice_id)
@@ -601,13 +571,13 @@ dsCmd ids local_vars stack_ty res_ty
 --
 --        ---> premap (\ ((xs),stk) -> let binds in ((ys),stk)) c
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body arr_op compose_op) env_ids = do
+dsCmd local_vars stack_ty res_ty (HsCmdLet binds body arr_op compose_op) env_ids = do
     trace "HsCmdLet" $ return ()
     let
         defined_vars = mkVarSet (collectLocalBinders binds)
         local_vars' = defined_vars `unionVarSet` local_vars
 
-    (core_body, _free_vars, env_ids') <- dsfixCmd ids local_vars' stack_ty res_ty body
+    (core_body, _free_vars, env_ids') <- dsfixCmd local_vars' stack_ty res_ty body
     stack_id <- newSysLocalDs stack_ty
     -- build a new environment, plus the stack, using the let bindings
     core_binds <- dsLocalBinds binds (buildEnvStack env_ids' stack_id)
@@ -630,9 +600,9 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body arr_op compose_op) env
 --
 --        ---> premap (\ (env,stk) -> env) c
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _ arr_op compose_op) env_ids = do
+dsCmd local_vars stack_ty res_ty (HsCmdDo stmts _ arr_op compose_op) env_ids = do
     trace "HsCmdDo" $ return ()
-    (core_stmts, env_ids') <- dsCmdDo ids local_vars res_ty stmts env_ids
+    (core_stmts, env_ids') <- dsCmdDo local_vars res_ty stmts env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     core_fst <- mkFstExpr env_ty stack_ty
     arr     <- dsExpr arr_op
@@ -650,7 +620,7 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _ arr_op compose_op) env_ids
 -- -----------------------------------
 -- D; xs |-a (|e c1 ... cn|) :: stk --> t    ---> e [t_xs] c1 ... cn
 
-dsCmd _ids local_vars _stack_ty _res_ty (HsCmdArrForm op _ args) env_ids = do
+dsCmd local_vars _stack_ty _res_ty (HsCmdArrForm op _ args) env_ids = do
     trace "HsCmdArrForm" $ return ()
     let env_ty = mkBigCoreVarTupTy env_ids
     core_op <- dsLExpr op
@@ -658,13 +628,13 @@ dsCmd _ids local_vars _stack_ty _res_ty (HsCmdArrForm op _ args) env_ids = do
     return (mkApps (App core_op (Type env_ty)) core_args,
             unionVarSets fv_sets)
 
-dsCmd ids local_vars stack_ty res_ty (HsCmdCast coercion cmd) env_ids = do
+dsCmd local_vars stack_ty res_ty (HsCmdCast coercion cmd) env_ids = do
     trace "HsCmdCast 641" $ return ()
-    (core_cmd, env_ids') <- dsCmd ids local_vars stack_ty res_ty cmd env_ids
+    (core_cmd, env_ids') <- dsCmd local_vars stack_ty res_ty cmd env_ids
     wrapped_cmd <- dsHsWrapper (mkWpCast coercion) core_cmd
     return (wrapped_cmd, env_ids')
 
-dsCmd _ _ _ _ _ c = pprPanic "dsCmd" (ppr c)
+dsCmd _ _ _ _ c = pprPanic "dsCmd" (ppr c)
 
 -- D; ys |-a c : stk --> t    (ys <= xs)
 -- ---------------------
@@ -676,10 +646,9 @@ dsTrimCmdArg
        -> LHsCmdTop Id   -- command argument to desugar
        -> DsM (CoreExpr, -- desugared expression
                IdSet)    -- subset of local vars that occur free
-dsTrimCmdArg local_vars env_ids (L _ (HsCmdTop cmd stack_ty cmd_ty ids compose_id arr_id)) = do
+dsTrimCmdArg local_vars env_ids (L _ (HsCmdTop cmd stack_ty cmd_ty compose_id arr_id)) = do
     trace "dsTrimCmdArg 658" $ return ()
-    (meth_binds, meth_ids) <- mkCmdEnv ids
-    (core_cmd, free_vars, env_ids') <- dsfixCmd meth_ids local_vars stack_ty cmd_ty cmd
+    (core_cmd, free_vars, env_ids') <- dsfixCmd local_vars stack_ty cmd_ty cmd
     stack_id <- newSysLocalDs stack_ty
     trim_code <- matchEnvStack env_ids stack_id (buildEnvStack env_ids' stack_id)
     compose <- dsExpr compose_id
@@ -689,22 +658,21 @@ dsTrimCmdArg local_vars env_ids (L _ (HsCmdTop cmd stack_ty cmd_ty ids compose_i
         in_ty' = envStackType env_ids' stack_ty
         arg_code = if env_ids' == env_ids then core_cmd else
                 do_premap compose arr in_ty in_ty' cmd_ty trim_code core_cmd
-    return (mkLets meth_binds arg_code, free_vars)
+    return (arg_code, free_vars)
 
 -- Given D; xs |-a c : stk --> t, builds c with xs fed back.
 -- Typically needs to be prefixed with arr (\(p, stk) -> ((xs),stk))
 
 dsfixCmd
-      :: DsCmdEnv       -- arrow combinators
-      -> IdSet          -- set of local vars available to this command
+      :: IdSet          -- set of local vars available to this command
       -> Type           -- type of the stack (right-nested tuple)
       -> Type           -- return type of the command
       -> LHsCmd Id      -- command to desugar
       -> DsM (CoreExpr, -- desugared expression
               IdSet,    -- subset of local vars that occur free
               [Id])     -- the same local vars as a list, fed back
-dsfixCmd ids local_vars stk_ty cmd_ty cmd
-  = trimInput (dsLCmd ids local_vars stk_ty cmd_ty cmd)
+dsfixCmd local_vars stk_ty cmd_ty cmd
+  = trimInput (dsLCmd local_vars stk_ty cmd_ty cmd)
 
 -- Feed back the list of local variables actually used a command,
 -- for use as the input tuple of the generated arrow.
@@ -729,8 +697,7 @@ Translation of command judgements of the form
 
 \begin{code}
 
-dsCmdDo :: DsCmdEnv       -- arrow combinators
-        -> IdSet          -- set of local vars available to this statement
+dsCmdDo :: IdSet          -- set of local vars available to this statement
         -> Type           -- return type of the statement
         -> [CmdLStmt Id]  -- statements to desugar
         -> [Id]           -- list of vars in the input to this statement
@@ -739,7 +706,7 @@ dsCmdDo :: DsCmdEnv       -- arrow combinators
         -> DsM (CoreExpr, -- desugared expression
                 IdSet)    -- subset of local vars that occur free
 
-dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
+dsCmdDo _ _ [] _ = panic "dsCmdDo"
 
 -- D; xs |-a c : () --> t
 -- --------------------------
@@ -747,9 +714,9 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
-dsCmdDo ids local_vars res_ty [L _ (LastStmtArrow body arr_id compose_id)] env_ids = do
+dsCmdDo local_vars res_ty [L _ (LastStmtArrow body arr_id compose_id)] env_ids = do
     trace "dsCmdDo LastStmt 726" $ return ()
-    (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
+    (core_body, env_ids') <- dsLCmd local_vars unitTy res_ty body env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     env_var <- newSysLocalDs env_ty
     let core_map = Lam env_var (mkCorePairExpr (Var env_var) mkCoreUnitExpr)
@@ -763,13 +730,13 @@ dsCmdDo ids local_vars res_ty [L _ (LastStmtArrow body arr_id compose_id)] env_i
                       core_body,
                       env_ids')
 
-dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
+dsCmdDo local_vars res_ty (stmt:stmts) env_ids = do
     trace "dsCmdDo stmts 741" $ return ()
     let
         bound_vars = mkVarSet (collectLStmtBinders stmt)
         local_vars' = bound_vars `unionVarSet` local_vars
-    (core_stmts, _, env_ids') <- trimInput (dsCmdDo ids local_vars' res_ty stmts)
-    (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
+    (core_stmts, _, env_ids') <- trimInput (dsCmdDo local_vars' res_ty stmts)
+    (core_stmt, fv_stmt) <- dsCmdLStmt local_vars env_ids' stmt env_ids
     compose <- dsExpr (getCompose stmt)
     return (do_compose compose
                       (mkBigCoreVarTupTy env_ids)
@@ -784,14 +751,13 @@ A statement maps one local environment to another, and is represented
 as an arrow from one tuple type to another.  A statement sequence is
 translated to a composition of such arrows.
 \begin{code}
-dsCmdLStmt :: DsCmdEnv -> IdSet -> [Id] -> CmdLStmt Id -> [Id]
+dsCmdLStmt :: IdSet -> [Id] -> CmdLStmt Id -> [Id]
            -> DsM (CoreExpr, IdSet)
-dsCmdLStmt ids local_vars out_ids cmd env_ids
-  = dsCmdStmt ids local_vars out_ids (unLoc cmd) env_ids
+dsCmdLStmt local_vars out_ids cmd env_ids
+  = dsCmdStmt local_vars out_ids (unLoc cmd) env_ids
 
 dsCmdStmt
-      :: DsCmdEnv       -- arrow combinators
-      -> IdSet          -- set of local vars available to this statement
+      :: IdSet          -- set of local vars available to this statement
       -> [Id]           -- list of vars in the output of this statement
       -> CmdStmt Id     -- statement to desugar
       -> [Id]           -- list of vars in the input to this statement
@@ -808,10 +774,10 @@ dsCmdStmt
 --        ---> premap (\ ((xs)) -> (((xs1),()),(xs')))
 --            (first c >>> arr snd) >>> ss
 
-dsCmdStmt ids local_vars out_ids (BodyStmtArrow cmd c_ty
+dsCmdStmt local_vars out_ids (BodyStmtArrow cmd c_ty
               arr1_id arr2_id compose1_id compose2_id first_id _) env_ids = do
     trace "BodyStmt 785" $ return ()
-    (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
+    (core_cmd, fv_cmd, env_ids1) <- dsfixCmd local_vars unitTy c_ty cmd
     core_mux <- matchEnv env_ids
         (mkCorePairExpr
           (mkCorePairExpr (mkBigCoreVarTup env_ids1) mkCoreUnitExpr)
@@ -844,10 +810,10 @@ dsCmdStmt ids local_vars out_ids (BodyStmtArrow cmd c_ty
 -- It would be simpler and more consistent to do this using second,
 -- but that's likely to be defined in terms of first.
 
-dsCmdStmt ids local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
+dsCmdStmt local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
                                  compose1_id compose2_id first_id _) env_ids = do
     trace "BindStmt 825" $ return ()
-    (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
+    (core_cmd, fv_cmd, env_ids1) <- dsfixCmd local_vars unitTy (hsLPatType pat) cmd
     let pat_ty   = hsLPatType pat
         pat_vars = mkVarSet (collectPatBinders pat)
         env_ids2 = varSetElems (mkVarSet out_ids `minusVarSet` pat_vars)
@@ -897,7 +863,7 @@ dsCmdStmt ids local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
 --
 --        ---> arr (\ (xs) -> let binds in (xs')) >>> ss
 
-dsCmdStmt ids local_vars out_ids (LetStmt binds arr_id) env_ids = do
+dsCmdStmt local_vars out_ids (LetStmt binds arr_id) env_ids = do
     -- build a new environment using the let bindings
     core_binds <- dsLocalBinds binds (mkBigCoreVarTup out_ids)
     -- match the old environment against the input
@@ -924,7 +890,7 @@ dsCmdStmt ids local_vars out_ids (LetStmt binds arr_id) env_ids = do
 --            first (loop (arr (\((ys1),~(ys2)) -> (ys)) >>> ss)) >>>
 --            arr (\((xs1),(xs2)) -> (xs')) >>> ss'
 
-dsCmdStmt ids local_vars out_ids (RecStmtArrow
+dsCmdStmt local_vars out_ids (RecStmtArrow
            { recS_stmts       = stmts      , recS_later_ids   = later_ids
            , recS_rec_ids     = rec_ids    , recS_later_rets  = later_rets
            , recS_rec_rets    = rec_rets
@@ -954,7 +920,7 @@ dsCmdStmt ids local_vars out_ids (RecStmtArrow
     --- loop (...)
 
     (core_loop, env1_id_set, env1_ids)
-               <- dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets
+               <- dsRecCmd local_vars stmts later_ids later_rets rec_ids rec_rets
                            arr1_recOp arr2_recOp compose1_recOp compose2_recOp loop_recOp
 
     -- pre_loop_fn = \(env_ids) -> ((env1_ids),(env2_ids))
@@ -989,14 +955,13 @@ dsCmdStmt ids local_vars out_ids (RecStmtArrow
 
     return (core_body, env1_id_set `unionVarSet` env2_id_set)
 
-dsCmdStmt _ _ _ _ s = pprPanic "dsCmdStmt" (ppr s)
+dsCmdStmt _ _ _ s = pprPanic "dsCmdStmt" (ppr s)
 
 --    loop (premap (\ ((env1_ids), ~(rec_ids)) -> (env_ids))
 --          (ss >>> arr (\ (out_ids) -> ((later_rets),(rec_rets))))) >>>
 
 dsRecCmd
-        :: DsCmdEnv       -- arrow combinators
-        -> IdSet          -- set of local vars available to this statement
+        :: IdSet          -- set of local vars available to this statement
         -> [CmdLStmt Id]  -- list of statements inside the RecCmd
         -> [Id]           -- list of vars defined here and used later
         -> [HsExpr Id]    -- expressions corresponding to later_ids
@@ -1011,7 +976,7 @@ dsRecCmd
                 IdSet,    -- subset of local vars that occur free
                 [Id])     -- same local vars as a list
 
-dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets
+dsRecCmd local_vars stmts later_ids later_rets rec_ids rec_rets
          arr1_id arr2_id compose1_id compose2_id loop_id = do
     trace "dsRecCmd" $ return ()
     let
@@ -1041,7 +1006,7 @@ dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets
 
     -- ss
 
-    (core_stmts, fv_stmts, env_ids) <- dsfixCmdStmts ids local_vars' out_ids stmts
+    (core_stmts, fv_stmts, env_ids) <- dsfixCmdStmts local_vars' out_ids stmts
 
     -- squash_pair_fn = \ ((env1_ids), ~(rec_ids)) -> (env_ids)
 
@@ -1086,35 +1051,33 @@ two environments (no stack)
 \begin{code}
 
 dsfixCmdStmts
-      :: DsCmdEnv       -- arrow combinators
-      -> IdSet          -- set of local vars available to this statement
+      :: IdSet          -- set of local vars available to this statement
       -> [Id]           -- output vars of these statements
       -> [CmdLStmt Id]  -- statements to desugar
       -> DsM (CoreExpr, -- desugared expression
               IdSet,    -- subset of local vars that occur free
               [Id])     -- same local vars as a list
 
-dsfixCmdStmts ids local_vars out_ids stmts
-  = trimInput (dsCmdStmts ids local_vars out_ids stmts)
+dsfixCmdStmts local_vars out_ids stmts
+  = trimInput (dsCmdStmts local_vars out_ids stmts)
 
 dsCmdStmts
-      :: DsCmdEnv       -- arrow combinators
-      -> IdSet          -- set of local vars available to this statement
+      :: IdSet          -- set of local vars available to this statement
       -> [Id]           -- output vars of these statements
       -> [CmdLStmt Id]  -- statements to desugar
       -> [Id]           -- list of vars in the input to these statements
       -> DsM (CoreExpr, -- desugared expression
               IdSet)    -- subset of local vars that occur free
 
-dsCmdStmts ids local_vars out_ids [stmt] env_ids
-  = dsCmdLStmt ids local_vars out_ids stmt env_ids
+dsCmdStmts local_vars out_ids [stmt] env_ids
+  = dsCmdLStmt local_vars out_ids stmt env_ids
 
-dsCmdStmts ids local_vars out_ids (stmt:stmts) env_ids = do
+dsCmdStmts local_vars out_ids (stmt:stmts) env_ids = do
     let
         bound_vars = mkVarSet (collectLStmtBinders stmt)
         local_vars' = bound_vars `unionVarSet` local_vars
-    (core_stmts, _fv_stmts, env_ids') <- dsfixCmdStmts ids local_vars' out_ids stmts
-    (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
+    (core_stmts, _fv_stmts, env_ids') <- dsfixCmdStmts local_vars' out_ids stmts
+    (core_stmt, fv_stmt) <- dsCmdLStmt local_vars env_ids' stmt env_ids
     trace "dsCmsStmts 1056" $ return ()
     compose <- dsExpr (getCompose stmt)
     return (do_compose compose
@@ -1125,7 +1088,7 @@ dsCmdStmts ids local_vars out_ids (stmt:stmts) env_ids = do
                        core_stmts,
                        fv_stmt)
 
-dsCmdStmts _ _ _ [] _ = panic "dsCmdStmts []"
+dsCmdStmts _ _ [] _ = panic "dsCmdStmts []"
 \end{code}
 
 Match a list of expressions against a list of patterns, left-to-right.

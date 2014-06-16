@@ -811,14 +811,13 @@ zonkCmdTop :: ZonkEnv -> LHsCmdTop TcId -> TcM (LHsCmdTop Id)
 zonkCmdTop env cmd = wrapLocM (zonk_cmd_top env) cmd
 
 zonk_cmd_top :: ZonkEnv -> HsCmdTop TcId -> TcM (HsCmdTop Id)
-zonk_cmd_top env (HsCmdTop cmd stack_tys ty ids compose_id arr_id)
+zonk_cmd_top env (HsCmdTop cmd stack_tys ty compose_id arr_id)
   = do new_cmd <- zonkLCmd env cmd
        new_stack_tys <- zonkTcTypeToType env stack_tys
        new_ty <- zonkTcTypeToType env ty
-       new_ids <- mapSndM (zonkExpr env) ids
        new_compose <- zonkExpr env compose_id
        new_arr <- zonkExpr env arr_id
-       return (HsCmdTop new_cmd new_stack_tys new_ty new_ids new_compose new_arr)
+       return (HsCmdTop new_cmd new_stack_tys new_ty new_compose new_arr)
 
 -------------------------------------------------------------------------
 zonkCoFn :: ZonkEnv -> HsWrapper -> TcM (ZonkEnv, HsWrapper)

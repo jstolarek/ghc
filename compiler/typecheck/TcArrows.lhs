@@ -29,7 +29,6 @@ import TcRnMonad
 import TcEnv
 import TcEvidence
 import Id( mkLocalId )
-import Inst
 import Name
 import Coercion ( Role(..) )
 import TysWiredIn
@@ -125,10 +124,10 @@ tcCmdTop :: CmdEnv
          -> CmdType
          -> TcM (LHsCmdTop TcId)
 
-tcCmdTop env (L loc (HsCmdTop cmd _ _ names compose_op arr_op)) cmd_ty@(cmd_stk, res_ty)
+tcCmdTop env (L loc (HsCmdTop cmd _ _ compose_op arr_op)) cmd_ty@(cmd_stk, res_ty)
   = setSrcSpan loc $
     do	{ cmd'   <- tcCmd env cmd cmd_ty
-	; names' <- mapM (tcSyntaxName ProcOrigin (cmd_arr env)) names
+--	; names' <- mapM (tcSyntaxName ProcOrigin (cmd_arr env)) names
         -- VOODOO CODING based on typechecking of >>= in TcMatches
         -- is it correct to use b and c variables for typechecking in both
         -- arr and compose?
@@ -143,7 +142,7 @@ tcCmdTop env (L loc (HsCmdTop cmd _ _ names compose_op arr_op)) cmd_ty@(cmd_stk,
 
         ; compose_op' <- tcSyntaxOp ProcOrigin compose_op
                                 (mkFunTys [mkCmdArrTy env a b, mkCmdArrTy env b c] (mkCmdArrTy env a c))
-	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty names' compose_op' arr_op') }
+	; return (L loc $ HsCmdTop cmd' cmd_stk res_ty compose_op' arr_op') }
 ----------------------------------------
 tcCmd  :: CmdEnv -> LHsCmd Name -> CmdType -> TcM (LHsCmd TcId)
 	-- The main recursive function

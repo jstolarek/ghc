@@ -798,12 +798,11 @@ addTickLPat :: LPat Id -> TM (LPat Id)
 addTickLPat pat = return pat
 
 addTickHsCmdTop :: HsCmdTop Id -> TM (HsCmdTop Id)
-addTickHsCmdTop (HsCmdTop cmd tys ty syntaxtable compose_id arr_id) =
+addTickHsCmdTop (HsCmdTop cmd tys ty compose_id arr_id) =
         return HsCmdTop `ap`
                (addTickLHsCmd cmd) `ap`
                (return tys) `ap`
                (return ty) `ap`
-               (return syntaxtable) `ap`
                (addTickSyntaxExpr hpcSrcSpan compose_id) `ap`
                (addTickSyntaxExpr hpcSrcSpan arr_id)
 

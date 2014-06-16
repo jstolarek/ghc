@@ -1506,7 +1506,7 @@ exp10 :: { LHsExpr RdrName }
                         {% checkPattern empty $2 >>= \ p ->
                             checkCommand $4 >>= \ cmd ->
                             return (LL $ HsProc p (LL $ HsCmdTop cmd placeHolderType
-                                                    placeHolderType undefined noSyntaxExpr noSyntaxExpr)) }
+                                                    placeHolderType noSyntaxExpr noSyntaxExpr)) }
                                                 -- TODO: is LL right here?
 
         | '{-# CORE' STRING '#-}' exp           { LL $ HsCoreAnn (getSTRING $2) $4 }
@@ -1605,7 +1605,7 @@ cmdargs :: { [LHsCmdTop RdrName] }
 
 acmd    :: { LHsCmdTop RdrName }
         : aexp2                 {% checkCommand $1 >>= \ cmd ->
-                                    return (L1 $ HsCmdTop cmd placeHolderType placeHolderType undefined noSyntaxExpr noSyntaxExpr) }
+                                    return (L1 $ HsCmdTop cmd placeHolderType placeHolderType noSyntaxExpr noSyntaxExpr) }
 
 cvtopbody :: { [LHsDecl RdrName] }
         :  '{'            cvtopdecls0 '}'               { $2 }

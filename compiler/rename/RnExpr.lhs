@@ -23,7 +23,6 @@ import {-# SOURCE #-} TcSplice( runQuasiQuoteExpr )
 import RnBinds   ( rnLocalBindsAndThen, rnLocalValBindsLHS, rnLocalValBindsRHS,
                    rnMatchGroup, rnGRHS, makeMiniFixityEnv)
 import HsSyn
-import HsUtils          ( leavesMatch )
 import TcRnMonad
 import Module           ( getModule )
 import RnEnv
@@ -412,18 +411,20 @@ rnCmdArgs (arg:args)
 rnCmdTop :: LHsCmdTop RdrName -> RnM (LHsCmdTop Name, FreeVars)
 rnCmdTop = wrapLocFstM rnCmdTop'
  where
-  rnCmdTop' (HsCmdTop cmd _ _ _ _ _)
+  rnCmdTop' (HsCmdTop cmd _ _ _ _)
    = do { (cmd', fvCmd) <- rnLCmd cmd
+{- VOODOO: leaving this commented out to be double for the review. I'm not sure
+           if I don't lose any important information by removing the syntax table
         ; let cmd_names = [arrAName, composeAName, firstAName] ++
                           nameSetToList (methodNamesCmd (unLoc cmd'))
         -- Generate the rebindable syntax for the monad
         ; (cmd_names', cmd_fvs) <- lookupSyntaxNames cmd_names
-
+-}
         ; (compose_op, fvs1) <- lookupStmtName ArrowExpr composeAName
         ; (arr_op    , fvs2) <- lookupStmtName ArrowExpr arrAName
 
-        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_names') compose_op arr_op,
-                  fvCmd `plusFV` cmd_fvs `plusFV` fvs1 `plusFV` fvs2) }
+        ; return (HsCmdTop cmd' placeHolderType placeHolderType {-(cmd_names `zip` cmd_names')-} compose_op arr_op,
+                  fvCmd `plusFV` fvs1 `plusFV` fvs2) }
 
 rnLCmd :: LHsCmd RdrName -> RnM (LHsCmd Name, FreeVars)
 rnLCmd = wrapLocFstM rnCmd
@@ -526,88 +527,6 @@ rnCmd (HsCmdDo stmts _ _ _)
                  , fvs1 `plusFV` fvs2 `plusFV` fvs3 ) }
 
 rnCmd cmd@(HsCmdCast {}) = pprPanic "rnCmd" (ppr cmd)
-
----------------------------------------------------
-type CmdNeeds = FreeVars        -- Only inhabitants are
-                                --      appAName, choiceAName, loopAName
-
--- find what methods the Cmd needs (loop, choice, apply)
-methodNamesLCmd :: LHsCmd Name -> CmdNeeds
-methodNamesLCmd = methodNamesCmd . unLoc
-
-methodNamesCmd :: HsCmd Name -> CmdNeeds
--- VOODOO: Is it ok to use generic appAName, choiceAName etc., or should
--- we extract actual names from the fields of HsCmd?
-methodNamesCmd (HsCmdArrApp _arrow _arg _ HsFirstOrderApp _rtl _ _ _)
-  = emptyFVs
-methodNamesCmd (HsCmdArrApp _arrow _arg _ HsHigherOrderApp _rtl _ _ _)
-  = unitFV appAName
-methodNamesCmd (HsCmdArrForm {}) = emptyFVs
-methodNamesCmd (HsCmdCast _ cmd) = methodNamesCmd cmd
-
-methodNamesCmd (HsCmdPar c) = methodNamesLCmd c
-
-methodNamesCmd (HsCmdIf _ _ c1 c2 _ _ _)
-  = methodNamesLCmd c1 `plusFV` methodNamesLCmd c2 `addOneFV` choiceAName
-
-methodNamesCmd (HsCmdLet _ c _ _)    = methodNamesLCmd c
-methodNamesCmd (HsCmdDo stmts _ _ _) = methodNamesStmts stmts
-methodNamesCmd (HsCmdApp c _ _ _)    = methodNamesLCmd c
-methodNamesCmd (HsCmdLam match _ _)  = methodNamesMatch match
-
-methodNamesCmd (HsCmdCase _ matches _ _ _)
-  = methodNamesMatch matches `addOneFV` choiceAName
-
---methodNamesCmd _ = emptyFVs
-   -- Other forms can't occur in commands, but it's not convenient
-   -- to error here so we just do what's convenient.
-   -- The type checker will complain later
-
----------------------------------------------------
-methodNamesMatch :: MatchGroup Name (LHsCmd Name) -> FreeVars
-methodNamesMatch (MG { mg_alts = ms })
-  = plusFVs (map do_one ms)
- where
-    do_one (L _ (Match _ _ grhss)) = methodNamesGRHSs grhss
-
--------------------------------------------------
--- gaw 2004
-methodNamesGRHSs :: GRHSs Name (LHsCmd Name) -> FreeVars
-methodNamesGRHSs (GRHSs grhss _) = plusFVs (map methodNamesGRHS grhss)
-
--------------------------------------------------
-
-methodNamesGRHS :: Located (GRHS Name (LHsCmd Name)) -> CmdNeeds
-methodNamesGRHS (L _ (GRHS _ rhs)) = methodNamesLCmd rhs
-
----------------------------------------------------
-methodNamesStmts :: [Located (StmtLR Name Name (LHsCmd Name))] -> FreeVars
-methodNamesStmts stmts = plusFVs (map methodNamesLStmt stmts)
-
----------------------------------------------------
-methodNamesLStmt :: Located (StmtLR Name Name (LHsCmd Name)) -> FreeVars
-methodNamesLStmt = methodNamesStmt . unLoc
-
-methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
-methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
-methodNamesStmt (BodyStmt cmd _ _ _)             = methodNamesLCmd cmd
-methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
--- VOODOO: do these five cases make sense? I removed loopAName from RecStmt
--- because arrow notation recursive decs are now represented by
--- RecStmtArrow. Also, if RecStmtArrow explicitly lists loopAName then why
--- LastStmtArrow, BodyStmtArrow and BindStmtArrow don't list other arrow
--- operators?
-methodNamesStmt (LastStmtArrow cmd _ _)          = methodNamesLCmd cmd
-methodNamesStmt (BodyStmtArrow cmd _ _ _ _ _ _ _)= methodNamesLCmd cmd
-methodNamesStmt (BindStmtArrow _ cmd _ _ _ _ _ _)= methodNamesLCmd cmd
-methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts
-methodNamesStmt (RecStmtArrow { recS_stmts = stmts })
-                                                 = methodNamesStmts stmts `addOneFV` loopAName
-methodNamesStmt (LetStmt {})                     = emptyFVs
-methodNamesStmt (ParStmt {})                     = emptyFVs
-methodNamesStmt (TransStmt {})                   = emptyFVs
-   -- ParStmt and TransStmt can't occur in commands, but it's not convenient to error
-   -- here so we just do what's convenient
 \end{code}
 
 
