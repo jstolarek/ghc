@@ -125,11 +125,6 @@ do_loop2 loop_id b_ty c_ty d_ty f
 
 -- premap :: forall b c d. (b -> c) -> a c d -> a b d
 -- premap f g = arr f >>> g
-do_premap :: DsCmdEnv -> Type -> Type -> Type ->
-             CoreExpr -> CoreExpr -> CoreExpr
-do_premap ids b_ty c_ty d_ty f g
-   =     trace "do_premap" $ do_compose ids b_ty c_ty d_ty (do_arr ids b_ty c_ty f) g
-
 do_premap2 :: CoreExpr -> CoreExpr -> Type -> Type -> Type ->
              CoreExpr -> CoreExpr -> CoreExpr
 do_premap2 compose_id arr_id b_ty c_ty d_ty f g
@@ -553,7 +548,7 @@ case bodies, containing the following fields:
 
 \begin{code}
 dsCmd ids local_vars stack_ty res_ty
-      (HsCmdCase exp (MG { mg_alts = matches, mg_arg_tys = arg_tys, mg_origin = origin }))
+      (HsCmdCase exp (MG { mg_alts = matches, mg_arg_tys = arg_tys, mg_origin = origin }) arr_id compose_id)
       env_ids = do
     trace "HsCmdCase" $ return ()
     stack_id <- newSysLocalDs stack_ty
@@ -603,7 +598,11 @@ dsCmd ids local_vars stack_ty res_ty
         -- which is the type of matches'
 
     core_matches <- matchEnvStack env_ids stack_id core_body
-    return (do_premap ids in_ty sum_ty res_ty core_matches core_choices,
+
+    arr <- dsExpr arr_id
+    compose <- dsExpr compose_id
+
+    return (do_premap2 compose arr in_ty sum_ty res_ty core_matches core_choices,
             exprFreeIds core_body  `intersectVarSet` local_vars)
 
 -- D; ys |-a cmd : stk --> t
@@ -948,7 +947,7 @@ dsCmdStmt ids local_vars out_ids (RecStmtArrow
     let env2_id_set = mkVarSet out_ids `minusVarSet` mkVarSet later_ids
         env2_ids = varSetElems env2_id_set
         env2_ty = mkBigCoreVarTupTy env2_ids
-
+ 
     -- post_loop_fn = \((later_ids),(env2_ids)) -> (out_ids)
 
 
