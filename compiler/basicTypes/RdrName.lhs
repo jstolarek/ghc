@@ -128,6 +128,16 @@ data RdrName
 
 \begin{code}
 
+instance Uniquable RdrName where
+    getUnique = rdrNameUnique
+
+-- VOODOO: I think this is wrong.
+rdrNameUnique :: RdrName -> Unique
+rdrNameUnique (Unqual occName) = getUnique occName
+rdrNameUnique (Qual _ occName) = getUnique occName
+rdrNameUnique (Orig _ occName) = getUnique occName
+rdrNameUnique (Exact name    ) = getUnique name
+
 instance HasOccName RdrName where
   occName = rdrNameOcc
 

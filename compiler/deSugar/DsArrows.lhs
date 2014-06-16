@@ -99,11 +99,6 @@ do_app2 app_id b_ty c_ty = mkApps app_id [Type b_ty, Type c_ty]
 
 -- (|||) :: forall b d c. a b d -> a c d -> a (Either b c) d
 -- note the swapping of d and c
-do_choice :: DsCmdEnv -> Type -> Type -> Type ->
-             CoreExpr -> CoreExpr -> CoreExpr
-do_choice ids b_ty c_ty d_ty f g
-  = mkApps (choice_id ids) [Type b_ty, Type d_ty, Type c_ty, f, g]
-
 do_choice2 :: CoreExpr -> Type -> Type -> Type ->
              CoreExpr -> CoreExpr -> CoreExpr
 do_choice2 choice_id b_ty c_ty d_ty f g
@@ -540,7 +535,8 @@ case bodies, containing the following fields:
 
 \begin{code}
 dsCmd ids local_vars stack_ty res_ty
-      (HsCmdCase exp (MG { mg_alts = matches, mg_arg_tys = arg_tys, mg_origin = origin }) arr_id compose_id)
+      (HsCmdCase exp (MG { mg_alts = matches, mg_arg_tys = arg_tys, mg_origin = origin })
+                 arr_id compose_id choice_ids)
       env_ids = do
     trace "HsCmdCase" $ return ()
     stack_id <- newSysLocalDs stack_ty
@@ -550,14 +546,15 @@ dsCmd ids local_vars stack_ty res_ty
 
     let
         leaves = concatMap leavesMatch matches
-        make_branch (leaf, bound_vars) = do
+        make_branch ((leaf, bound_vars), choice_id) = do
             (core_leaf, _fvs, leaf_ids) <-
                   dsfixCmd ids (bound_vars `unionVarSet` local_vars) stack_ty res_ty leaf
             return ([mkHsEnvStackExpr leaf_ids stack_id],
                     envStackType leaf_ids stack_ty,
-                    core_leaf)
+                    core_leaf, choice_id)
 
-    branches <- mapM make_branch leaves
+    choices <- mapM dsExpr choice_ids
+    branches <- mapM make_branch (zip leaves choices)
     either_con <- dsLookupTyCon eitherTyConName
     left_con <- dsLookupDataCon leftDataConName
     right_con <- dsLookupDataCon rightDataConName
@@ -570,13 +567,14 @@ dsCmd ids local_vars stack_ty res_ty
         -- Prefix each tuple with a distinct series of Left's and Right's,
         -- in a balanced way, keeping track of the types.
 
-        merge_branches (builds1, in_ty1, core_exp1)
-                       (builds2, in_ty2, core_exp2)
+        merge_branches (builds1, in_ty1, core_exp1, choice1)
+                       (builds2, in_ty2, core_exp2, choice2)
           = (map (left_expr in_ty1 in_ty2) builds1 ++
                 map (right_expr in_ty1 in_ty2) builds2,
              mkTyConApp either_con [in_ty1, in_ty2],
-             do_choice ids in_ty1 in_ty2 res_ty core_exp1 core_exp2)
-        (leaves', sum_ty, core_choices) = foldb merge_branches branches
+             do_choice2 choice1 in_ty1 in_ty2 res_ty core_exp1 core_exp2,
+             choice2 )
+        (leaves', sum_ty, core_choices, _) = foldb merge_branches branches
 
         -- Replace the commands in the case with these tagged tuples,
         -- yielding a HsExpr Id we can feed to dsExpr.
@@ -1144,18 +1142,6 @@ matchSimplys (exp:exps) ctxt (pat:pats) result_expr fail_expr = do
     match_code <- matchSimplys exps ctxt pats result_expr fail_expr
     matchSimply exp ctxt pat match_code fail_expr
 matchSimplys _ _ _ _ _ = panic "matchSimplys"
-\end{code}
-
-List of leaf expressions, with set of variables bound in each
-
-\begin{code}
-leavesMatch :: LMatch Id (Located (body Id)) -> [(Located (body Id), IdSet)]
-leavesMatch (L _ (Match pats _ (GRHSs grhss binds)))
-  = let defined_vars = mkVarSet (collectPatsBinders pats) `unionVarSet`
-                       mkVarSet (collectLocalBinders binds)
-    in
-    [(body, mkVarSet (collectLStmtsBinders stmts) `unionVarSet` defined_vars)
-    | L _ (GRHS stmts body) <- grhss]
 \end{code}
 
 Replace the leaf commands in a match

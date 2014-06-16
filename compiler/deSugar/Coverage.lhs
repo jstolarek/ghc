@@ -834,12 +834,13 @@ addTickHsCmd (OpApp e1 c2 fix c3) =
                 (addTickLHsCmd c3)
 -}
 addTickHsCmd (HsCmdPar e) = liftM HsCmdPar (addTickLHsCmd e)
-addTickHsCmd (HsCmdCase e mgs arr compose) =
-        liftM4 HsCmdCase
+addTickHsCmd (HsCmdCase e mgs arr compose choices) =
+        liftM5 HsCmdCase
                 (addTickLHsExpr e)
                 (addTickCmdMatchGroup mgs)
                 (addTickSyntaxExpr hpcSrcSpan arr)
                 (addTickSyntaxExpr hpcSrcSpan compose)
+                (mapM (addTickSyntaxExpr hpcSrcSpan) choices)
 addTickHsCmd (HsCmdIf cnd e1 c2 c3 arr compose choice) =
         return (HsCmdIf cnd) `ap`
                  (addBinTickLHsExpr (BinBox CondBinBox) e1) `ap`

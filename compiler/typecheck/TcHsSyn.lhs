@@ -774,12 +774,13 @@ zonkCmd env (HsCmdPar c)
   = do new_c <- zonkLCmd env c
        return (HsCmdPar new_c)
 
-zonkCmd env (HsCmdCase expr ms arr compose)
+zonkCmd env (HsCmdCase expr ms arr compose choices)
   = do new_expr <- zonkLExpr env expr
        new_ms <- zonkMatchGroup env zonkLCmd ms
        new_arr     <- zonkExpr env arr
        new_compose <- zonkExpr env compose
-       return (HsCmdCase new_expr new_ms new_arr new_compose)
+       new_choices <- mapM (zonkExpr env) choices
+       return (HsCmdCase new_expr new_ms new_arr new_compose new_choices)
 
 zonkCmd env (HsCmdIf eCond ePred cThen cElse arr compose choice)
   = do new_eCond <- fmapMaybeM (zonkExpr env) eCond

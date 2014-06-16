@@ -23,6 +23,7 @@ import {-# SOURCE #-} TcSplice( runQuasiQuoteExpr )
 import RnBinds   ( rnLocalBindsAndThen, rnLocalValBindsLHS, rnLocalValBindsRHS,
                    rnMatchGroup, rnGRHS, makeMiniFixityEnv)
 import HsSyn
+import HsUtils          ( leavesMatch )
 import TcRnMonad
 import Module           ( getModule )
 import RnEnv
@@ -487,13 +488,16 @@ rnCmd (HsCmdPar e)
   = do  { (e', fvs_e) <- rnLCmd e
         ; return (HsCmdPar e', fvs_e) }
 
-rnCmd (HsCmdCase expr matches _ _)
+rnCmd (HsCmdCase expr matches@(MG { mg_alts = alts }) _ _ _)
   = rnLExpr expr                        `thenM` \ (new_expr, e_fvs) ->
     rnMatchGroup CaseAlt rnLCmd matches `thenM` \ (new_matches, ms_fvs) -> do
     (arr_op    , fvs1) <- lookupStmtName ArrowExpr arrAName
     (compose_op, fvs2) <- lookupStmtName ArrowExpr composeAName
-    return ( HsCmdCase new_expr new_matches arr_op compose_op
-           , plusFVs [e_fvs, ms_fvs, fvs1, fvs2 ] )
+    let choices_no = length (concatMap leavesMatch alts)
+    (choice_ops, fvs_choice)
+        <- unzip `liftM` replicateM choices_no (lookupStmtName ArrowExpr choiceAName)
+    return ( HsCmdCase new_expr new_matches arr_op compose_op choice_ops
+           , plusFVs ( e_fvs : ms_fvs : fvs1 : fvs2 : fvs_choice ) )
 
 rnCmd (HsCmdIf _ p b1 b2 _ _ _)
   = do (p', fvP)   <- rnLExpr p
@@ -551,7 +555,7 @@ methodNamesCmd (HsCmdDo stmts _ _ _) = methodNamesStmts stmts
 methodNamesCmd (HsCmdApp c _ _ _)    = methodNamesLCmd c
 methodNamesCmd (HsCmdLam match _ _)  = methodNamesMatch match
 
-methodNamesCmd (HsCmdCase _ matches _ _)
+methodNamesCmd (HsCmdCase _ matches _ _ _)
   = methodNamesMatch matches `addOneFV` choiceAName
 
 --methodNamesCmd _ = emptyFVs

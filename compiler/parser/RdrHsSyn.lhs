@@ -902,7 +902,7 @@ checkCmd _ (HsLam mg) =
 checkCmd _ (HsPar e) =
     checkCommand e >>= (\c -> return $ HsCmdPar c)
 checkCmd _ (HsCase e mg) =
-    checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdCase e mg' noSyntaxExpr noSyntaxExpr)
+    checkCmdMatchGroup mg >>= (\mg' -> return $ HsCmdCase e mg' noSyntaxExpr noSyntaxExpr [])
 checkCmd _ (HsIf cf ep et ee) = do
     pt <- checkCommand et
     pe <- checkCommand ee

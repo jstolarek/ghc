@@ -165,11 +165,16 @@ tc_cmd env (HsCmdLet binds (L body_loc body) _ _) res_ty
 	; return (HsCmdLet binds' (L body_loc body') noSyntaxExpr noSyntaxExpr) }
 
 -- VOODOO
-tc_cmd env in_cmd@(HsCmdCase scrut matches _ _) (stk, res_ty)
+tc_cmd env in_cmd@(HsCmdCase scrut matches@(MG { mg_alts = alts }) _ _ _) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
       (scrut', scrut_ty) <- tcInferRho scrut
       matches' <- tcMatchesCase match_ctxt scrut_ty matches res_ty
-      return (HsCmdCase scrut' matches' noSyntaxExpr noSyntaxExpr)
+
+      -- temporary, until proper typechecking is in place
+      let choices_no = length (concatMap leavesMatch alts)
+          foo = replicate choices_no noSyntaxExpr
+
+      return (HsCmdCase scrut' matches' noSyntaxExpr noSyntaxExpr foo)
   where
     match_ctxt = MC { mc_what = CaseAlt,
                       mc_body = mc_body }

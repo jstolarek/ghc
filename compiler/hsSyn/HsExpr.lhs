@@ -749,6 +749,7 @@ data HsCmd id
                 (MatchGroup id (LHsCmd id))     -- bodies are HsCmd's
                 (SyntaxExpr id)                 -- arr operator
                 (SyntaxExpr id)                 -- compose operator
+                [SyntaxExpr id]                 -- choice operators
 
   | HsCmdIf     (Maybe (SyntaxExpr id))         -- cond function
                 (LHsExpr id)                    -- predicate
@@ -839,7 +840,7 @@ ppr_cmd (HsCmdApp c e _ _)
 ppr_cmd (HsCmdLam matches _ _)
   = pprMatches (LambdaExpr :: HsMatchContext id) matches
 
-ppr_cmd (HsCmdCase expr matches _ _)
+ppr_cmd (HsCmdCase expr matches _ _ _)
   = sep [ sep [ptext (sLit "case"), nest 4 (ppr expr), ptext (sLit "of {")],
           nest 2 (pprMatches (CaseAlt :: HsMatchContext id) matches <+> char '}') ]
 

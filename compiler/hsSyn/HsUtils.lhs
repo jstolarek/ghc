@@ -4,7 +4,7 @@
 
 Here we collect a variety of helper functions that construct or
 analyse HsSyn.  All these functions deal with generic HsSyn; functions
-which deal with the intantiated versions are located elsewhere:
+which deal with the instantiated versions are located elsewhere:
 
    Parameterised by	Module
    ----------------     -------------
@@ -74,7 +74,10 @@ module HsUtils(
   hsForeignDeclsBinders, hsGroupBinders, hsDataFamInstBinders,
 
   -- Collecting implicit binders
-  lStmtsImplicits, hsValBindsImplicits, lPatImplicits
+  lStmtsImplicits, hsValBindsImplicits, lPatImplicits,
+
+  -- Desugaring of arrow notation
+  leavesMatch
   ) where
 
 #include "HsVersions.h"
@@ -102,6 +105,8 @@ import Util
 import Bag
 import Outputable
 import Data.Either
+import UniqSet
+import Unique
 \end{code}
 
 
@@ -870,4 +875,20 @@ lPatImplicits = hs_lpat
                                                     , let pat = hsRecFieldArg fld
                                                           pat_explicit = maybe True (i<) (rec_dotdot fs)]
     details (InfixCon p1 p2) = hs_lpat p1 `unionNameSets` hs_lpat p2
+\end{code}
+
+List of leaf expressions, with set of variables bound in each. This is used for
+desugaring of arrow notation. It is used by the desugarer and renamer.
+
+VOODOO: Perhaps there is a better place to put this function?
+
+\begin{code}
+leavesMatch :: (Uniquable id) => LMatch id (Located (body id)) -> [(Located (body id), UniqSet id)]
+leavesMatch (L _ (Match pats _ (GRHSs grhss binds)))
+  = let defined_vars = mkUniqSet (collectPatsBinders pats) `unionUniqSets`
+                       mkUniqSet (collectLocalBinders binds)
+    in
+    [(body, mkUniqSet (collectLStmtsBinders stmts) `unionUniqSets` defined_vars)
+    | L _ (GRHS stmts body) <- grhss]
+
 \end{code}
