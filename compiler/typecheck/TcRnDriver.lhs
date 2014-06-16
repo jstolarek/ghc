@@ -1294,8 +1294,12 @@ tcUserStmt (L loc (BodyStmt expr _ _ _))
                           -- (if we are at a breakpoint, say).  We must put those free vars
 
               -- [let it = expr]
-              let_stmt  = L loc $ LetStmt $ HsValBinds $
-                          ValBindsOut [(NonRecursive,unitBag the_bind)] []
+              let_stmt  = L loc $ LetStmt (HsValBinds (ValBindsOut
+                                           [(NonRecursive,unitBag the_bind)] []))
+                   -- VOODOO: I don't know how to create arr out of thin air
+                   -- here, so I just use noSyntaxExpr not sure if that's
+                   -- correct though.
+                                           noSyntaxExpr
 
               -- [it <- e]
               bind_stmt = L loc $ BindStmt (L loc (VarPat fresh_it))

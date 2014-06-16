@@ -758,7 +758,7 @@ dsDo stmts
            ; rest <- goL stmts
            ; return (mkApps then_expr2 [rhs2, rest]) }
 
-    go _ (LetStmt binds) stmts
+    go _ (LetStmt binds _) stmts
       = do { rest <- goL stmts
            ; dsLocalBinds binds rest }
 

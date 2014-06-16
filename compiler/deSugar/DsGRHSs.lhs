@@ -111,7 +111,7 @@ matchGuards (BodyStmt expr _ _ _ : stmts) ctx rhs rhs_ty = do
     pred_expr <- dsLExpr expr
     return (mkGuardedMatchResult pred_expr match_result)
 
-matchGuards (LetStmt binds : stmts) ctx rhs rhs_ty = do
+matchGuards (LetStmt binds _ : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     return (adjustMatchResultDs (dsLocalBinds binds) match_result)
         -- NB the dsLet occurs inside the match_result

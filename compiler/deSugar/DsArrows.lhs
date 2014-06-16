@@ -79,18 +79,10 @@ mkCmdEnv tc_meths
     mk_panic std_name = pprPanic "mkCmdEnv" (ptext (sLit "Not found:") <+> ppr std_name)
 
 -- arr :: forall b c. (b -> c) -> a b c
-do_arr :: DsCmdEnv -> Type -> Type -> CoreExpr -> CoreExpr
-do_arr ids b_ty c_ty f = trace "do_arr" $ mkApps (arr_id ids) [Type b_ty, Type c_ty, f]
-
 do_arr2 :: CoreExpr -> Type -> Type -> CoreExpr -> CoreExpr
 do_arr2 arr_id b_ty c_ty f = trace "do_arr2" $ mkApps arr_id [Type b_ty, Type c_ty, f]
 
 -- (>>>) :: forall b c d. a b c -> a c d -> a b d
-do_compose :: DsCmdEnv -> Type -> Type -> Type ->
-              CoreExpr -> CoreExpr -> CoreExpr
-do_compose ids b_ty c_ty d_ty f g
-  = trace "do_compose" $ mkApps (compose_id ids) [Type b_ty, Type c_ty, Type d_ty, f, g]
-
 do_compose2 :: CoreExpr -> Type -> Type -> Type ->
                CoreExpr -> CoreExpr -> CoreExpr
 do_compose2 compose_id b_ty c_ty d_ty f g
@@ -780,7 +772,8 @@ dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
         local_vars' = bound_vars `unionVarSet` local_vars
     (core_stmts, _, env_ids') <- trimInput (dsCmdDo ids local_vars' res_ty stmts)
     (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
-    return (do_compose ids
+    compose <- dsExpr (getCompose stmt)
+    return (do_compose2 compose
                       (mkBigCoreVarTupTy env_ids)
                       (mkBigCoreVarTupTy env_ids')
                       res_ty
@@ -818,7 +811,7 @@ dsCmdStmt
 --            (first c >>> arr snd) >>> ss
 
 dsCmdStmt ids local_vars out_ids (BodyStmtArrow cmd c_ty
-              arr1_id arr2_id compose1_id compose2_id first_id) env_ids = do
+              arr1_id arr2_id compose1_id compose2_id first_id _) env_ids = do
     trace "BodyStmt 785" $ return ()
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
     core_mux <- matchEnv env_ids
@@ -854,7 +847,7 @@ dsCmdStmt ids local_vars out_ids (BodyStmtArrow cmd c_ty
 -- but that's likely to be defined in terms of first.
 
 dsCmdStmt ids local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
-                                 compose1_id compose2_id first_id) env_ids = do
+                                 compose1_id compose2_id first_id _) env_ids = do
     trace "BindStmt 825" $ return ()
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
     let pat_ty   = hsLPatType pat
@@ -906,13 +899,14 @@ dsCmdStmt ids local_vars out_ids (BindStmtArrow pat cmd arr1_id arr2_id
 --
 --        ---> arr (\ (xs) -> let binds in (xs')) >>> ss
 
-dsCmdStmt ids local_vars out_ids (LetStmt binds) env_ids = do
+dsCmdStmt ids local_vars out_ids (LetStmt binds arr_id) env_ids = do
     -- build a new environment using the let bindings
     core_binds <- dsLocalBinds binds (mkBigCoreVarTup out_ids)
     -- match the old environment against the input
     core_map <- matchEnv env_ids core_binds
     trace "LetStmt 875" $ return ()
-    return (do_arr ids
+    arr <- dsExpr arr_id
+    return (do_arr2 arr
                    (mkBigCoreVarTupTy env_ids)
                    (mkBigCoreVarTupTy out_ids)
                    core_map,
@@ -1124,7 +1118,8 @@ dsCmdStmts ids local_vars out_ids (stmt:stmts) env_ids = do
     (core_stmts, _fv_stmts, env_ids') <- dsfixCmdStmts ids local_vars' out_ids stmts
     (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
     trace "dsCmsStmts 1056" $ return ()
-    return (do_compose ids
+    compose <- dsExpr (getCompose stmt)
+    return (do_compose2 compose
                        (mkBigCoreVarTupTy env_ids)
                        (mkBigCoreVarTupTy env_ids')
                        (mkBigCoreVarTupTy out_ids)
@@ -1199,8 +1194,22 @@ foldb f xs = foldb f (fold_pairs xs)
     fold_pairs [] = []
     fold_pairs [x] = [x]
     fold_pairs (x1:x2:xs) = f x1 x2:fold_pairs xs
-\end{code}
 
+getCompose :: CmdLStmt Id -> SyntaxExpr Id
+getCompose (L _ (BindStmtArrow { bndSArr_com     = compose } )) = compose
+getCompose (L _ (BodyStmtArrow { bdySArr_com     = compose } )) = compose
+getCompose (L _ (RecStmtArrow  { recS_compose_fn = compose } )) = compose
+getCompose (L _ stmt) = pprPanic "getCompose" (ppr stmt)
+
+-- Note [Arrow statement composition]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Explain here that we need extra >>> to desugar statement composition (mention
+-- two functions that do this). LastStmtArrow doesn't need this, because it is a
+-- special case in ... . Each constructor will be desugared at most once.
+-- Note that getCompose corresponds to okArrowDoStmt or sth like that.
+
+
+\end{code}
 Note [Dictionary binders in ConPatOut] See also same Note in HsUtils
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The following functions to collect value variables from patterns are
@@ -1277,9 +1286,9 @@ collectLStmtBinders = collectStmtBinders . unLoc
 
 collectStmtBinders :: Stmt Id body -> [Id]
 collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
-collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
+collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _ _)
                                         = collectPatBinders pat
-collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
+collectStmtBinders (LetStmt binds _)    = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []
 collectStmtBinders (BodyStmtArrow {})   = []

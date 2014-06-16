@@ -1855,7 +1855,7 @@ stmt  :: { LStmt RdrName (LHsExpr RdrName) }
 qual  :: { LStmt RdrName (LHsExpr RdrName) }
     : bindpat '<-' exp                  { LL $ mkBindStmt $1 $3 }
     | exp                               { L1 $ mkBodyStmt $1 }
-    | 'let' binds                       { LL $ LetStmt (unLoc $2) }
+    | 'let' binds                       { LL $ LetStmt (unLoc $2) undefined }
 
 -----------------------------------------------------------------------------
 -- Record Field Update/Construction

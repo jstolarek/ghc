@@ -927,7 +927,7 @@ zonkStmt env zBody (RecStmtArrow
                      , recS_compose1_rec_fn = compose1_rec_id
                      , recS_compose2_rec_fn = compose2_rec_id
                      , recS_later_rets = later_rets, recS_rec_rets = rec_rets
-                     , recS_ret_ty = ret_ty })
+                     , recS_ret_ty = ret_ty, recS_compose_fn  = compose_id })
   = do { new_rvs <- zonkIdBndrs env rvs
        ; new_lvs <- zonkIdBndrs env lvs
        ; new_ret_ty  <- zonkTcTypeToType env ret_ty
@@ -941,6 +941,7 @@ zonkStmt env zBody (RecStmtArrow
        ; new_compose2_rec_id <- zonkExpr env compose2_rec_id
        ; new_first_id <- zonkExpr env first_id
        ; new_loop_id  <- zonkExpr env loop_rec_id
+       ; new_compose_id <- zonkExpr env compose_id
        ; let env1 = extendIdZonkEnv env new_rvs
        ; (env2, new_segStmts) <- zonkStmts env1 zBody segStmts
         -- Zonk the ret-expressions in an envt that
@@ -956,7 +957,8 @@ zonkStmt env zBody (RecStmtArrow
                      , recS_arr2_rec_fn = new_arr2_rec_id, recS_first_fn = new_first_id
                      , recS_loop_rec_fn = new_loop_id, recS_compose1_rec_fn = new_compose1_rec_id
                      , recS_compose2_rec_fn = new_compose2_rec_id, recS_later_rets = new_later_rets
-                     , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
+                     , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty
+                     , recS_compose_fn  = new_compose_id }) }
 
 zonkStmt env zBody (BodyStmt body bind guard ty)
   = do new_body  <- zBody env body
@@ -965,7 +967,7 @@ zonkStmt env zBody (BodyStmt body bind guard ty)
        new_ty    <- zonkTcTypeToType env ty
        return (env, BodyStmt new_body new_bind new_guard new_ty)
 
-zonkStmt env zBody (BodyStmtArrow body ty arr1_op arr2_op compose1_op compose2_op first_op)
+zonkStmt env zBody (BodyStmtArrow body ty arr1_op arr2_op compose1_op compose2_op first_op compose_op)
   = do new_body     <- zBody env body
        new_ty       <- zonkTcTypeToType env ty
        new_arr1     <- zonkExpr env arr1_op
@@ -973,8 +975,9 @@ zonkStmt env zBody (BodyStmtArrow body ty arr1_op arr2_op compose1_op compose2_o
        new_compose1 <- zonkExpr env compose1_op
        new_compose2 <- zonkExpr env compose2_op
        new_first    <- zonkExpr env first_op
+       new_compose  <- zonkExpr env compose_op
        return (env, BodyStmtArrow new_body new_ty new_arr1 new_arr2
-                                  new_compose1 new_compose2 new_first)
+                                  new_compose1 new_compose2 new_first new_compose)
 
 zonkStmt env zBody (LastStmt body return_op)
   = do new_body   <- zBody env body
@@ -1007,9 +1010,10 @@ zonkStmt env _ (TransStmt { trS_stmts = stmts, trS_bndrs = binderMap
         newBinder' <- zonkIdBndr env newBinder
         return (oldBinder', newBinder')
 
-zonkStmt env _ (LetStmt binds)
+zonkStmt env _ (LetStmt binds arr_op)
   = do (env1, new_binds) <- zonkLocalBinds env binds
-       return (env1, LetStmt new_binds)
+       new_arr <- zonkExpr env arr_op
+       return (env1, LetStmt new_binds new_arr)
 
 zonkStmt env zBody (BindStmt pat body bind_op fail_op)
   = do  { new_body <- zBody env body
@@ -1017,7 +1021,7 @@ zonkStmt env zBody (BindStmt pat body bind_op fail_op)
         ; new_bind <- zonkExpr env bind_op
         ; new_fail <- zonkExpr env fail_op
         ; return (env1, BindStmt new_pat new_body new_bind new_fail) }
-zonkStmt env zBody (BindStmtArrow pat body arr1_op arr2_op compose1_op compose2_op first_op)
+zonkStmt env zBody (BindStmtArrow pat body arr1_op arr2_op compose1_op compose2_op first_op compose_op)
   = do  { new_body <- zBody env body
         ; (env1, new_pat) <- zonkPat env pat
         ; new_arr1     <- zonkExpr env arr1_op
@@ -1025,8 +1029,10 @@ zonkStmt env zBody (BindStmtArrow pat body arr1_op arr2_op compose1_op compose2_
         ; new_compose1 <- zonkExpr env compose1_op
         ; new_compose2 <- zonkExpr env compose2_op
         ; new_first    <- zonkExpr env first_op
+        ; new_compose  <- zonkExpr env compose_op
         ; return (env1, BindStmtArrow new_pat new_body new_arr1 new_arr2
-                                      new_compose1 new_compose2 new_first) }
+                                      new_compose1 new_compose2 new_first
+                                      new_compose) }
 
 -------------------------------------------------------------------------
 zonkRecFields :: ZonkEnv -> HsRecordBinds TcId -> TcM (HsRecordBinds TcId)

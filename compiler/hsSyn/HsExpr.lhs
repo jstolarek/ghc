@@ -1100,7 +1100,9 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
       bndSArr_arr2 :: (SyntaxExpr idR), -- arr operator
       bndSArr_com1 :: (SyntaxExpr idR), -- >>> operator
       bndSArr_com2 :: (SyntaxExpr idR), -- >>> operator
-      bndSArr_fst  :: (SyntaxExpr idR)  -- first
+      bndSArr_fst  :: (SyntaxExpr idR), -- first
+      bndSArr_com  :: (SyntaxExpr idR)  -- >>> operator
+                                        -- see Note [Arrow statement composition]
   }
 
   | BodyStmtArrow {
@@ -1110,10 +1112,13 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
       bdySArr_arr2 :: (SyntaxExpr idR), -- arr operator
       bdySArr_com1 :: (SyntaxExpr idR), -- >>> operator
       bdySArr_com2 :: (SyntaxExpr idR), -- >>> operator
-      bdySArr_fst  :: (SyntaxExpr idR)  -- first
+      bdySArr_fst  :: (SyntaxExpr idR), -- first
+      bdySArr_com  :: (SyntaxExpr idR)  -- >>> operator
+                                        -- see Note [Arrow statement composition]
   }
 
   | LetStmt  (HsLocalBindsLR idL idR)
+             (SyntaxExpr idR) -- arr operator for arrow do-notation
 
   -- ParStmts only occur in a list/monad comprehension
   | ParStmt  [ParStmtBlock idL idR]
@@ -1204,6 +1209,8 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
      , recS_compose2_rec_fn :: SyntaxExpr idR -- The >>> function for dsRecCmd
      , recS_first_fn        :: SyntaxExpr idR -- The first function
      , recS_loop_rec_fn     :: SyntaxExpr idR -- The loop function for dsRecCmd
+     , recS_compose_fn      :: SyntaxExpr idR -- The >>> function
+                                        -- see Note [Arrow statement composition]
 
         -- These fields are only valid after typechecking
      , recS_later_rets :: [PostTcExpr] -- (only used in the arrow version)
@@ -1385,9 +1392,9 @@ pprStmt :: (OutputableBndr idL, OutputableBndr idR, Outputable body)
 pprStmt (LastStmt expr _)         = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
 pprStmt (LastStmtArrow expr _ _)  = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
 pprStmt (BindStmt pat expr _ _)   = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
-pprStmt (BindStmtArrow pat expr _ _ _ _ _)
+pprStmt (BindStmtArrow pat expr _ _ _ _ _ _)
                                   = hsep [ppr pat, ptext (sLit "<-"), ppr expr]
-pprStmt (LetStmt binds)           = hsep [ptext (sLit "let"), pprBinds binds]
+pprStmt (LetStmt binds _)         = hsep [ptext (sLit "let"), pprBinds binds]
 pprStmt (BodyStmt expr _ _ _)     = ppr expr
 pprStmt (BodyStmtArrow { bdySArr_body = expr })
   = ppr expr

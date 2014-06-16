@@ -370,25 +370,30 @@ matchExpectedCmdArgs n ty
 --	(a) RecStmts, and
 --	(b) no rebindable syntax
 
+-- VOODOO: not doing any typechecking here, just discarding existing operators
+-- and replacing them with noSyntaxExpr. Oh wait, what's that above about no
+-- rebindable syntax?
 tcArrDoStmt :: CmdEnv -> TcCmdStmtChecker
 tcArrDoStmt env _ (LastStmtArrow rhs _ _) res_ty thing_inside
   = do	{ rhs' <- tcCmd env rhs (unitTy, res_ty)
 	; thing <- thing_inside (panic "tcArrDoStmt")
 	; return (LastStmtArrow rhs' noSyntaxExpr noSyntaxExpr, thing) }
 
-tcArrDoStmt env _ (BodyStmtArrow rhs _ _ _ _ _ _) res_ty thing_inside
+tcArrDoStmt env _ (BodyStmtArrow rhs _ _ _ _ _ _ _) res_ty thing_inside
   = do	{ (rhs', elt_ty) <- tc_arr_rhs env rhs
 	; thing 	 <- thing_inside res_ty
 	; return (BodyStmtArrow rhs' elt_ty noSyntaxExpr noSyntaxExpr
-                                noSyntaxExpr noSyntaxExpr noSyntaxExpr, thing) }
+                                noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr, thing) }
 
-tcArrDoStmt env ctxt (BindStmtArrow pat rhs _ _ _ _ _) res_ty thing_inside
+tcArrDoStmt env ctxt (BindStmtArrow pat rhs _ _ _ _ _ _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat pat_ty $
                             thing_inside res_ty
 	; return (BindStmtArrow pat' rhs' noSyntaxExpr noSyntaxExpr noSyntaxExpr
-                                          noSyntaxExpr noSyntaxExpr, thing) }
-
+                                          noSyntaxExpr noSyntaxExpr noSyntaxExpr, thing) }
+-- VOODOO: I think this is wrong. This almost certainly needs to be
+-- RecStmtArrow.  I wonder what about LetStmt ? I guess it can be ignored here
+-- if it is typechecked in TcMatches.
 tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                             , recS_rec_ids = rec_names }) res_ty thing_inside
   = do  { let tup_names = rec_names ++ filterOut (`elem` rec_names) later_names

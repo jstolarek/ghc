@@ -334,10 +334,11 @@ tcStmtsAndThen _ _ [] res_ty thing_inside
 	; return ([], thing) }
 
 -- LetStmts are handled uniformly, regardless of context
-tcStmtsAndThen ctxt stmt_chk (L loc (LetStmt binds) : stmts) res_ty thing_inside
+tcStmtsAndThen ctxt stmt_chk (L loc (LetStmt binds _) : stmts) res_ty thing_inside
   = do	{ (binds', (stmts',thing)) <- tcLocalBinds binds $
 				      tcStmtsAndThen ctxt stmt_chk stmts res_ty thing_inside
-	; return (L loc (LetStmt binds') : stmts', thing) }
+        -- VOODOO: this is wrong. Need to typecheck arr operator instead of discarding it
+	; return (L loc (LetStmt binds' noSyntaxExpr) : stmts', thing) }
 
 -- For the vanilla case, handle the location-setting part
 tcStmtsAndThen ctxt stmt_chk (L loc stmt : stmts) res_ty thing_inside

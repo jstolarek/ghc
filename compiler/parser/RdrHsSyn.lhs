@@ -932,11 +932,13 @@ checkCmdStmt _ (LastStmt e _) =
     checkCommand e >>= (\c -> return $ LastStmtArrow c noSyntaxExpr noSyntaxExpr)
 checkCmdStmt _ (BindStmt pat e _ _) =
     checkCommand e >>= (\c -> return $ BindStmtArrow pat c noSyntaxExpr
-                              noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
+                              noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+                              noSyntaxExpr)
 checkCmdStmt _ (BodyStmt e _ _ ty) =
     checkCommand e >>= (\c -> return $ BodyStmtArrow c ty noSyntaxExpr
-                              noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr)
-checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
+                              noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
+                              noSyntaxExpr)
+checkCmdStmt _ (LetStmt bnds _) = return $ LetStmt bnds noSyntaxExpr
 checkCmdStmt _ (RecStmt { recS_stmts = stmts, recS_later_ids = later_ids
                         , recS_rec_ids = rec_ids, recS_later_rets = later_rets
                         , recS_rec_rets = rec_rets, recS_ret_ty = ret_ty }) = do
@@ -944,7 +946,8 @@ checkCmdStmt _ (RecStmt { recS_stmts = stmts, recS_later_ids = later_ids
     return $ RecStmtArrow ss           later_ids    rec_ids      noSyntaxExpr
                           noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
                           noSyntaxExpr noSyntaxExpr noSyntaxExpr noSyntaxExpr
-                          noSyntaxExpr later_rets   rec_rets     ret_ty
+                          noSyntaxExpr noSyntaxExpr later_rets   rec_rets
+                          ret_ty
 checkCmdStmt l stmt = cmdStmtFail l stmt
 
 checkCmdMatchGroup :: MatchGroup RdrName (LHsExpr RdrName) -> P (MatchGroup RdrName (LHsCmd RdrName))

@@ -256,7 +256,8 @@ emptyRecStmtArrow =
       , recS_compose1_rec_fn = noSyntaxExpr, recS_compose2_rec_fn = noSyntaxExpr
       , recS_first_fn        = noSyntaxExpr, recS_loop_rec_fn     = noSyntaxExpr
       , recS_later_rets      = []          , recS_rec_rets        = []
-      , recS_rec_ids         = []          , recS_ret_ty          = placeHolderType }
+      , recS_rec_ids         = []          , recS_ret_ty          = placeHolderType
+      , recS_compose_fn      = noSyntaxExpr }
 
 mkRecStmt stmts = emptyRecStmt { recS_stmts = stmts }
 
@@ -617,9 +618,9 @@ collectLStmtBinders = collectStmtBinders . unLoc
 collectStmtBinders :: StmtLR idL idR body -> [idL]
   -- Id Binders for a Stmt... [but what about pattern-sig type vars]?
 collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
-collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _)
+collectStmtBinders (BindStmtArrow pat _ _ _ _ _ _ _)
                                         = collectPatBinders pat
-collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
+collectStmtBinders (LetStmt binds _)    = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []
 collectStmtBinders (BodyStmtArrow {})   = []
@@ -809,9 +810,9 @@ lStmtsImplicits = hs_lstmts
     hs_lstmts = foldr (\stmt rest -> unionNameSets (hs_stmt (unLoc stmt)) rest) emptyNameSet
 
     hs_stmt (BindStmt pat _ _ _) = lPatImplicits pat
-    hs_stmt (BindStmtArrow pat _ _ _ _ _ _)
+    hs_stmt (BindStmtArrow pat _ _ _ _ _ _ _)
                                  = lPatImplicits pat
-    hs_stmt (LetStmt binds)      = hs_local_binds binds
+    hs_stmt (LetStmt binds _)    = hs_local_binds binds
     hs_stmt (BodyStmt {})        = emptyNameSet
     hs_stmt (LastStmt {})        = emptyNameSet
     hs_stmt (BodyStmtArrow {})   = emptyNameSet

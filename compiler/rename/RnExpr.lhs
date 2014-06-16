@@ -594,8 +594,8 @@ methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
 -- LastStmtArrow, BodyStmtArrow and BindStmtArrow don't list other arrow
 -- operators?
 methodNamesStmt (LastStmtArrow cmd _ _)          = methodNamesLCmd cmd
-methodNamesStmt (BodyStmtArrow cmd _ _ _ _ _ _)  = methodNamesLCmd cmd
-methodNamesStmt (BindStmtArrow _ cmd _ _ _ _ _)  = methodNamesLCmd cmd
+methodNamesStmt (BodyStmtArrow cmd _ _ _ _ _ _ _)= methodNamesLCmd cmd
+methodNamesStmt (BindStmtArrow _ cmd _ _ _ _ _ _)= methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts
 methodNamesStmt (RecStmtArrow { recS_stmts = stmts })
                                                  = methodNamesStmts stmts `addOneFV` loopAName
@@ -743,10 +743,10 @@ rnStmt ctxt rnBody (L loc (BodyStmtArrow { bdySArr_body = body })) thing_inside
         ; (first_op  , fvs_first  ) <- lookupStmtName ctxt firstAName
         ; (thing     , fvs_inside ) <- thing_inside []
         ; return (([L loc (BodyStmtArrow body' placeHolderType arr_op arr_op
-                                         compose_op compose_op first_op)], thing),
+                                         compose_op compose_op first_op compose_op)], thing),
                   plusFVs [ fv_expr, fvs_inside, fvs_arr, fvs_compose, fvs_first ]) }
 
-rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _)) thing_inside
+rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _ _)) thing_inside
   = do  { (body'      , fv_expr    ) <- rnBody body
         ; (arr_op     , fvs_arr    ) <- lookupStmtName ctxt arrAName
         ; (compose_op , fvs_compose) <- lookupStmtName ctxt composeAName
@@ -754,13 +754,14 @@ rnStmt ctxt rnBody (L loc (BindStmtArrow pat body _ _ _ _ _)) thing_inside
         ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
         { (thing, fvs_inside) <- thing_inside (collectPatBinders pat')
         ; return (([L loc (BindStmtArrow pat' body' arr_op arr_op compose_op
-                                         compose_op first_op)], thing),
+                                         compose_op first_op compose_op)], thing),
                   plusFVs [ fv_expr, fvs_inside, fvs_arr, fvs_compose, fvs_first ]) }}
 
-rnStmt _ _ (L loc (LetStmt binds)) thing_inside
+rnStmt ctxt _ (L loc (LetStmt binds _)) thing_inside
   = do  { rnLocalBindsAndThen binds $ \binds' -> do
         { (thing, fvs) <- thing_inside (collectLocalBinders binds')
-        ; return (([L loc (LetStmt binds')], thing), fvs) }  }
+        ; (arr_op, fvs_arr) <- lookupStmtName ctxt arrAName
+        ; return (([L loc (LetStmt binds' arr_op)], thing), fvs `plusFV` fvs_arr) }  }
 
 rnStmt ctxt rnBody (L _ (RecStmt { recS_stmts = rec_stmts })) thing_inside
   = do  { (return_op, fvs1)  <- lookupStmtName ctxt returnMName
@@ -983,7 +984,7 @@ rnRecStmtsAndThen rnBody s cont
 collectRecStmtsFixities :: [LStmtLR RdrName RdrName body] -> [LFixitySig RdrName]
 collectRecStmtsFixities l =
     foldr (\ s -> \acc -> case s of
-                            (L _ (LetStmt (HsValBinds (ValBindsIn _ sigs)))) ->
+                            (L _ (LetStmt (HsValBinds (ValBindsIn _ sigs)) _)) ->
                                 foldr (\ sig -> \ acc -> case sig of
                                                            (L loc (FixSig s)) -> (L loc s) : acc
                                                            _ -> acc) acc sigs
@@ -1011,12 +1012,13 @@ rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body bind_id fail_id))
       return [(L loc (BindStmt pat' body bind_id fail_id),
                fv_pat)]
 
-rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _)))
+rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _) _))
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
 
-rn_rec_stmt_lhs fix_env (L loc (LetStmt (HsValBinds binds)))
+-- VOODOO: arr not handled in any way here. Is this correct?
+rn_rec_stmt_lhs fix_env (L loc (LetStmt (HsValBinds binds) arr))
     = do (_bound_names, binds') <- rnLocalValBindsLHS fix_env binds
-         return [(L loc (LetStmt (HsValBinds binds')),
+         return [(L loc (LetStmt (HsValBinds binds') arr),
                  -- Warning: this is bogus; see function invariant
                  emptyFVs
                  )]
@@ -1042,7 +1044,7 @@ rn_rec_stmt_lhs _ stmt@(L _ (BindStmtArrow {}))  -- Syntactically illegal in mdo
 rn_rec_stmt_lhs _ stmt@(L _ (BodyStmtArrow {}))  -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt BodyStmtArrow" (ppr stmt)
 
-rn_rec_stmt_lhs _ (L _ (LetStmt EmptyLocalBinds))
+rn_rec_stmt_lhs _ (L _ (LetStmt EmptyLocalBinds _))
   = panic "rn_rec_stmt LetStmt EmptyLocalBinds"
 
 rn_rec_stmts_lhs :: Outputable body => MiniFixityEnv
@@ -1090,15 +1092,17 @@ rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
     return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
               L loc (BindStmt pat' body' bind_op fail_op))]
 
-rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _))) _
+rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _) _)) _
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
 
-rn_rec_stmt _ all_bndrs (L loc (LetStmt (HsValBinds binds'))) _ = do
+rn_rec_stmt _ all_bndrs (L loc (LetStmt (HsValBinds binds') arr)) _ = do
   (binds', du_binds) <-
       -- fixities and unused are handled above in rnRecStmtsAndThen
       rnLocalValBindsRHS (mkNameSet all_bndrs) binds'
+  -- VOODOO: is this treatment of arr correct? Can I discard FVs?
+  (arr', _) <- rnExpr arr
   return [(duDefs du_binds, allUses du_binds,
-           emptyNameSet, L loc (LetStmt (HsValBinds binds')))]
+           emptyNameSet, L loc (LetStmt (HsValBinds binds') arr'))]
 
 -- no RecStmt case because they get flattened above when doing the LHSes
 rn_rec_stmt _ _ stmt@(L _ (RecStmt {})) _
@@ -1126,7 +1130,7 @@ rn_rec_stmt _ _ stmt@(L _ (BindStmtArrow {})) _  -- Syntactically illegal in mdo
 rn_rec_stmt _ _ stmt@(L _ (BodyStmtArrow {})) _  -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt: BodyStmtArrow" (ppr stmt)
 
-rn_rec_stmt _ _ (L _ (LetStmt EmptyLocalBinds)) _
+rn_rec_stmt _ _ (L _ (LetStmt EmptyLocalBinds _)) _
   = panic "rn_rec_stmt: LetStmt EmptyLocalBinds"
 
 rn_rec_stmts :: Outputable (body RdrName) =>
@@ -1434,8 +1438,8 @@ okPatGuardStmt stmt
 -------------
 okParStmt dflags ctxt stmt
   = case stmt of
-      LetStmt (HsIPBinds {}) -> notOK
-      _                      -> okStmt dflags ctxt stmt
+      LetStmt (HsIPBinds {}) _ -> notOK
+      _                        -> okStmt dflags ctxt stmt
 
 ----------------
 okDoStmt :: DynFlags -> Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
