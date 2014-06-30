@@ -1072,6 +1072,10 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
                               -- See notes [Monad Comprehensions]
              PostTcType       -- Element type of the RHS (used for arrows)
 
+  | BindStmtA (LPat idL)
+              body
+              (SyntaxExpr idR) -- the `bindA` operator for arrows
+
   | LetStmt  (HsLocalBindsLR idL idR)
 
   -- ParStmts only occur in a list/monad comprehension
@@ -1299,6 +1303,7 @@ pprStmt :: (OutputableBndr idL, OutputableBndr idR, Outputable body)
         => (StmtLR idL idR body) -> SDoc
 pprStmt (LastStmt expr _)         = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
 pprStmt (BindStmt pat expr _ _)   = hsep [ppr pat, larrow, ppr expr]
+pprStmt (BindStmtA pat expr _)    = hsep [ppr pat, larrow, ppr expr]
 pprStmt (LetStmt binds)           = hsep [ptext (sLit "let"), pprBinds binds]
 pprStmt (BodyStmt expr _ _ _)     = ppr expr
 pprStmt (ParStmt stmtss _ _)      = sep (punctuate (ptext (sLit " | ")) (map ppr stmtss))

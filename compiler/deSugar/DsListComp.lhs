@@ -251,6 +251,7 @@ deListComp (ParStmt stmtss_w_bndrs _ _ : quals) list
         pats = map mkBigLHsVarPatTup bndrs_s
 
 deListComp (RecStmt {} : _) _ = panic "deListComp RecStmt"
+deListComp (BindStmtA {} : _) _ = panic "deListComp BindStmtA"
 \end{code}
 
 
@@ -346,6 +347,7 @@ dfListComp c_id n_id (BindStmt pat list1 _ _ : quals) = do
 
 dfListComp _ _ (ParStmt {} : _) = panic "dfListComp ParStmt"
 dfListComp _ _ (RecStmt {} : _) = panic "dfListComp RecStmt"
+dfListComp _ _ (BindStmtA {} : _) = panic "dfListComp BindStmtA"
 
 dfBindComp :: Id -> Id          -- 'c' and 'n'
            -> (LPat Id, CoreExpr)
@@ -595,6 +597,7 @@ dePArrComp (ParStmt {} : _) _ _ =
   panic "DsListComp.dePArrComp: malformed comprehension AST: ParStmt"
 dePArrComp (TransStmt {} : _) _ _ = panic "DsListComp.dePArrComp: TransStmt"
 dePArrComp (RecStmt   {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmt"
+dePArrComp (BindStmtA {} : _) _ _ = panic "DsListComp.dePArrComp: BindStmtA"
 
 --  <<[:e' | qs | qss:]>> pa ea =
 --    <<[:e' | qss:]>> (pa, (x_1, ..., x_n))

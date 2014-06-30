@@ -541,7 +541,9 @@ methodNamesLStmt = methodNamesStmt . unLoc
 methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
 methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
 methodNamesStmt (BodyStmt cmd _ _ _)             = methodNamesLCmd cmd
+-- JSTOLAREK: do both of these have a chance of occuring?
 methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
+methodNamesStmt (BindStmtA _ cmd _)              = methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
 methodNamesStmt (ParStmt {})                     = emptyFVs
@@ -667,6 +669,14 @@ rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
        -- fv_expr shouldn't really be filtered by the rnPatsAndThen
         -- but it does not matter because the names are unique
 
+rnStmt ctxt rnBody (L loc (BindStmtA pat body _)) thing_inside
+  = do  { (body', fv_expr) <- rnBody body
+        ; (bindA_op, fvs1) <- lookupStmtName ctxt bindAName
+        ; rnPat (StmtCtxt ctxt) pat $ \ pat' -> do
+        { (thing, fvs2) <- thing_inside (collectPatBinders pat')
+        ; return (([L loc (BindStmtA pat' body' bindA_op)], thing),
+                  plusFVs [ fv_expr, fvs1, fvs2]) }}
+
 rnStmt _ _ (L loc (LetStmt binds)) thing_inside
   = do  { rnLocalBindsAndThen binds $ \binds' -> do
         { (thing, fvs) <- thing_inside (collectLocalBinders binds')
@@ -780,9 +790,9 @@ lookupStmtName ctxt n
   = case ctxt of
       ListComp        -> not_rebindable
       PArrComp        -> not_rebindable
-      ArrowExpr       -> not_rebindable
       PatGuard {}     -> not_rebindable
 
+      ArrowExpr       -> rebindable
       DoExpr          -> rebindable
       MDoExpr         -> rebindable
       MonadComp       -> rebindable
@@ -889,6 +899,13 @@ rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body a b))
       return [(L loc (BindStmt pat' body a b),
                fv_pat)]
 
+rn_rec_stmt_lhs fix_env (L loc (BindStmtA pat body a))
+  = do
+      -- should the ctxt be MDo instead?
+      (pat', fv_pat) <- rnBindPat (localRecNameMaker fix_env) pat
+      return [(L loc (BindStmtA pat' body a),
+               fv_pat)]
+
 rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _)))
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
 
@@ -954,6 +971,14 @@ rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
              fvs   = fv_expr `plusFV` fv_pat `plusFV` fvs1 `plusFV` fvs2
        ; return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
                   L loc (BindStmt pat' body' bind_op fail_op))] }
+
+rn_rec_stmt rnBody _ (L loc (BindStmtA pat' body _)) fv_pat
+  = do { (body', fv_expr) <- rnBody body
+       ; (bindA_op, fvs1) <- lookupSyntaxName bindAName
+       ; let bndrs = mkNameSet (collectPatBinders pat')
+       ;     fvs   = plusFVs [ fv_expr, fv_pat, fvs1]
+       ; return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
+              L loc (BindStmtA pat' body' bindA_op))] }
 
 rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _))) _
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
@@ -1236,6 +1261,7 @@ pprStmtCat (TransStmt {})     = ptext (sLit "transform")
 pprStmtCat (LastStmt {})      = ptext (sLit "return expression")
 pprStmtCat (BodyStmt {})      = ptext (sLit "body")
 pprStmtCat (BindStmt {})      = ptext (sLit "binding")
+pprStmtCat (BindStmtA {})     = ptext (sLit "binding")
 pprStmtCat (LetStmt {})       = ptext (sLit "let")
 pprStmtCat (RecStmt {})       = ptext (sLit "rec")
 pprStmtCat (ParStmt {})       = ptext (sLit "parallel")
@@ -1245,7 +1271,7 @@ isOK, notOK :: Maybe SDoc
 isOK  = Nothing
 notOK = Just empty
 
-okStmt, okDoStmt, okCompStmt, okParStmt, okPArrStmt
+okStmt, okCompStmt, okParStmt, okPArrStmt
    :: DynFlags -> HsStmtContext Name
    -> Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
 -- Return Nothing if OK, (Just extra) if not ok
@@ -1254,11 +1280,11 @@ okStmt, okDoStmt, okCompStmt, okParStmt, okPArrStmt
 okStmt dflags ctxt stmt
   = case ctxt of
       PatGuard {}        -> okPatGuardStmt stmt
+      ArrowExpr          -> okArrowDoStmt stmt
       ParStmtCtxt ctxt   -> okParStmt  dflags ctxt stmt
-      DoExpr             -> okDoStmt   dflags ctxt stmt
-      MDoExpr            -> okDoStmt   dflags ctxt stmt
-      ArrowExpr          -> okDoStmt   dflags ctxt stmt
-      GhciStmtCtxt       -> okDoStmt   dflags ctxt stmt
+      DoExpr             -> okDoStmt   dflags stmt
+      MDoExpr            -> okDoStmt   dflags stmt
+      GhciStmtCtxt       -> okDoStmt   dflags stmt
       ListComp           -> okCompStmt dflags ctxt stmt
       MonadComp          -> okCompStmt dflags ctxt stmt
       PArrComp           -> okPArrStmt dflags ctxt stmt
@@ -1280,12 +1306,12 @@ okParStmt dflags ctxt stmt
       _                      -> okStmt dflags ctxt stmt
 
 ----------------
-okDoStmt dflags ctxt stmt
+okDoStmt :: DynFlags -> Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
+okDoStmt dflags stmt
   = case stmt of
        RecStmt {}
          | Opt_RecursiveDo `xopt` dflags -> isOK
-         | ArrowExpr <- ctxt -> isOK    -- Arrows allows 'rec'
-         | otherwise         -> Just (ptext (sLit "Use RecursiveDo"))
+         | otherwise -> Just (ptext (sLit "Use RecursiveDo"))
        BindStmt {} -> isOK
        LetStmt {}  -> isOK
        BodyStmt {} -> isOK
@@ -1304,7 +1330,8 @@ okCompStmt dflags _ stmt
          | Opt_TransformListComp `xopt` dflags -> isOK
          | otherwise -> Just (ptext (sLit "Use TransformListComp"))
        RecStmt {}  -> notOK
-       LastStmt {} -> notOK  -- Should not happen (dealt with by checkLastStmt)
+       LastStmt {} -> notOK  -- Should not happen (dealt with by checkLastStmt
+       BindStmtA {} -> notOK
 
 ----------------
 okPArrStmt dflags _ stmt
@@ -1318,6 +1345,18 @@ okPArrStmt dflags _ stmt
        TransStmt {} -> notOK
        RecStmt {}   -> notOK
        LastStmt {}  -> notOK  -- Should not happen (dealt with by checkLastStmt)
+       BindStmtA {} -> notOK
+
+okArrowDoStmt :: Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
+okArrowDoStmt stmt
+  = case stmt of
+       BindStmtA {} -> isOK
+       -- JSTOLAREK: these should be replaced with respective *A versions
+       RecStmt {}   -> isOK
+       LetStmt {}   -> isOK
+       BodyStmt {}  -> isOK
+       -- JSTOLAREK: I think that LastStmt should also be allowed
+       _            -> notOK
 
 ---------
 checkTupleSection :: [HsTupArg RdrName] -> RnM ()

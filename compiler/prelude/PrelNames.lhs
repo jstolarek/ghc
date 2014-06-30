@@ -834,6 +834,13 @@ bindMName          = varQual gHC_BASE (fsLit ">>=")    bindMClassOpKey
 returnMName        = varQual gHC_BASE (fsLit "return") returnMClassOpKey
 failMName          = varQual gHC_BASE (fsLit "fail")   failMClassOpKey
 
+-- Redbindable Arrow operators
+bindAName, thenAName, fixAName, ifThenElseAName :: Name
+bindAName        = methName aRROW (fsLit "bindA")       bindAClassOpKey
+thenAName        = methName aRROW (fsLit "thenA")       thenAClassOpKey
+fixAName         = methName aRROW (fsLit "fixA" )       fixAClassOpKey
+ifThenElseAName  = methName aRROW (fsLit "ifThenElseA") ifThenElseAClassOpKey
+
 -- Classes (Applicative, Foldable, Traversable)
 applicativeClassName, foldableClassName, traversableClassName :: Name
 applicativeClassName  = clsQual  cONTROL_APPLICATIVE (fsLit "Applicative") applicativeClassKey
@@ -1827,6 +1834,13 @@ toListClassOpKey = mkPreludeMiscIdUnique 501
 
 proxyHashKey :: Unique
 proxyHashKey = mkPreludeMiscIdUnique 502
+
+-- Rebindable Arrow notation
+bindAClassOpKey, thenAClassOpKey, fixAClassOpKey, ifThenElseAClassOpKey :: Unique
+bindAClassOpKey       = mkPreludeMiscIdUnique 503
+thenAClassOpKey       = mkPreludeMiscIdUnique 504
+fixAClassOpKey        = mkPreludeMiscIdUnique 505
+ifThenElseAClassOpKey = mkPreludeMiscIdUnique 506
 
 ---------------- Template Haskell -------------------
 --      USES IdUniques 200-499

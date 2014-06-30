@@ -789,7 +789,7 @@ dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
 -- It would be simpler and more consistent to do this using second,
 -- but that's likely to be defined in terms of first.
 
-dsCmdStmt ids local_vars out_ids (BindStmt pat cmd _ _) env_ids = do
+dsCmdStmt ids local_vars out_ids (BindStmtA pat cmd _) env_ids = do
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
     let pat_ty   = hsLPatType pat
         pat_vars = mkVarSet (collectPatBinders pat)
@@ -1172,8 +1172,10 @@ collectLStmtsBinders = concatMap collectLStmtBinders
 collectLStmtBinders :: LStmt Id body -> [Id]
 collectLStmtBinders = collectStmtBinders . unLoc
 
+-- JSTOLAREK: perhaps here we don't need to worry about BindStmt?
 collectStmtBinders :: Stmt Id body -> [Id]
 collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
+collectStmtBinders (BindStmtA pat _ _)  = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
 collectStmtBinders (LastStmt {})        = []

@@ -660,6 +660,11 @@ addTickStmt _isGuard (BindStmt pat e bind fail) = do
                 (addTickLHsExprRHS e)
                 (addTickSyntaxExpr hpcSrcSpan bind)
                 (addTickSyntaxExpr hpcSrcSpan fail)
+addTickStmt _isGuard (BindStmtA pat e bindA) = do
+        liftM3 BindStmtA
+                (addTickLPat pat)
+                (addTickLHsExprRHS e)
+                (addTickSyntaxExpr hpcSrcSpan bindA)
 addTickStmt isGuard (BodyStmt e bind' guard' ty) = do
         liftM4 BodyStmt
                 (addTick isGuard e)

@@ -954,6 +954,12 @@ zonkStmt env zBody (BindStmt pat body bind_op fail_op)
         ; new_fail <- zonkExpr env fail_op
         ; return (env1, BindStmt new_pat new_body new_bind new_fail) }
 
+zonkStmt env zBody (BindStmtA pat body bindA_op)
+  = do  { new_body <- zBody env body
+        ; (env1, new_pat) <- zonkPat env pat
+        ; new_bindA <- zonkExpr env bindA_op
+        ; return (env1, BindStmtA new_pat new_body new_bindA) }
+
 -------------------------------------------------------------------------
 zonkRecFields :: ZonkEnv -> HsRecordBinds TcId -> TcM (HsRecordBinds TcId)
 zonkRecFields env (HsRecFields flds dd)
