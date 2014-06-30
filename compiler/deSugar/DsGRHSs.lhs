@@ -100,11 +100,11 @@ matchGuards [] _ rhs _
         -- NB:  The success of this clause depends on the typechecker not
         --      wrapping the 'otherwise' in empty HsTyApp or HsWrap constructors
         --      If it does, you'll get bogus overlap warnings
-matchGuards (BodyStmt e _ _ _ : stmts) ctx rhs rhs_ty
+matchGuards (BodyStmt e _ _ : stmts) ctx rhs rhs_ty
   | Just addTicks <- isTrueLHsExpr e = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     return (adjustMatchResultDs addTicks match_result)
-matchGuards (BodyStmt expr _ _ _ : stmts) ctx rhs rhs_ty = do
+matchGuards (BodyStmt expr _ _ : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     pred_expr <- dsLExpr expr
     return (mkGuardedMatchResult pred_expr match_result)
@@ -122,10 +122,18 @@ matchGuards (BindStmt pat bind_rhs _ _ : stmts) ctx rhs rhs_ty = do
     core_rhs <- dsLExpr bind_rhs
     matchSinglePat core_rhs (StmtCtxt ctx) pat rhs_ty match_result
 
+-- JSTOLAREK: check whether these are required or not
+matchGuards (LastStmtA  {} : _) _ _ _ = panic "matchGuards LastStmtA"
+matchGuards (BodyStmtA  {} : _) _ _ _ = panic "matchGuards BodyStmtA"
+matchGuards (BindStmtA  {} : _) _ _ _ = panic "matchGuards BindStmtA"
+matchGuards (LetStmtA  {} : _) _ _ _  = panic "matchGuards LetStmtA"
+matchGuards (RecStmtA  {} : _) _ _ _  = panic "matchGuards RecStmtA"
+{-
 matchGuards (BindStmtA pat bind_rhs _ : stmts) ctx rhs rhs_ty = do
     match_result <- matchGuards stmts ctx rhs rhs_ty
     core_rhs <- dsLExpr bind_rhs
     matchSinglePat core_rhs (StmtCtxt ctx) pat rhs_ty match_result
+-}
 
 matchGuards (LastStmt  {} : _) _ _ _ = panic "matchGuards LastStmt"
 matchGuards (ParStmt   {} : _) _ _ _ = panic "matchGuards ParStmt"

@@ -930,8 +930,8 @@ checkCmdStmt _ (LastStmt e r) =
     checkCommand e >>= (\c -> return $ LastStmt c r)
 checkCmdStmt _ (BindStmt pat e _ _) = 
     checkCommand e >>= (\c -> return $ BindStmtA pat c noSyntaxExpr)
-checkCmdStmt _ (BodyStmt e t g ty) = 
-    checkCommand e >>= (\c -> return $ BodyStmt c t g ty)
+checkCmdStmt _ (BodyStmt e _ _) = 
+    checkCommand e >>= (\c -> return $ BodyStmtA c noSyntaxExpr placeHolderType)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
 checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do
     ss <- mapM checkCmdLStmt stmts

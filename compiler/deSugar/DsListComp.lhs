@@ -216,7 +216,7 @@ deListComp (LastStmt body _ : quals) list
        ; return (mkConsExpr (exprType core_body) core_body list) }
 
         -- Non-last: must be a guard
-deListComp (BodyStmt guard _ _ _ : quals) list = do  -- rule B above
+deListComp (BodyStmt guard _ _ : quals) list = do  -- rule B above
     core_guard <- dsLExpr guard
     core_rest <- deListComp quals list
     return (mkIfThenElse core_guard core_rest list)
@@ -251,7 +251,11 @@ deListComp (ParStmt stmtss_w_bndrs _ _ : quals) list
         pats = map mkBigLHsVarPatTup bndrs_s
 
 deListComp (RecStmt {} : _) _ = panic "deListComp RecStmt"
+deListComp (LastStmtA {} : _) _ = panic "deListComp LastStmtA"
 deListComp (BindStmtA {} : _) _ = panic "deListComp BindStmtA"
+deListComp (BodyStmtA {} : _) _ = panic "deListComp BodyStmtA"
+deListComp (LetStmtA  {} : _) _ = panic "deListComp LetStmtA"
+deListComp (RecStmtA  {} : _) _ = panic "deListComp RecStmtA"
 \end{code}
 
 
@@ -323,7 +327,7 @@ dfListComp c_id n_id (LastStmt body _ : quals)
        ; return (mkApps (Var c_id) [core_body, Var n_id]) }
 
         -- Non-last: must be a guard
-dfListComp c_id n_id (BodyStmt guard _ _ _  : quals) = do
+dfListComp c_id n_id (BodyStmt guard _ _  : quals) = do
     core_guard <- dsLExpr guard
     core_rest <- dfListComp c_id n_id quals
     return (mkIfThenElse core_guard core_rest (Var n_id))
@@ -347,7 +351,11 @@ dfListComp c_id n_id (BindStmt pat list1 _ _ : quals) = do
 
 dfListComp _ _ (ParStmt {} : _) = panic "dfListComp ParStmt"
 dfListComp _ _ (RecStmt {} : _) = panic "dfListComp RecStmt"
+dfListComp _ _ (LastStmtA {} : _) = panic "dfListComp LastStmtA"
 dfListComp _ _ (BindStmtA {} : _) = panic "dfListComp BindStmtA"
+dfListComp _ _ (BodyStmtA {} : _) = panic "dfListComp BodyStmtA"
+dfListComp _ _ (LetStmtA  {} : _) = panic "dfListComp LetStmtA"
+dfListComp _ _ (RecStmtA  {} : _) = panic "dfListComp RecStmtA"
 
 dfBindComp :: Id -> Id          -- 'c' and 'n'
            -> (LPat Id, CoreExpr)
@@ -527,7 +535,7 @@ dePArrComp (LastStmt e' _ : quals) pa cea
 --
 --  <<[:e' | b, qs:]>> pa ea = <<[:e' | qs:]>> pa (filterP (\pa -> b) ea)
 --
-dePArrComp (BodyStmt b _ _ _ : qs) pa cea = do
+dePArrComp (BodyStmt b _ _ : qs) pa cea = do
     filterP <- dsDPHBuiltin filterPVar
     let ty = parrElemType cea
     (clam,_) <- deLambda ty pa b
@@ -597,7 +605,11 @@ dePArrComp (ParStmt {} : _) _ _ =
   panic "DsListComp.dePArrComp: malformed comprehension AST: ParStmt"
 dePArrComp (TransStmt {} : _) _ _ = panic "DsListComp.dePArrComp: TransStmt"
 dePArrComp (RecStmt   {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmt"
+dePArrComp (LastStmtA {} : _) _ _ = panic "DsListComp.dePArrComp: LastStmtA"
 dePArrComp (BindStmtA {} : _) _ _ = panic "DsListComp.dePArrComp: BindStmtA"
+dePArrComp (BodyStmtA {} : _) _ _ = panic "DsListComp.dePArrComp: BodyStmtA"
+dePArrComp (LetStmtA  {} : _) _ _ = panic "DsListComp.dePArrComp: LetStmtA"
+dePArrComp (RecStmtA  {} : _) _ _ = panic "DsListComp.dePArrComp: RecStmtA"
 
 --  <<[:e' | qs | qss:]>> pa ea =
 --    <<[:e' | qss:]>> (pa, (x_1, ..., x_n))
@@ -697,7 +709,7 @@ dsMcStmt (BindStmt pat rhs bind_op fail_op) stmts
 --
 --   [ .. | exp, stmts ]
 --
-dsMcStmt (BodyStmt exp then_exp guard_exp _) stmts
+dsMcStmt (BodyStmt exp then_exp guard_exp) stmts
   = do { exp'       <- dsLExpr exp
        ; guard_exp' <- dsExpr guard_exp
        ; then_exp'  <- dsExpr then_exp

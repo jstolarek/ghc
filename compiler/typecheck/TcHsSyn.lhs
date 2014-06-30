@@ -911,12 +911,11 @@ zonkStmt env zBody (RecStmt { recS_stmts = segStmts, recS_later_ids = lvs, recS_
                          , recS_later_rets = new_later_rets
                          , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
 
-zonkStmt env zBody (BodyStmt body then_op guard_op ty)
+zonkStmt env zBody (BodyStmt body then_op guard_op)
   = do new_body <- zBody env body
        new_then <- zonkExpr env then_op
        new_guard <- zonkExpr env guard_op
-       new_ty <- zonkTcTypeToType env ty
-       return (env, BodyStmt new_body new_then new_guard new_ty)
+       return (env, BodyStmt new_body new_then new_guard)
 
 zonkStmt env zBody (LastStmt body ret_op)
   = do new_body <- zBody env body
@@ -954,11 +953,45 @@ zonkStmt env zBody (BindStmt pat body bind_op fail_op)
         ; new_fail <- zonkExpr env fail_op
         ; return (env1, BindStmt new_pat new_body new_bind new_fail) }
 
+zonkStmt env zBody (BodyStmtA body then_op ty)
+  = do new_body <- zBody env body
+       new_then <- zonkExpr env then_op
+       new_ty <- zonkTcTypeToType env ty
+       return (env, BodyStmtA new_body new_then new_ty)
+
+zonkStmt env zBody (LastStmtA body)
+  = do new_body <- zBody env body
+       return (env, LastStmtA new_body)
+
 zonkStmt env zBody (BindStmtA pat body bindA_op)
   = do  { new_body <- zBody env body
         ; (env1, new_pat) <- zonkPat env pat
         ; new_bindA <- zonkExpr env bindA_op
         ; return (env1, BindStmtA new_pat new_body new_bindA) }
+
+zonkStmt env _ (LetStmtA binds)
+  = do (env1, new_binds) <- zonkLocalBinds env binds
+       return (env1, LetStmtA new_binds)
+
+zonkStmt env zBody (RecStmtA { recS_stmts = segStmts, recS_later_ids = lvs, recS_rec_ids = rvs
+                             , recS_fix_fn = fix_id
+                             , recS_later_rets = later_rets, recS_rec_rets = rec_rets
+                             , recS_ret_ty = ret_ty })
+  = do { new_rvs <- zonkIdBndrs env rvs
+       ; new_lvs <- zonkIdBndrs env lvs
+       ; new_ret_ty  <- zonkTcTypeToType env ret_ty
+       ; new_fix_id  <- zonkExpr env fix_id
+       ; let env1 = extendIdZonkEnv env new_rvs
+       ; (env2, new_segStmts) <- zonkStmts env1 zBody segStmts
+        -- Zonk the ret-expressions in an envt that
+        -- has the polymorphic bindings in the envt
+       ; new_later_rets <- mapM (zonkExpr env2) later_rets
+       ; new_rec_rets <- mapM (zonkExpr env2) rec_rets
+       ; return (extendIdZonkEnv env new_lvs,     -- Only the lvs are needed
+                 RecStmtA { recS_stmts = new_segStmts, recS_later_ids = new_lvs
+                          , recS_rec_ids = new_rvs, recS_fix_fn = new_fix_id
+                          , recS_later_rets = new_later_rets
+                          , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
 
 -------------------------------------------------------------------------
 zonkRecFields :: ZonkEnv -> HsRecordBinds TcId -> TcM (HsRecordBinds TcId)

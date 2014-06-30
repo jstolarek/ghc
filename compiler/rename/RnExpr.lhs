@@ -400,11 +400,10 @@ rnCmdTop = wrapLocFstM rnCmdTop'
    = do { (cmd', fvCmd) <- rnLCmd cmd
         ; let cmd_names = [arrAName, composeAName, firstAName] ++
                           nameSetToList (methodNamesCmd (unLoc cmd'))
-        -- Generate the rebindable syntax for the monad
-        ; (cmd_names', cmd_fvs) <- lookupSyntaxNames cmd_names
-
-        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_names'),
-                  fvCmd `plusFV` cmd_fvs) }
+              -- JSTOLAREK: perhaps we can simplify the syntax table in HsCmdTop?
+              cmd_exprs = map HsVar cmd_names
+        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_exprs),
+                  fvCmd) }
 
 rnLCmd :: LHsCmd RdrName -> RnM (LHsCmd Name, FreeVars)
 rnLCmd = wrapLocFstM rnCmd
@@ -538,14 +537,19 @@ methodNamesStmts stmts = plusFVs (map methodNamesLStmt stmts)
 methodNamesLStmt :: Located (StmtLR Name Name (LHsCmd Name)) -> FreeVars
 methodNamesLStmt = methodNamesStmt . unLoc
 
+-- JSTOLAREK: I suspect that only arrow statements can appear here. So I guess
+-- that it should be OK to insert a catch all panic clause
 methodNamesStmt :: StmtLR Name Name (LHsCmd Name) -> FreeVars
 methodNamesStmt (LastStmt cmd _)                 = methodNamesLCmd cmd
-methodNamesStmt (BodyStmt cmd _ _ _)             = methodNamesLCmd cmd
--- JSTOLAREK: do both of these have a chance of occuring?
+methodNamesStmt (LastStmtA cmd)                  = methodNamesLCmd cmd
+methodNamesStmt (BodyStmt cmd _ _)               = methodNamesLCmd cmd
+methodNamesStmt (BodyStmtA cmd _ _)              = methodNamesLCmd cmd
 methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
 methodNamesStmt (BindStmtA _ cmd _)              = methodNamesLCmd cmd
 methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
+methodNamesStmt (RecStmtA { recS_stmts = stmts })= methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
+methodNamesStmt (LetStmtA {})                    = emptyFVs
 methodNamesStmt (ParStmt {})                     = emptyFVs
 methodNamesStmt (TransStmt {})                   = emptyFVs
    -- ParStmt and TransStmt can't occur in commands, but it's not convenient to error
@@ -644,7 +648,13 @@ rnStmt ctxt rnBody (L loc (LastStmt body _)) thing_inside
         ; return (([L loc (LastStmt body' ret_op)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs3) }
 
-rnStmt ctxt rnBody (L loc (BodyStmt body _ _ _)) thing_inside
+rnStmt _ rnBody (L loc (LastStmtA body)) thing_inside
+  = do  { (body', fv_expr) <- rnBody body
+        ; (thing, fvs    ) <- thing_inside []
+        ; return (([L loc (LastStmtA body')], thing),
+                  fv_expr `plusFV` fvs) }
+
+rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
         ; (then_op, fvs1)  <- lookupStmtName ctxt thenMName
         ; (guard_op, fvs2) <- if isListCompExpr ctxt
@@ -654,8 +664,15 @@ rnStmt ctxt rnBody (L loc (BodyStmt body _ _ _)) thing_inside
                               -- Also for sub-stmts of same eg [ e | x<-xs, gd | blah ]
                               -- Here "gd" is a guard
         ; (thing, fvs3)    <- thing_inside []
-        ; return (([L loc (BodyStmt body' then_op guard_op placeHolderType)], thing),
+        ; return (([L loc (BodyStmt body' then_op guard_op)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }
+
+rnStmt ctxt rnBody (L loc (BodyStmtA body _ _)) thing_inside
+  = do  { (body', fv_expr) <- rnBody body
+        ; (then_op, fvs1)  <- lookupStmtName ctxt thenAName
+        ; (thing, fvs3)    <- thing_inside []
+        ; return (([L loc (BodyStmtA body' then_op placeHolderType)], thing),
+                  fv_expr `plusFV` fvs1 `plusFV` fvs3) }
 
 rnStmt ctxt rnBody (L loc (BindStmt pat body _ _)) thing_inside
   = do  { (body', fv_expr) <- rnBody body
@@ -682,6 +699,11 @@ rnStmt _ _ (L loc (LetStmt binds)) thing_inside
         { (thing, fvs) <- thing_inside (collectLocalBinders binds')
         ; return (([L loc (LetStmt binds')], thing), fvs) }  }
 
+rnStmt _ _ (L loc (LetStmtA binds)) thing_inside
+  = do  { rnLocalBindsAndThen binds $ \binds' -> do
+        { (thing, fvs) <- thing_inside (collectLocalBinders binds')
+        ; return (([L loc (LetStmtA binds')], thing), fvs) }  }
+
 rnStmt ctxt rnBody (L _ (RecStmt { recS_stmts = rec_stmts })) thing_inside
   = do  { (return_op, fvs1)  <- lookupStmtName ctxt returnMName
         ; (mfix_op,   fvs2)  <- lookupStmtName ctxt mfixName
@@ -705,6 +727,26 @@ rnStmt ctxt rnBody (L _ (RecStmt { recS_stmts = rec_stmts })) thing_inside
         ; (thing, fvs_later) <- thing_inside bndrs
         ; let (rec_stmts', fvs) = segmentRecStmts ctxt empty_rec_stmt segs fvs_later
         ; return ((rec_stmts', thing), fvs `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) } }
+
+rnStmt ctxt rnBody (L _ (RecStmtA { recS_stmts = rec_stmts })) thing_inside
+  = do  { (fix_op,   fvs1)  <- lookupStmtName ctxt fixAName
+        ; let empty_rec_stmt = emptyRecStmtA { recS_fix_fn  = fix_op }
+
+        -- Step1: Bring all the binders of the mdo into scope
+        -- (Remember that this also removes the binders from the
+        -- finally-returned free-vars.)
+        -- And rename each individual stmt, making a
+        -- singleton segment.  At this stage the FwdRefs field
+        -- isn't finished: it's empty for all except a BindStmt
+        -- for which it's the fwd refs within the bind itself
+        -- (This set may not be empty, because we're in a recursive
+        -- context.)
+        ; rnRecStmtsAndThen rnBody rec_stmts   $ \ segs -> do
+        { let bndrs = nameSetToList $ foldr (unionNameSets . (\(ds,_,_,_) -> ds))
+                                            emptyNameSet segs
+        ; (thing, fvs_later) <- thing_inside bndrs
+        ; let (rec_stmts', fvs) = segmentRecStmts ctxt empty_rec_stmt segs fvs_later
+        ; return ((rec_stmts', thing), fvs `plusFV` fvs1) } }
 
 rnStmt ctxt _ (L loc (ParStmt segs _ _)) thing_inside
   = do  { (mzip_op, fvs1)   <- lookupStmtName ctxt mzipName
@@ -886,11 +928,17 @@ rn_rec_stmt_lhs :: Outputable body => MiniFixityEnv
                    -- so we don't bother to compute it accurately in the other cases
                 -> RnM [(LStmtLR Name RdrName body, FreeVars)]
 
-rn_rec_stmt_lhs _ (L loc (BodyStmt body a b c))
-  = return [(L loc (BodyStmt body a b c), emptyFVs)]
+rn_rec_stmt_lhs _ (L loc (BodyStmt body a b))
+  = return [(L loc (BodyStmt body a b), emptyFVs)]
+
+rn_rec_stmt_lhs _ (L loc (BodyStmtA body a b))
+  = return [(L loc (BodyStmtA body a b), emptyFVs)]
 
 rn_rec_stmt_lhs _ (L loc (LastStmt body a))
   = return [(L loc (LastStmt body a), emptyFVs)]
+
+rn_rec_stmt_lhs _ (L loc (LastStmtA body))
+  = return [(L loc (LastStmtA body), emptyFVs)]
 
 rn_rec_stmt_lhs fix_env (L loc (BindStmt pat body a b))
   = do
@@ -909,6 +957,10 @@ rn_rec_stmt_lhs fix_env (L loc (BindStmtA pat body a))
 rn_rec_stmt_lhs _ (L _ (LetStmt binds@(HsIPBinds _)))
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
 
+-- JSTOLAREK: I don't understand this, applying voodoo programming
+rn_rec_stmt_lhs _ (L _ (LetStmtA binds@(HsIPBinds _)))
+  = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
+
 rn_rec_stmt_lhs fix_env (L loc (LetStmt (HsValBinds binds)))
     = do (_bound_names, binds') <- rnLocalValBindsLHS fix_env binds
          return [(L loc (LetStmt (HsValBinds binds')),
@@ -916,8 +968,18 @@ rn_rec_stmt_lhs fix_env (L loc (LetStmt (HsValBinds binds)))
                  emptyFVs
                  )]
 
+rn_rec_stmt_lhs fix_env (L loc (LetStmtA (HsValBinds binds)))
+    = do (_bound_names, binds') <- rnLocalValBindsLHS fix_env binds
+         return [(L loc (LetStmtA (HsValBinds binds')),
+                 -- Warning: this is bogus; see function invariant
+                 emptyFVs
+                 )]
+
 -- XXX Do we need to do something with the return and mfix names?
 rn_rec_stmt_lhs fix_env (L _ (RecStmt { recS_stmts = stmts }))  -- Flatten Rec inside Rec
+    = rn_rec_stmts_lhs fix_env stmts
+
+rn_rec_stmt_lhs fix_env (L _ (RecStmtA { recS_stmts = stmts }))  -- Flatten Rec inside Rec
     = rn_rec_stmts_lhs fix_env stmts
 
 rn_rec_stmt_lhs _ stmt@(L _ (ParStmt {}))       -- Syntactically illegal in mdo
@@ -928,6 +990,9 @@ rn_rec_stmt_lhs _ stmt@(L _ (TransStmt {}))     -- Syntactically illegal in mdo
 
 rn_rec_stmt_lhs _ (L _ (LetStmt EmptyLocalBinds))
   = panic "rn_rec_stmt LetStmt EmptyLocalBinds"
+
+rn_rec_stmt_lhs _ (L _ (LetStmtA EmptyLocalBinds))
+  = panic "rn_rec_stmt LetStmtA EmptyLocalBinds"
 
 rn_rec_stmts_lhs :: Outputable body => MiniFixityEnv
                  -> [LStmt RdrName body]
@@ -957,11 +1022,22 @@ rn_rec_stmt rnBody _ (L loc (LastStmt body _)) _
         ; return [(emptyNameSet, fv_expr `plusFV` fvs1, emptyNameSet,
                    L loc (LastStmt body' ret_op))] }
 
+rn_rec_stmt rnBody _ (L loc (LastStmtA body)) _
+  = do  { (body', fv_expr) <- rnBody body
+        ; return [(emptyNameSet, fv_expr, emptyNameSet,
+                   L loc (LastStmtA body'))] }
+
 rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _ _)) _
   = do { (body', fvs) <- rnBody body
        ; (then_op, fvs1) <- lookupSyntaxName thenMName
        ; return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
                  L loc (BodyStmt body' then_op noSyntaxExpr placeHolderType))] }
+
+rn_rec_stmt rnBody _ (L loc (BodyStmtA body _ _)) _
+  = do { (body', fvs) <- rnBody body
+       ; (then_op, fvs1) <- lookupSyntaxName thenAName
+       ; return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
+                 L loc (BodyStmtA body' then_op placeHolderType))] }
 
 rn_rec_stmt rnBody _ (L loc (BindStmt pat' body _ _)) fv_pat
   = do { (body', fv_expr) <- rnBody body
@@ -983,6 +1059,10 @@ rn_rec_stmt rnBody _ (L loc (BindStmtA pat' body _)) fv_pat
 rn_rec_stmt _ _ (L _ (LetStmt binds@(HsIPBinds _))) _
   = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
 
+-- JSTOLAREK: I don't understand this, applying voodoo programming
+rn_rec_stmt _ _ (L _ (LetStmtA binds@(HsIPBinds _))) _
+  = failWith (badIpBinds (ptext (sLit "an mdo expression")) binds)
+
 rn_rec_stmt _ all_bndrs (L loc (LetStmt (HsValBinds binds'))) _ = do
   (binds', du_binds) <-
       -- fixities and unused are handled above in rnRecStmtsAndThen
@@ -990,9 +1070,19 @@ rn_rec_stmt _ all_bndrs (L loc (LetStmt (HsValBinds binds'))) _ = do
   return [(duDefs du_binds, allUses du_binds,
            emptyNameSet, L loc (LetStmt (HsValBinds binds')))]
 
+rn_rec_stmt _ all_bndrs (L loc (LetStmtA (HsValBinds binds'))) _ = do
+  (binds', du_binds) <-
+      -- fixities and unused are handled above in rnRecStmtsAndThen
+      rnLocalValBindsRHS (mkNameSet all_bndrs) binds'
+  return [(duDefs du_binds, allUses du_binds,
+           emptyNameSet, L loc (LetStmtA (HsValBinds binds')))]
+
 -- no RecStmt case because they get flattened above when doing the LHSes
 rn_rec_stmt _ _ stmt@(L _ (RecStmt {})) _
   = pprPanic "rn_rec_stmt: RecStmt" (ppr stmt)
+
+rn_rec_stmt _ _ stmt@(L _ (RecStmtA {})) _
+  = pprPanic "rn_rec_stmt: RecStmtA" (ppr stmt)
 
 rn_rec_stmt _ _ stmt@(L _ (ParStmt {})) _       -- Syntactically illegal in mdo
   = pprPanic "rn_rec_stmt: ParStmt" (ppr stmt)
@@ -1002,6 +1092,9 @@ rn_rec_stmt _ _ stmt@(L _ (TransStmt {})) _     -- Syntactically illegal in mdo
 
 rn_rec_stmt _ _ (L _ (LetStmt EmptyLocalBinds)) _
   = panic "rn_rec_stmt: LetStmt EmptyLocalBinds"
+
+rn_rec_stmt _ _ (L _ (LetStmtA EmptyLocalBinds)) _
+  = panic "rn_rec_stmt: LetStmtA EmptyLocalBinds"
 
 rn_rec_stmts :: Outputable (body RdrName) =>
                 (Located (body RdrName) -> RnM (Located (body Name), FreeVars))
@@ -1228,10 +1321,10 @@ checkLastStmt ctxt lstmt@(L loc stmt)
   where
     check_do    -- Expect BodyStmt, and change it to LastStmt
       = case stmt of
-          BodyStmt e _ _ _ -> return (L loc (mkLastStmt e))
-          LastStmt {}      -> return lstmt   -- "Deriving" clauses may generate a
-                                             -- LastStmt directly (unlike the parser)
-          _                -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
+          BodyStmt e _ _ -> return (L loc (mkLastStmt e))
+          LastStmt {}    -> return lstmt   -- "Deriving" clauses may generate a
+                                           -- LastStmt directly (unlike the parser)
+          _              -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
     last_error = (ptext (sLit "The last statement in") <+> pprAStmtContext ctxt
                   <+> ptext (sLit "must be an expression"))
 
@@ -1259,11 +1352,15 @@ checkStmt ctxt (L _ stmt)
 pprStmtCat :: Stmt a body -> SDoc
 pprStmtCat (TransStmt {})     = ptext (sLit "transform")
 pprStmtCat (LastStmt {})      = ptext (sLit "return expression")
+pprStmtCat (LastStmtA {})     = ptext (sLit "return expression")
 pprStmtCat (BodyStmt {})      = ptext (sLit "body")
+pprStmtCat (BodyStmtA {})     = ptext (sLit "body")
 pprStmtCat (BindStmt {})      = ptext (sLit "binding")
 pprStmtCat (BindStmtA {})     = ptext (sLit "binding")
 pprStmtCat (LetStmt {})       = ptext (sLit "let")
+pprStmtCat (LetStmtA {})      = ptext (sLit "let")
 pprStmtCat (RecStmt {})       = ptext (sLit "rec")
+pprStmtCat (RecStmtA {})      = ptext (sLit "rec")
 pprStmtCat (ParStmt {})       = ptext (sLit "parallel")
 
 ------------
@@ -1332,6 +1429,10 @@ okCompStmt dflags _ stmt
        RecStmt {}  -> notOK
        LastStmt {} -> notOK  -- Should not happen (dealt with by checkLastStmt
        BindStmtA {} -> notOK
+       BodyStmtA {} -> notOK
+       LastStmtA {} -> notOK
+       LetStmtA  {} -> notOK
+       RecStmtA  {} -> notOK
 
 ----------------
 okPArrStmt dflags _ stmt
@@ -1346,6 +1447,10 @@ okPArrStmt dflags _ stmt
        RecStmt {}   -> notOK
        LastStmt {}  -> notOK  -- Should not happen (dealt with by checkLastStmt)
        BindStmtA {} -> notOK
+       BodyStmtA {} -> notOK
+       LastStmtA {} -> notOK
+       LetStmtA  {} -> notOK
+       RecStmtA  {} -> notOK
 
 okArrowDoStmt :: Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
 okArrowDoStmt stmt

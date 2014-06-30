@@ -53,7 +53,7 @@ module HsUtils(
   -- Stmts
   mkTransformStmt, mkTransformByStmt, mkBodyStmt, mkBindStmt, mkLastStmt,
   emptyTransStmt, mkGroupUsingStmt, mkGroupByUsingStmt, 
-  emptyRecStmt, mkRecStmt, 
+  emptyRecStmt, emptyRecStmtA, mkRecStmt, 
 
   -- Template Haskell
   mkHsSpliceTy, mkHsSpliceE, mkHsSpliceTE, mkHsSplice,
@@ -194,7 +194,7 @@ mkLastStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBodyStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBindStmt :: LPat idL -> Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 
-emptyRecStmt :: StmtLR idL idR bodyR
+emptyRecStmt, emptyRecStmtA :: StmtLR idL idR bodyR
 mkRecStmt    :: [LStmtLR idL idR bodyR] -> StmtLR idL idR bodyR
 
 
@@ -237,13 +237,17 @@ mkGroupUsingStmt   ss u   = emptyTransStmt { trS_form = GroupForm, trS_stmts = s
 mkGroupByUsingStmt ss b u = emptyTransStmt { trS_form = GroupForm, trS_stmts = ss, trS_using = u, trS_by = Just b }
 
 mkLastStmt body     = LastStmt body noSyntaxExpr
-mkBodyStmt body     = BodyStmt body noSyntaxExpr noSyntaxExpr placeHolderType
+mkBodyStmt body     = BodyStmt body noSyntaxExpr noSyntaxExpr
 mkBindStmt pat body = BindStmt pat body noSyntaxExpr noSyntaxExpr
 
 emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_ret_fn = noSyntaxExpr, recS_mfix_fn = noSyntaxExpr
                        , recS_bind_fn = noSyntaxExpr, recS_later_rets = []
                        , recS_rec_rets = [], recS_ret_ty = placeHolderType }
+
+emptyRecStmtA = RecStmtA { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
+                         , recS_fix_fn = noSyntaxExpr, recS_later_rets = []
+                         , recS_rec_rets = [], recS_ret_ty = placeHolderType }
 
 mkRecStmt stmts = emptyRecStmt { recS_stmts = stmts }
 
@@ -604,15 +608,19 @@ collectLStmtBinders = collectStmtBinders . unLoc
 collectStmtBinders :: StmtLR idL idR body -> [idL]
   -- Id Binders for a Stmt... [but what about pattern-sig type vars]?
 collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
--- JSTOLAREK: do we need to worry about BindStmtA here?
+-- JSTOLAREK: do we need to worry about the arrow statements here?
 collectStmtBinders (BindStmtA pat _ _)  = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
+collectStmtBinders (LetStmtA binds)     = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
+collectStmtBinders (BodyStmtA {})       = []
 collectStmtBinders (LastStmt {})        = []
+collectStmtBinders (LastStmtA {})       = []
 collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [s | ParStmtBlock ss _ _ <- xs, s <- ss]
 collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts
 collectStmtBinders (RecStmt { recS_stmts = ss })     = collectLStmtsBinders ss
+collectStmtBinders (RecStmtA { recS_stmts = ss })    = collectLStmtsBinders ss
 
 
 ----------------- Patterns --------------------------
@@ -792,14 +800,20 @@ lStmtsImplicits = hs_lstmts
     hs_lstmts :: [LStmtLR Name idR (Located (body idR))] -> NameSet
     hs_lstmts = foldr (\stmt rest -> unionNameSets (hs_stmt (unLoc stmt)) rest) emptyNameSet
     
+    -- JSTOLAREK: do we need to worry about arrow statements here?
+    -- Check callers of lStmtsImplicits
     hs_stmt (BindStmt pat _ _ _) = lPatImplicits pat
     hs_stmt (BindStmtA pat _ _)  = lPatImplicits pat
     hs_stmt (LetStmt binds)      = hs_local_binds binds
+    hs_stmt (LetStmtA binds)     = hs_local_binds binds
     hs_stmt (BodyStmt {})        = emptyNameSet
+    hs_stmt (BodyStmtA {})       = emptyNameSet
     hs_stmt (LastStmt {})        = emptyNameSet
+    hs_stmt (LastStmtA {})       = emptyNameSet
     hs_stmt (ParStmt xs _ _)     = hs_lstmts [s | ParStmtBlock ss _ _ <- xs, s <- ss]
     hs_stmt (TransStmt { trS_stmts = stmts }) = hs_lstmts stmts
     hs_stmt (RecStmt { recS_stmts = ss })     = hs_lstmts ss
+    hs_stmt (RecStmtA { recS_stmts = ss })    = hs_lstmts ss
     
     hs_local_binds (HsValBinds val_binds) = hsValBindsImplicits val_binds
     hs_local_binds (HsIPBinds _)         = emptyNameSet

@@ -347,23 +347,30 @@ matchExpectedCmdArgs n ty
 --	(b) no rebindable syntax
 
 tcArrDoStmt :: CmdEnv -> TcCmdStmtChecker
-tcArrDoStmt env _ (LastStmt rhs _) res_ty thing_inside
+tcArrDoStmt env _ (LastStmtA rhs) res_ty thing_inside
   = do	{ rhs' <- tcCmd env rhs (unitTy, res_ty)
 	; thing <- thing_inside (panic "tcArrDoStmt")
-	; return (LastStmt rhs' noSyntaxExpr, thing) }
+        -- JSTOLAREK: we mustn't discard the bind operator! Typecheckig should
+        -- go here.
+	; return (LastStmtA rhs', thing) }
 
-tcArrDoStmt env _ (BodyStmt rhs _ _ _) res_ty thing_inside
+tcArrDoStmt env _ (BodyStmtA rhs _ _) res_ty thing_inside
   = do	{ (rhs', elt_ty) <- tc_arr_rhs env rhs
 	; thing 	 <- thing_inside res_ty
-	; return (BodyStmt rhs' noSyntaxExpr noSyntaxExpr elt_ty, thing) }
+        -- JSTOLAREK: we mustn't discard the bind operator! Typecheckig should
+        -- go here. Also, I probably should do sth with the type stored in
+        -- BodyStmtA
+	; return (BodyStmtA rhs' noSyntaxExpr elt_ty, thing) }
 
 tcArrDoStmt env ctxt (BindStmtA pat rhs _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs
 	; (pat', thing)  <- tcPat (StmtCtxt ctxt) pat pat_ty $
                             thing_inside res_ty
+        -- JSTOLAREK: we mustn't discard the bind operator! Typecheckig should
+        -- go here.
 	; return (BindStmtA pat' rhs' noSyntaxExpr, thing) }
 
-tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
+tcArrDoStmt env ctxt (RecStmtA { recS_stmts = stmts, recS_later_ids = later_names
                             , recS_rec_ids = rec_names }) res_ty thing_inside
   = do  { let tup_names = rec_names ++ filterOut (`elem` rec_names) later_names
         ; tup_elt_tys <- newFlexiTyVarTys (length tup_names) liftedTypeKind
@@ -393,6 +400,7 @@ tcArrDoStmt env ctxt (RecStmt { recS_stmts = stmts, recS_later_ids = later_names
                                , recS_ret_ty = res_ty }, thing)
 	}}
 
+-- JSTOLAREK: why is let stmt unexpected?
 tcArrDoStmt _ _ stmt _ _
   = pprPanic "tcArrDoStmt: unexpected Stmt" (ppr stmt)
 

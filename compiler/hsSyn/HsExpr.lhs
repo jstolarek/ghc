@@ -1070,11 +1070,6 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
              (SyntaxExpr idR) -- The (>>) operator
              (SyntaxExpr idR) -- The `guard` operator; used only in MonadComp
                               -- See notes [Monad Comprehensions]
-             PostTcType       -- Element type of the RHS (used for arrows)
-
-  | BindStmtA (LPat idL)
-              body
-              (SyntaxExpr idR) -- the `bindA` operator for arrows
 
   | LetStmt  (HsLocalBindsLR idL idR)
 
@@ -1139,6 +1134,31 @@ data StmtLR idL idR body -- body should always be (LHs**** idR)
                                      -- With rebindable syntax the type might not
                                      -- be quite as simple as (m (tya, tyb, tyc)).
       }
+
+  -- Arrow do-notation
+  | LastStmtA body
+
+  | BindStmtA (LPat idL)
+              body
+              (SyntaxExpr idR) -- `bindA` (>>=) operator for arrows
+
+  | BodyStmtA body             -- See Note [BodyStmt]
+              (SyntaxExpr idR) -- `thenA` (>>) operator for arrows
+              PostTcType       -- Element type of the RHS
+
+  | LetStmtA  (HsLocalBindsLR idL idR)
+
+  | RecStmtA
+     { recS_stmts :: [LStmtLR idL idR body]
+     , recS_later_ids :: [idR]
+     , recS_rec_ids :: [idR]
+     , recS_later_rets :: [PostTcExpr]
+     , recS_rec_rets :: [PostTcExpr]
+     , recS_ret_ty :: PostTcType
+     , recS_fix_fn :: SyntaxExpr idR -- fixA operator
+  }
+
+
   deriving (Data, Typeable)
 
 data TransForm   -- The 'f' below is the 'using' function, 'e' is the by function
@@ -1302,10 +1322,13 @@ instance (OutputableBndr idL, OutputableBndr idR, Outputable body)
 pprStmt :: (OutputableBndr idL, OutputableBndr idR, Outputable body)
         => (StmtLR idL idR body) -> SDoc
 pprStmt (LastStmt expr _)         = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
+pprStmt (LastStmtA expr)          = ifPprDebug (ptext (sLit "[last]")) <+> ppr expr
 pprStmt (BindStmt pat expr _ _)   = hsep [ppr pat, larrow, ppr expr]
 pprStmt (BindStmtA pat expr _)    = hsep [ppr pat, larrow, ppr expr]
 pprStmt (LetStmt binds)           = hsep [ptext (sLit "let"), pprBinds binds]
-pprStmt (BodyStmt expr _ _ _)     = ppr expr
+pprStmt (LetStmtA binds)          = hsep [ptext (sLit "let"), pprBinds binds]
+pprStmt (BodyStmt expr _ _)       = ppr expr
+pprStmt (BodyStmtA expr _ _)      = ppr expr
 pprStmt (ParStmt stmtss _ _)      = sep (punctuate (ptext (sLit " | ")) (map ppr stmtss))
 
 pprStmt (TransStmt { trS_stmts = stmts, trS_by = by, trS_using = using, trS_form = form })
@@ -1313,6 +1336,12 @@ pprStmt (TransStmt { trS_stmts = stmts, trS_by = by, trS_using = using, trS_form
 
 pprStmt (RecStmt { recS_stmts = segment, recS_rec_ids = rec_ids
                  , recS_later_ids = later_ids })
+  = ptext (sLit "rec") <+>
+    vcat [ ppr_do_stmts segment
+         , ifPprDebug (vcat [ ptext (sLit "rec_ids=") <> ppr rec_ids
+                            , ptext (sLit "later_ids=") <> ppr later_ids])]
+pprStmt (RecStmtA { recS_stmts = segment, recS_rec_ids = rec_ids
+                  , recS_later_ids = later_ids })
   = ptext (sLit "rec") <+>
     vcat [ ppr_do_stmts segment
          , ifPprDebug (vcat [ ptext (sLit "rec_ids=") <> ppr rec_ids
@@ -1615,6 +1644,7 @@ pprStmtContext (TransStmtCtxt c)
 
 
 -- Used to generate the string for a *runtime* error message
+
 matchContextErrString :: Outputable id => HsMatchContext id -> SDoc
 matchContextErrString (FunRhs fun _)             = ptext (sLit "function") <+> ppr fun
 matchContextErrString CaseAlt                    = ptext (sLit "case")

@@ -975,9 +975,9 @@ rnGRHS' ctxt rnBody (GRHS guards rhs)
 	-- Standard Haskell 1.4 guards are just a single boolean
 	-- expression, rather than a list of qualifiers as in the
 	-- Glasgow extension
-    is_standard_guard []                       = True
-    is_standard_guard [L _ (BodyStmt _ _ _ _)] = True
-    is_standard_guard _                        = False
+    is_standard_guard []                     = True
+    is_standard_guard [L _ (BodyStmt _ _ _)] = True
+    is_standard_guard _                      = False
 \end{code}
 
 %************************************************************************

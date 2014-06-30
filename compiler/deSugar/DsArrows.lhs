@@ -704,7 +704,7 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
-dsCmdDo ids local_vars res_ty [L _ (LastStmt body _)] env_ids = do
+dsCmdDo ids local_vars res_ty [L _ (LastStmtA body)] env_ids = do
     (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     env_var <- newSysLocalDs env_ty
@@ -760,7 +760,7 @@ dsCmdStmt
 --        ---> premap (\ ((xs)) -> (((xs1),()),(xs')))
 --            (first c >>> arr snd) >>> ss
 
-dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
+dsCmdStmt ids local_vars out_ids (BodyStmtA cmd _then_op c_ty) env_ids = do
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
     core_mux <- matchEnv env_ids
         (mkCorePairExpr
@@ -789,8 +789,11 @@ dsCmdStmt ids local_vars out_ids (BodyStmt cmd _ _ c_ty) env_ids = do
 -- It would be simpler and more consistent to do this using second,
 -- but that's likely to be defined in terms of first.
 
-dsCmdStmt ids local_vars out_ids (BindStmtA pat cmd _) env_ids = do
+dsCmdStmt ids local_vars out_ids (BindStmtA pat cmd _bindA_op) env_ids = do
     (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy (hsLPatType pat) cmd
+
+-- do { p <- cmd; ss } = cmd `bind` \ p -> do { ss }
+
     let pat_ty   = hsLPatType pat
         pat_vars = mkVarSet (collectPatBinders pat)
         env_ids2 = varSetElems (mkVarSet out_ids `minusVarSet` pat_vars)
@@ -835,7 +838,7 @@ dsCmdStmt ids local_vars out_ids (BindStmtA pat cmd _) env_ids = do
 --
 --        ---> arr (\ (xs) -> let binds in (xs')) >>> ss
 
-dsCmdStmt ids local_vars out_ids (LetStmt binds) env_ids = do
+dsCmdStmt ids local_vars out_ids (LetStmtA binds) env_ids = do
     -- build a new environment using the let bindings
     core_binds <- dsLocalBinds binds (mkBigCoreVarTup out_ids)
     -- match the old environment against the input
@@ -861,9 +864,9 @@ dsCmdStmt ids local_vars out_ids (LetStmt binds) env_ids = do
 --            arr (\((xs1),(xs2)) -> (xs')) >>> ss'
 
 dsCmdStmt ids local_vars out_ids
-        (RecStmt { recS_stmts = stmts
-                 , recS_later_ids = later_ids, recS_rec_ids = rec_ids
-                 , recS_later_rets = later_rets, recS_rec_rets = rec_rets })
+        (RecStmtA { recS_stmts = stmts
+                  , recS_later_ids = later_ids, recS_rec_ids = rec_ids
+                  , recS_later_rets = later_rets, recS_rec_rets = rec_rets })
         env_ids = do
     let env2_id_set = mkVarSet out_ids `minusVarSet` mkVarSet later_ids
         env2_ids = varSetElems env2_id_set
@@ -1172,16 +1175,20 @@ collectLStmtsBinders = concatMap collectLStmtBinders
 collectLStmtBinders :: LStmt Id body -> [Id]
 collectLStmtBinders = collectStmtBinders . unLoc
 
--- JSTOLAREK: perhaps here we don't need to worry about BindStmt?
+-- JSTOLAREK: perhaps here we don't need to worry about monadic statements?
 collectStmtBinders :: Stmt Id body -> [Id]
 collectStmtBinders (BindStmt pat _ _ _) = collectPatBinders pat
 collectStmtBinders (BindStmtA pat _ _)  = collectPatBinders pat
 collectStmtBinders (LetStmt binds)      = collectLocalBinders binds
+collectStmtBinders (LetStmtA binds)     = collectLocalBinders binds
 collectStmtBinders (BodyStmt {})        = []
+collectStmtBinders (BodyStmtA {})       = []
 collectStmtBinders (LastStmt {})        = []
+collectStmtBinders (LastStmtA {})       = []
 collectStmtBinders (ParStmt xs _ _)     = collectLStmtsBinders
                                         $ [ s | ParStmtBlock ss _ _ <- xs, s <- ss]
 collectStmtBinders (TransStmt { trS_stmts = stmts }) = collectLStmtsBinders stmts
-collectStmtBinders (RecStmt { recS_later_ids = later_ids }) = later_ids
+collectStmtBinders (RecStmt { recS_later_ids = later_ids })  = later_ids
+collectStmtBinders (RecStmtA { recS_later_ids = later_ids }) = later_ids
 
 \end{code}

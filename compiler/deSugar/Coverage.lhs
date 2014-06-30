@@ -654,6 +654,9 @@ addTickStmt _isGuard (LastStmt e ret) = do
         liftM2 LastStmt
                 (addTickLHsExpr e)
                 (addTickSyntaxExpr hpcSrcSpan ret)
+addTickStmt _isGuard (LastStmtA e) = do
+        liftM  LastStmtA
+                (addTickLHsExpr e)
 addTickStmt _isGuard (BindStmt pat e bind fail) = do
         liftM4 BindStmt
                 (addTickLPat pat)
@@ -665,14 +668,21 @@ addTickStmt _isGuard (BindStmtA pat e bindA) = do
                 (addTickLPat pat)
                 (addTickLHsExprRHS e)
                 (addTickSyntaxExpr hpcSrcSpan bindA)
-addTickStmt isGuard (BodyStmt e bind' guard' ty) = do
-        liftM4 BodyStmt
+addTickStmt isGuard (BodyStmt e bind' guard') = do
+        liftM3 BodyStmt
                 (addTick isGuard e)
                 (addTickSyntaxExpr hpcSrcSpan bind')
                 (addTickSyntaxExpr hpcSrcSpan guard')
+addTickStmt isGuard (BodyStmtA e thenA ty) = do
+        liftM3 BodyStmtA
+                (addTick isGuard e)
+                (addTickSyntaxExpr hpcSrcSpan thenA)
                 (return ty)
 addTickStmt _isGuard (LetStmt binds) = do
         liftM LetStmt
+                (addTickHsLocalBinds binds)
+addTickStmt _isGuard (LetStmtA binds) = do
+        liftM LetStmtA
                 (addTickHsLocalBinds binds)
 addTickStmt isGuard (ParStmt pairs mzipExpr bindExpr) = do
     liftM3 ParStmt
@@ -700,6 +710,11 @@ addTickStmt isGuard stmt@(RecStmt {})
        ; bind'  <- addTickSyntaxExpr hpcSrcSpan (recS_bind_fn stmt)
        ; return (stmt { recS_stmts = stmts', recS_ret_fn = ret'
                       , recS_mfix_fn = mfix', recS_bind_fn = bind' }) }
+
+addTickStmt isGuard stmt@(RecStmtA {})
+  = do { stmts' <- addTickLStmts isGuard (recS_stmts stmt)
+       ; fix'   <- addTickSyntaxExpr hpcSrcSpan (recS_fix_fn stmt)
+       ; return (stmt { recS_stmts = stmts', recS_fix_fn = fix' }) }
 
 addTick :: Maybe (Bool -> BoxLabel) -> LHsExpr Id -> TM (LHsExpr Id)
 addTick isGuard e | Just fn <- isGuard = addBinTickLHsExpr fn e
@@ -861,26 +876,23 @@ addTickLCmdStmts' lstmts res
         binders = collectLStmtsBinders lstmts
 
 addTickCmdStmt :: Stmt Id (LHsCmd Id) -> TM (Stmt Id (LHsCmd Id))
-addTickCmdStmt (BindStmt pat c bind fail) = do
-        liftM4 BindStmt
+addTickCmdStmt (BindStmtA pat c bind) = do
+        liftM3 BindStmtA
                 (addTickLPat pat)
                 (addTickLHsCmd c)
                 (return bind)
-                (return fail)
-addTickCmdStmt (LastStmt c ret) = do
-        liftM2 LastStmt
+addTickCmdStmt (LastStmtA c) = do
+        liftM  LastStmtA
                 (addTickLHsCmd c)
-                (addTickSyntaxExpr hpcSrcSpan ret)
-addTickCmdStmt (BodyStmt c bind' guard' ty) = do
-        liftM4 BodyStmt
+addTickCmdStmt (BodyStmtA c then' ty) = do
+        liftM3 BodyStmtA
                 (addTickLHsCmd c)
-                (addTickSyntaxExpr hpcSrcSpan bind')
-                (addTickSyntaxExpr hpcSrcSpan guard')
+                (addTickSyntaxExpr hpcSrcSpan then')
                 (return ty)
-addTickCmdStmt (LetStmt binds) = do
-        liftM LetStmt
+addTickCmdStmt (LetStmtA binds) = do
+        liftM LetStmtA
                 (addTickHsLocalBinds binds)
-addTickCmdStmt stmt@(RecStmt {})
+addTickCmdStmt stmt@(RecStmtA {})
   = do { stmts' <- addTickLCmdStmts (recS_stmts stmt)
        ; ret'   <- addTickSyntaxExpr hpcSrcSpan (recS_ret_fn stmt)
        ; mfix'  <- addTickSyntaxExpr hpcSrcSpan (recS_mfix_fn stmt)
