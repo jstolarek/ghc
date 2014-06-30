@@ -38,7 +38,9 @@ module Control.Arrow (
     -- * Arrow application
     ArrowApply(..), ArrowMonad(..), leftApp,
     -- * Feedback
-    ArrowLoop(..)
+    ArrowLoop(..),
+    -- * Rebindable do-notation support
+    bindA, thenA, fixA, ifThenElseA
     ) where
 
 import Prelude hiding (id,(.))
@@ -360,3 +362,23 @@ instance ArrowLoop (->) where
 instance MonadFix m => ArrowLoop (Kleisli m) where
     loop (Kleisli f) = Kleisli (liftM fst . mfix . f')
       where f' x y = f (x, snd y)
+
+-- JSTOLAREK: document these
+
+bindA :: Arrow a => a (e,s) b -> a (e,(b,s)) c -> a (e,s) c
+u `bindA` f = arr id &&& u >>> arr (\ ((e,s),b) -> (e,(b,s))) >>> f
+
+
+thenA :: Arrow a => a (e,s) b -> a (e,s) c -> a (e,s) c
+u `thenA` v = arr id &&& u >>> arr fst >>> v
+
+
+fixA :: ArrowLoop a => a (e,(b,s)) b -> a (e,s) b
+fixA f = loop (arr (\ ((e,s),b) -> (e,(b,s))) >>> f >>> arr (\ b -> (b,b)))
+
+
+ifThenElseA :: ArrowChoice a => a (e,s) r -> a (e,s) r -> a (e,(Bool,s)) r
+ifThenElseA thenPart elsePart = arr split >>> thenPart ||| elsePart
+  where
+    split (e, (True, s)) = Left (e, s)
+    split (e, (False, s)) = Right (e, s)
