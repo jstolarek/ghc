@@ -705,7 +705,8 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
 dsCmdDo ids local_vars res_ty [L _ (LastStmtA body)] env_ids = do
-    (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
+    dsLCmd ids local_vars unitTy res_ty body env_ids
+{-
     let env_ty = mkBigCoreVarTupTy env_ids
     env_var <- newSysLocalDs env_ty
     let core_map = Lam env_var (mkCorePairExpr (Var env_var) mkCoreUnitExpr)
@@ -716,6 +717,7 @@ dsCmdDo ids local_vars res_ty [L _ (LastStmtA body)] env_ids = do
                       core_map
                       core_body,
                       env_ids')
+-}
 
 dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
     let
@@ -723,6 +725,8 @@ dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
         local_vars' = bound_vars `unionVarSet` local_vars
     (core_stmts, _, env_ids') <- trimInput (dsCmdDo ids local_vars' res_ty stmts)
     (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
+    return (core_stmt core_stmts, fv_stmt)
+{-
     return (do_compose ids
                       (mkBigCoreVarTupTy env_ids)
                       (mkBigCoreVarTupTy env_ids')
@@ -730,6 +734,7 @@ dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
                       core_stmt
                       core_stmts,
                       fv_stmt)
+-}
 
 \end{code}
 A statement maps one local environment to another, and is represented
@@ -737,7 +742,7 @@ as an arrow from one tuple type to another.  A statement sequence is
 translated to a composition of such arrows.
 \begin{code}
 dsCmdLStmt :: DsCmdEnv -> IdSet -> [Id] -> CmdLStmt Id -> [Id]
-           -> DsM (CoreExpr, IdSet)
+           -> DsM (CoreExpr -> CoreExpr, IdSet)
 dsCmdLStmt ids local_vars out_ids cmd env_ids
   = dsCmdStmt ids local_vars out_ids (unLoc cmd) env_ids
 
@@ -749,7 +754,8 @@ dsCmdStmt
       -> [Id]           -- list of vars in the input to this statement
                         -- This is typically fed back,
                         -- so don't pull on it too early
-      -> DsM (CoreExpr, -- desugared expression
+      -> DsM (CoreExpr -> CoreExpr,
+                        -- desugared expression
               IdSet)    -- subset of local vars that occur free
 
 -- D; xs1 |-a c : () --> t
@@ -772,7 +778,8 @@ dsCmdStmt ids local_vars out_ids (BodyStmtA cmd _then_op c_ty) env_ids = do
         before_c_ty = mkCorePairTy in_ty1 out_ty
         after_c_ty  = mkCorePairTy c_ty out_ty
     snd_fn <- mkSndExpr c_ty out_ty
-    return (do_premap ids in_ty before_c_ty out_ty core_mux $
+    return (\_ ->
+             do_premap ids in_ty before_c_ty out_ty core_mux $
                do_compose ids before_c_ty after_c_ty out_ty
                    (do_first ids in_ty1 c_ty out_ty core_cmd) $
                do_arr ids after_c_ty out_ty snd_fn,
@@ -826,7 +833,7 @@ dsCmdStmt ids local_vars out_ids (BindStmtA pat cmd _bindA_op) env_ids = do
         in_ty1 = mkCorePairTy (mkBigCoreVarTupTy env_ids1) unitTy
         in_ty2 = mkBigCoreVarTupTy env_ids2
         before_c_ty = mkCorePairTy in_ty1 in_ty2
-    return (do_premap ids in_ty before_c_ty out_ty core_mux $
+    return (\_ -> do_premap ids in_ty before_c_ty out_ty core_mux $
                do_compose ids before_c_ty after_c_ty out_ty
                  (do_first ids in_ty1 pat_ty in_ty2 core_cmd) $
                do_arr ids after_c_ty out_ty proj_expr,
@@ -843,7 +850,7 @@ dsCmdStmt ids local_vars out_ids (LetStmtA binds) env_ids = do
     core_binds <- dsLocalBinds binds (mkBigCoreVarTup out_ids)
     -- match the old environment against the input
     core_map <- matchEnv env_ids core_binds
-    return (do_arr ids
+    return (\_ -> do_arr ids
                    (mkBigCoreVarTupTy env_ids)
                    (mkBigCoreVarTupTy out_ids)
                    core_map,
@@ -902,6 +909,7 @@ dsCmdStmt ids local_vars out_ids
     let
         env_ty = mkBigCoreVarTupTy env_ids
         out_ty = mkBigCoreVarTupTy out_ids
+{-
         core_body = do_premap ids env_ty pre_pair_ty out_ty
                 pre_loop_fn
                 (do_compose ids pre_pair_ty post_pair_ty out_ty
@@ -909,8 +917,9 @@ dsCmdStmt ids local_vars out_ids
                                 core_loop)
                         (do_arr ids post_pair_ty out_ty
                                 post_loop_fn))
-
-    return (core_body, env1_id_set `unionVarSet` env2_id_set)
+-}
+    -- JSTOLAREK: completely wrong.
+    return (core_loop, env1_id_set `unionVarSet` env2_id_set)
 
 dsCmdStmt _ _ _ _ s = pprPanic "dsCmdStmt" (ppr s)
 
@@ -999,7 +1008,7 @@ dsfixCmdStmts
       -> IdSet          -- set of local vars available to this statement
       -> [Id]           -- output vars of these statements
       -> [CmdLStmt Id]  -- statements to desugar
-      -> DsM (CoreExpr, -- desugared expression
+      -> DsM (CoreExpr -> CoreExpr, -- desugared expression
               IdSet,    -- subset of local vars that occur free
               [Id])     -- same local vars as a list
 
@@ -1012,7 +1021,7 @@ dsCmdStmts
       -> [Id]           -- output vars of these statements
       -> [CmdLStmt Id]  -- statements to desugar
       -> [Id]           -- list of vars in the input to these statements
-      -> DsM (CoreExpr, -- desugared expression
+      -> DsM (CoreExpr -> CoreExpr, -- desugared expression
               IdSet)    -- subset of local vars that occur free
 
 dsCmdStmts ids local_vars out_ids [stmt] env_ids
@@ -1024,6 +1033,8 @@ dsCmdStmts ids local_vars out_ids (stmt:stmts) env_ids = do
         local_vars' = bound_vars `unionVarSet` local_vars
     (core_stmts, _fv_stmts, env_ids') <- dsfixCmdStmts ids local_vars' out_ids stmts
     (core_stmt, fv_stmt) <- dsCmdLStmt ids local_vars env_ids' stmt env_ids
+    return (\cs -> core_stmt (core_stmts cs), fv_stmt)
+{-
     return (do_compose ids
                        (mkBigCoreVarTupTy env_ids)
                        (mkBigCoreVarTupTy env_ids')
@@ -1031,6 +1042,7 @@ dsCmdStmts ids local_vars out_ids (stmt:stmts) env_ids = do
                        core_stmt
                        core_stmts,
                        fv_stmt)
+-}
 
 dsCmdStmts _ _ _ [] _ = panic "dsCmdStmts []"
 \end{code}
