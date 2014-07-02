@@ -1027,11 +1027,11 @@ rn_rec_stmt rnBody _ (L loc (LastStmtA body)) _
         ; return [(emptyNameSet, fv_expr, emptyNameSet,
                    L loc (LastStmtA body'))] }
 
-rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _ _)) _
+rn_rec_stmt rnBody _ (L loc (BodyStmt body _ _)) _
   = do { (body', fvs) <- rnBody body
        ; (then_op, fvs1) <- lookupSyntaxName thenMName
        ; return [(emptyNameSet, fvs `plusFV` fvs1, emptyNameSet,
-                 L loc (BodyStmt body' then_op noSyntaxExpr placeHolderType))] }
+                 L loc (BodyStmt body' then_op noSyntaxExpr))] }
 
 rn_rec_stmt rnBody _ (L loc (BodyStmtA body _ _)) _
   = do { (body', fvs) <- rnBody body
@@ -1052,7 +1052,7 @@ rn_rec_stmt rnBody _ (L loc (BindStmtA pat' body _)) fv_pat
   = do { (body', fv_expr) <- rnBody body
        ; (bindA_op, fvs1) <- lookupSyntaxName bindAName
        ; let bndrs = mkNameSet (collectPatBinders pat')
-       ;     fvs   = plusFVs [ fv_expr, fv_pat, fvs1]
+             fvs   = plusFVs [ fv_expr, fv_pat, fvs1]
        ; return [(bndrs, fvs, bndrs `intersectNameSet` fvs,
               L loc (BindStmtA pat' body' bindA_op))] }
 
@@ -1314,7 +1314,7 @@ checkLastStmt ctxt lstmt@(L loc stmt)
       ListComp  -> check_comp
       MonadComp -> check_comp
       PArrComp  -> check_comp
-      ArrowExpr -> check_do
+      ArrowExpr -> check_arrow
       DoExpr    -> check_do
       MDoExpr   -> check_do
       _         -> check_other
@@ -1332,6 +1332,12 @@ checkLastStmt ctxt lstmt@(L loc stmt)
       = case stmt of
           LastStmt {} -> return lstmt
           _           -> pprPanic "checkLastStmt" (ppr lstmt)
+
+    -- JSTOLAREK: verify that this works.
+    check_arrow
+      = case stmt of
+          BodyStmtA e _ _ -> return (L loc (LastStmtA e))
+          _               -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
 
     check_other -- Behave just as if this wasn't the last stmt
       = do { checkStmt ctxt lstmt; return lstmt }
@@ -1456,11 +1462,10 @@ okArrowDoStmt :: Stmt RdrName (Located (body RdrName)) -> Maybe SDoc
 okArrowDoStmt stmt
   = case stmt of
        BindStmtA {} -> isOK
-       -- JSTOLAREK: these should be replaced with respective *A versions
-       RecStmt {}   -> isOK
-       LetStmt {}   -> isOK
-       BodyStmt {}  -> isOK
-       -- JSTOLAREK: I think that LastStmt should also be allowed
+       RecStmtA {}   -> isOK
+       LetStmtA {}   -> isOK
+       BodyStmtA {}  -> isOK
+       LastStmtA {}  -> isOK
        _            -> notOK
 
 ---------

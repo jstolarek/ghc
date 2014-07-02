@@ -48,6 +48,9 @@ import SrcLoc
 import ListSetOps( assocDefault )
 import FastString
 import Data.List
+-- JSTOLAREK: debugging only
+import Debug.Trace
+import DynFlags
 \end{code}
 
 \begin{code}
@@ -678,6 +681,18 @@ trimInput build_arrow
         (core_cmd, free_vars) <- build_arrow env_ids
         return (core_cmd, free_vars, varSetElems free_vars))
 
+trimInput2
+      :: ([Id] -> DsM (CoreExpr -> CoreExpr, IdSet))
+      -> DsM (CoreExpr -> CoreExpr,    -- desugared expression
+              IdSet,       -- subset of local vars that occur free
+              [Id])        -- same local vars as a list, fed back to
+                           -- the inner function to form the tuple of
+                           -- inputs to the arrow.
+trimInput2 build_arrow
+  = fixDs (\ ~(_,_,env_ids) -> do
+        (core_cmd, free_vars) <- build_arrow env_ids
+        return (core_cmd, free_vars, varSetElems free_vars))
+
 \end{code}
 
 Translation of command judgements of the form
@@ -766,8 +781,12 @@ dsCmdStmt
 --        ---> premap (\ ((xs)) -> (((xs1),()),(xs')))
 --            (first c >>> arr snd) >>> ss
 
-dsCmdStmt ids local_vars out_ids (BodyStmtA cmd _then_op c_ty) env_ids = do
-    (core_cmd, fv_cmd, env_ids1) <- dsfixCmd ids local_vars unitTy c_ty cmd
+dsCmdStmt ids local_vars out_ids (BodyStmtA cmd then_op c_ty) env_ids = do
+    (core_cmd, fv_cmd, _) <- dsfixCmd ids local_vars unitTy c_ty cmd
+    bind_ <- dsExpr then_op
+    trace ("bind_ desuagred: " ++ showSDoc unsafeGlobalDynFlags (ppr bind_)) $ return ()
+    return (\stmts -> mkCoreApps bind_ [core_cmd, stmts], fv_cmd)
+{-
     core_mux <- matchEnv env_ids
         (mkCorePairExpr
           (mkCorePairExpr (mkBigCoreVarTup env_ids1) mkCoreUnitExpr)
@@ -784,6 +803,7 @@ dsCmdStmt ids local_vars out_ids (BodyStmtA cmd _then_op c_ty) env_ids = do
                    (do_first ids in_ty1 c_ty out_ty core_cmd) $
                do_arr ids after_c_ty out_ty snd_fn,
                    extendVarSetList fv_cmd out_ids)
+-}
 
 -- D; xs1 |-a c : () --> t
 -- D; xs' |-a do { ss } : t'   xs2 = xs' - defs(p)
@@ -934,7 +954,7 @@ dsRecCmd
         -> [HsExpr Id]    -- expressions corresponding to later_ids
         -> [Id]           -- list of vars fed back through the loop
         -> [HsExpr Id]    -- expressions corresponding to rec_ids
-        -> DsM (CoreExpr, -- desugared statement
+        -> DsM (CoreExpr -> CoreExpr, -- desugared statement
                 IdSet,    -- subset of local vars that occur free
                 [Id])     -- same local vars as a list
 
@@ -989,14 +1009,16 @@ dsRecCmd ids local_vars stmts later_ids later_rets rec_ids rec_rets = do
 
     let
         env_ty = mkBigCoreVarTupTy env_ids
+{-
         core_loop = do_loop ids env1_ty later_ty rec_ty
                 (do_premap ids in_pair_ty env_ty out_pair_ty
                         squash_pair_fn
                         (do_compose ids env_ty out_ty out_pair_ty
                                 core_stmts
                                 (do_arr ids out_ty out_pair_ty mk_pair_fn)))
-
-    return (core_loop, env1_id_set, env1_ids)
+-}
+    --JSTOLAREK: completely wrong
+    return (undefined, env1_id_set, env1_ids)
 
 \end{code}
 A sequence of statements (as in a rec) is desugared to an arrow between
@@ -1013,7 +1035,7 @@ dsfixCmdStmts
               [Id])     -- same local vars as a list
 
 dsfixCmdStmts ids local_vars out_ids stmts
-  = trimInput (dsCmdStmts ids local_vars out_ids stmts)
+  = trimInput2 (dsCmdStmts ids local_vars out_ids stmts)
 
 dsCmdStmts
       :: DsCmdEnv       -- arrow combinators

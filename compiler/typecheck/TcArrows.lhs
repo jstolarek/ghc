@@ -354,13 +354,18 @@ tcArrDoStmt env _ (LastStmtA rhs) res_ty thing_inside
         -- go here.
 	; return (LastStmtA rhs', thing) }
 
-tcArrDoStmt env _ (BodyStmtA rhs _ _) res_ty thing_inside
+tcArrDoStmt env _ (BodyStmtA rhs then_op _) res_ty thing_inside
   = do	{ (rhs', elt_ty) <- tc_arr_rhs env rhs
 	; thing 	 <- thing_inside res_ty
-        -- JSTOLAREK: we mustn't discard the bind operator! Typecheckig should
-        -- go here. Also, I probably should do sth with the type stored in
-        -- BodyStmtA
-	; return (BodyStmtA rhs' noSyntaxExpr elt_ty, thing) }
+        ; s <- newFlexiTyVarTy liftedTypeKind
+        ; b <- newFlexiTyVarTy liftedTypeKind
+        ; c <- newFlexiTyVarTy liftedTypeKind
+-- thenA :: Arrow a => a (e,s) b -> a (e,s) c -> a (e,s) c
+	; then_op' <- tcSyntaxOp DoOrigin then_op
+			   (mkFunTys [ mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) b
+                                     , mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) c]
+                                      (mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) c))
+	; return (BodyStmtA rhs' then_op' elt_ty, thing) }
 
 tcArrDoStmt env ctxt (BindStmtA pat rhs _) res_ty thing_inside
   = do	{ (rhs', pat_ty) <- tc_arr_rhs env rhs
@@ -400,7 +405,7 @@ tcArrDoStmt env ctxt (RecStmtA { recS_stmts = stmts, recS_later_ids = later_name
                                , recS_ret_ty = res_ty }, thing)
 	}}
 
--- JSTOLAREK: why is let stmt unexpected?
+-- JSTOLAREK: why is let stmt unexpected? Answer to self: see tcStmtsAndThen
 tcArrDoStmt _ _ stmt _ _
   = pprPanic "tcArrDoStmt: unexpected Stmt" (ppr stmt)
 

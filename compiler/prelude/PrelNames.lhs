@@ -231,6 +231,9 @@ basicKnownKeyNames
         fmapName,
         joinMName,
 
+        -- Arrow stuff
+        bindAName, thenAName, fixAName, ifThenElseAName,
+
         -- MonadRec stuff
         mfixName,
 
