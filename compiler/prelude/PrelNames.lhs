@@ -839,10 +839,10 @@ failMName          = varQual gHC_BASE (fsLit "fail")   failMClassOpKey
 
 -- Redbindable Arrow operators
 bindAName, thenAName, fixAName, ifThenElseAName :: Name
-bindAName        = methName aRROW (fsLit "bindA")       bindAClassOpKey
-thenAName        = methName aRROW (fsLit "thenA")       thenAClassOpKey
-fixAName         = methName aRROW (fsLit "fixA" )       fixAClassOpKey
-ifThenElseAName  = methName aRROW (fsLit "ifThenElseA") ifThenElseAClassOpKey
+bindAName        = varQual aRROW (fsLit "bindA")       bindAClassOpKey
+thenAName        = varQual aRROW (fsLit "thenA")       thenAClassOpKey
+fixAName         = varQual aRROW (fsLit "fixA" )       fixAClassOpKey
+ifThenElseAName  = varQual aRROW (fsLit "ifThenElseA") ifThenElseAClassOpKey
 
 -- Classes (Applicative, Foldable, Traversable)
 applicativeClassName, foldableClassName, traversableClassName :: Name
