@@ -42,6 +42,9 @@ import FastString
 import Util
 
 import Control.Monad
+
+import Debug.Trace
+import DynFlags
 \end{code}
 
 Note [Arrow overivew]
@@ -350,8 +353,6 @@ tcArrDoStmt :: CmdEnv -> TcCmdStmtChecker
 tcArrDoStmt env _ (LastStmtA rhs) res_ty thing_inside
   = do	{ rhs' <- tcCmd env rhs (unitTy, res_ty)
 	; thing <- thing_inside (panic "tcArrDoStmt")
-        -- JSTOLAREK: we mustn't discard the bind operator! Typecheckig should
-        -- go here.
 	; return (LastStmtA rhs', thing) }
 
 tcArrDoStmt env _ (BodyStmtA rhs then_op _) res_ty thing_inside
@@ -359,12 +360,21 @@ tcArrDoStmt env _ (BodyStmtA rhs then_op _) res_ty thing_inside
 	; thing 	 <- thing_inside res_ty
         ; s <- newFlexiTyVarTy liftedTypeKind
         ; b <- newFlexiTyVarTy liftedTypeKind
-        ; c <- newFlexiTyVarTy liftedTypeKind
--- thenA :: Arrow a => a (e,s) b -> a (e,s) c -> a (e,s) c
+--        ; c <- newFlexiTyVarTy liftedTypeKind
+        -- thenA :: Arrow a => a (e,s) b -> a (e,s) c -> a (e,s) c
+        -- do { cmd; ss } = cmd `bind_` do { ss }
+        ; trace ("tcArrDoStmt BodyStmtA, elt_ty: " ++ showSDoc unsafeGlobalDynFlags (ppr elt_ty)) $ return ()
+        ; trace ("tcArrDoStmt BodyStmtA, res_ty: " ++ showSDoc unsafeGlobalDynFlags (ppr res_ty)) $ return ()
+	; then_op' <- tcSyntaxOp DoOrigin then_op
+			   (mkFunTys [ mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) elt_ty
+                                     , mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty]
+                                      (mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty))
+{-
 	; then_op' <- tcSyntaxOp DoOrigin then_op
 			   (mkFunTys [ mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) b
-                                     , mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) c]
-                                      (mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) c))
+                                     , mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty]
+                                      (mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty))
+-}
 	; return (BodyStmtA rhs' then_op' elt_ty, thing) }
 
 tcArrDoStmt env ctxt (BindStmtA pat rhs _) res_ty thing_inside
@@ -406,6 +416,7 @@ tcArrDoStmt env ctxt (RecStmtA { recS_stmts = stmts, recS_later_ids = later_name
 	}}
 
 -- JSTOLAREK: why is let stmt unexpected? Answer to self: see tcStmtsAndThen
+-- Turn this into a proper comment or nore
 tcArrDoStmt _ _ stmt _ _
   = pprPanic "tcArrDoStmt: unexpected Stmt" (ppr stmt)
 
