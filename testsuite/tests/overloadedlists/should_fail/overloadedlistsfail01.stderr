@@ -4,8 +4,8 @@ overloadedlistsfail01.hs:5:8: error:
     The type variable ‘a0’ is ambiguous
     Potential instances:
       instance [safe] Show Version -- Defined in ‘Data.Version’
-      instance Show a => Show (Maybe a) -- Defined in ‘GHC.Show’
       instance Show Ordering -- Defined in ‘GHC.Show’
+      instance Show Integer -- Defined in ‘GHC.Show’
       ...plus 23 others
       (use -fprint-potential-instances to see them all)
     In the expression: print [1]
@@ -14,7 +14,7 @@ overloadedlistsfail01.hs:5:8: error:
 overloadedlistsfail01.hs:5:14: error:
     No instance for (IsList a0) arising from an overloaded list
     The type variable ‘a0’ is ambiguous
-    Potential instances:
+    Note: there are several potential instances:
       instance IsList Version -- Defined in ‘GHC.Exts’
       instance IsList [a] -- Defined in ‘GHC.Exts’
     In the first argument of ‘print’, namely ‘[1]’
@@ -24,12 +24,11 @@ overloadedlistsfail01.hs:5:14: error:
 overloadedlistsfail01.hs:5:15: error:
     No instance for (Num (Item a0)) arising from the literal ‘1’
     The type variable ‘a0’ is ambiguous
-    Potential instances:
+    Note: there are several potential instances:
       instance Num Integer -- Defined in ‘GHC.Num’
       instance Num Double -- Defined in ‘GHC.Float’
       instance Num Float -- Defined in ‘GHC.Float’
       ...plus two others
-      (use -fprint-potential-instances to see them all)
     In the expression: 1
     In the first argument of ‘print’, namely ‘[1]’
     In the expression: print [1]
