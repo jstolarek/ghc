@@ -1144,15 +1144,18 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdKindSig = kind })
-  = do { ((tycon', tyvars', kind'), fv1) <-
+                             , fdInfo = info, fdKindSig = kind
+                             , fdInjective = L injSpan injectivity })
+  = do { ((tycon', tyvars', kind', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
               ; (kind', fv_kind) <- rnLHsMaybeKind fmly_doc kind
-              ; return ((tycon', tyvars', kind'), fv_kind) }
+              ; injectivity'     <- mapM rn_injectivity injectivity
+              ; return ((tycon', tyvars', kind', injectivity'), fv_kind) }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdKindSig = kind' }
+                            , fdInfo = info', fdKindSig = kind'
+                            , fdInjective = L injSpan injectivity' }
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
@@ -1165,6 +1168,11 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
+     rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
+     rn_injectivity (InjectivityInfo inj_from inj_to) = do
+        inj_from' <- mapM (rnLTyVar True) inj_from
+        inj_to'   <- mapM (rnLTyVar True) inj_to
+        return $ InjectivityInfo inj_from' inj_to'
 \end{code}
 
 Note [Stupid theta]

@@ -70,6 +70,8 @@ module HsDecls (
   AnnProvenance(..), annProvenanceName_maybe,
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
+  -- ** Injective type families
+  InjectivityInfo(..),
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -539,12 +541,21 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
-  { fdInfo    :: FamilyInfo name            -- type or data, closed or open
-  , fdLName   :: Located name               -- type constructor
-  , fdTyVars  :: LHsTyVarBndrs name         -- type variables
-  , fdKindSig :: Maybe (LHsKind name) }     -- result kind
+  { fdInfo      :: FamilyInfo name               -- type or data, closed or open
+  -- JSTOLAREK: everything else here is Located, so I've made this located as
+  -- well. But perhaps I don't have to? I'm not introducing any bindings on the
+  -- one hand, but then again I'll be reporting errors later...
+  , fdInjective :: Located [InjectivityInfo name] -- information about injectivity
+  , fdLName     :: Located name                   -- type constructor
+  , fdTyVars    :: LHsTyVarBndrs name             -- type variables
+  , fdKindSig   :: Maybe (LHsKind name) }         -- result kind
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
+
+-- JSTOLAREK: provide a comment about this data type
+data InjectivityInfo name
+  = InjectivityInfo [Located name] [Located name]
+  deriving( Data, Typeable )
 
 data FamilyInfo name
   = DataFamily

@@ -734,11 +734,11 @@ ty_decl :: { LTyClDecl RdrName }
                         [mj AnnType $1,mj AnnEqual $3] }
 
            -- type family declarations
-        | 'type' 'family' type opt_kind_sig where_type_family
+        | 'type' 'family' type opt_kind_sig opt_injective_info where_type_family
                 -- Note the use of type for the head; this allows
                 -- infix type constructors to be declared
-                {% amms (mkFamDecl (comb4 $1 $3 $4 $5) (snd $ unLoc $5) $3
-                                   (unLoc $4))
+                {% amms (mkFamDecl (comb4 $1 $3 $4 $6) (snd $ unLoc $6) $3
+                                   (unLoc $4) $5)
                         (mj AnnType $1:mj AnnFamily $2:(fst $ unLoc $5)) }
 
           -- ordinary data type or newtype declaration
@@ -762,7 +762,8 @@ ty_decl :: { LTyClDecl RdrName }
 
           -- data/newtype family
         | 'data' 'family' type opt_kind_sig
-                {% amms (mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4))
+                {% amms (mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4)
+                         (noLoc []))
                         [mj AnnData $1,mj AnnFamily $2] }
 
 inst_decl :: { LInstDecl RdrName }
@@ -807,6 +808,24 @@ overlap_pragma :: { Maybe (Located OverlapMode) }
                                        [mo $1,mc $2] }
   | {- empty -}                 { Nothing }
 
+
+-- Injective type families
+
+opt_injective_info :: { Located [InjectivityInfo RdrName] }
+        :                               { noLoc []   }
+        | '|' injectivity_conds         { LL (reverse (unLoc $2)) }
+
+injectivity_conds :: { Located [InjectivityInfo RdrName] }
+        : injectivity_conds ',' injectivity_cond { LL (unLoc $3 : unLoc $1) }
+        | injectivity_cond                       { LL [unLoc $1]            }
+
+injectivity_cond :: { Located (InjectivityInfo RdrName) }
+        : inj_varids '->' inj_varids
+          { LL $ InjectivityInfo (reverse (unLoc $1)) (reverse (unLoc $3)) }
+
+inj_varids :: { Located [Located RdrName] }
+        : inj_varids varid  { LL ($2 : unLoc $1) }
+        | varid             { L1  [$1]           }
 
 -- Closed type families
 
@@ -854,18 +873,20 @@ at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_kind_sig
                 {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                                  (unLoc $4)))
+                                                  (unLoc $4) (noLoc [])))
                         (mj AnnData $1:$2) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
-        | 'type' type opt_kind_sig
-               {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $2 $3)
-                                                  OpenTypeFamily $2 (unLoc $3)))
+        | 'type' type opt_kind_sig opt_injective_info
+               {% amms (liftM mkTyClD (mkFamDecl (comb4 $1 $2 $3 $4)
+                                                  OpenTypeFamily $2 (unLoc $3)
+                                                  $4))
                        [mj AnnType $1] }
-        | 'type' 'family' type opt_kind_sig
-               {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4)
-                                                  OpenTypeFamily $3 (unLoc $4)))
+        | 'type' 'family' type opt_kind_sig opt_injective_info
+               {% amms (liftM mkTyClD (mkFamDecl (comb4 $1 $3 $4 $5)
+                                                  OpenTypeFamily $3 (unLoc $4)
+                                                  $5))
                        [mj AnnType $1,mj AnnFamily $2] }
 
            -- default type instances, with optional 'instance' keyword
