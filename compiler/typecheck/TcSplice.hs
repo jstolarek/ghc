@@ -704,7 +704,7 @@ runMeta' show_code ppr_hs run_and_convert expr
 {-
 Note [Exceptions in TH]
 ~~~~~~~~~~~~~~~~~~~~~~~
-Supppose we have something like this
+Suppose we have something like this
         $( f 4 )
 where
         f :: Int -> Q [Dec]
@@ -1089,7 +1089,46 @@ reifyTyCon tc
   | isPrimTyCon tc
   = return (TH.PrimTyConI (reifyName tc) (tyConArity tc) (isUnLiftedTyCon tc))
 
-  | isFamilyTyCon tc
+  | isTypeFamilyTyCon tc
+  = do { let tvs      = tyConTyVars tc
+             kind     = tyConKind tc
+             resVar   = famTcResVar tc
+
+             -- we need the *result kind* (see #8884)
+             (kvs, mono_kind) = splitForAllTys kind
+                                -- tyConArity includes *kind* params
+             (_, res_kind)    = splitKindFunTysN (tyConArity tc - length kvs)
+                                                 mono_kind
+       ; kind' <- reifyKind res_kind
+       ; let (resultSig, injectivity) =
+                 case resVar of
+                   Nothing   -> ( TH.KindSig kind', Nothing )
+                   Just name ->
+                     let thName   = reifyName name
+                         injAnnot = famTcInj tc
+                         sig = TH.TyVarSig (TH.KindedTV thName kind')
+                         inj = do { injList <- injAnnot -- Maybe monad
+                                  ; let injRHS = map (reifyName . tyVarName)
+                                                     (filterByList injList tvs)
+                                  ; return $ TH.InjectivityAnn thName injRHS }
+                     in (sig, inj)
+       ; tvs' <- reifyTyVars tvs
+       ; if isOpenTypeFamilyTyCon tc
+         then do { fam_envs <- tcGetFamInstEnvs
+                 ; instances <- reifyFamilyInstances tc
+                                  (familyInstances fam_envs tc)
+                 ; return (TH.FamilyI
+                             (TH.OpenTypeFamilyD (reifyName tc) tvs'
+                                                 resultSig injectivity)
+                             instances) }
+         else do { let Just ax = isClosedTypeFamilyTyCon_maybe tc
+                 ; eqns <- brListMapM reifyAxBranch $ coAxiomBranches ax
+                 ; return (TH.FamilyI
+                      (TH.ClosedTypeFamilyD (reifyName tc) tvs' resultSig
+                                            injectivity eqns)
+                      []) } }
+
+  | isDataFamilyTyCon tc
   = do { let tvs      = tyConTyVars tc
              kind     = tyConKind tc
 
@@ -1101,19 +1140,10 @@ reifyTyCon tc
        ; kind' <- fmap Just (reifyKind res_kind)
 
        ; tvs' <- reifyTyVars tvs
-       ; flav' <- reifyFamFlavour tc
-       ; case flav' of
-         { Left flav ->  -- open type/data family
-             do { fam_envs <- tcGetFamInstEnvs
-                ; instances <- reifyFamilyInstances tc
-                                 (familyInstances fam_envs tc)
-                ; return (TH.FamilyI
-                            (TH.FamilyD flav (reifyName tc) tvs' kind')
-                            instances) }
-         ; Right eqns -> -- closed type family
-             return (TH.FamilyI
-                      (TH.ClosedTypeFamilyD (reifyName tc) tvs' kind' eqns)
-                      []) } }
+       ; fam_envs <- tcGetFamInstEnvs
+       ; instances <- reifyFamilyInstances tc (familyInstances fam_envs tc)
+       ; return (TH.FamilyI
+                       (TH.DataFamilyD (reifyName tc) tvs' kind') instances) }
 
   | Just (tvs, rhs) <- synTyConDefn_maybe tc  -- Vanilla type synonym
   = do { rhs' <- reifyType rhs

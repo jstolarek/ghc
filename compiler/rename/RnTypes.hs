@@ -14,6 +14,7 @@ module RnTypes (
         rnHsSigType, rnLHsInstType, rnConDeclFields,
         newTyVarNameRn, rnLHsTypeWithWildCards,
         rnHsSigTypeWithWildCards,
+        rnLTyVar, newTyVarNameRn,
 
         -- Precence related stuff
         mkOpAppRn, mkNegAppRn, mkOpFormRn, mkConOpPatRn,
@@ -365,6 +366,10 @@ rnTyVar is_type rdr_name
   | is_type   = lookupTypeOccRn rdr_name
   | otherwise = lookupKindOccRn rdr_name
 
+rnLTyVar :: Bool -> Located RdrName -> RnM (Located Name)
+rnLTyVar is_type (L loc rdr_name) = do
+  tyvar' <- rnTyVar is_type rdr_name
+  return (L loc tyvar')
 
 --------------
 rnLHsTypes :: HsDocContext -> [LHsType RdrName]
@@ -447,7 +452,8 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
        ; bindLocalNamesFV kv_names $
     do { let tv_names_w_loc = hsLTyVarLocNames tv_bndrs
 
-             rn_tv_bndr :: LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
+             rn_tv_bndr :: LHsTyVarBndr RdrName
+                        -> RnM (LHsTyVarBndr Name, FreeVars)
              rn_tv_bndr (L loc (UserTyVar rdr))
                = do { nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
                     ; return (L loc (UserTyVar nm), emptyFVs) }
@@ -1107,9 +1113,14 @@ extractHsTysRdrTyVars ty
   = case extract_ltys ty ([],[]) of
      (kvs, tvs) -> (nub kvs, nub tvs)
 
-extractRdrKindSigVars :: Maybe (LHsKind RdrName) -> [RdrName]
-extractRdrKindSigVars Nothing = []
-extractRdrKindSigVars (Just k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
+extractRdrKindSigVars resultSig
+    | KindSig k                        <- resultSig = kindRdrNameFromSig k
+    | TyVarSig (L _ (KindedTyVar _ k)) <- resultSig = kindRdrNameFromSig k
+    | TyVarSig (L _ (UserTyVar _))     <- resultSig = []
+    | otherwise = [] -- this can only be NoSig but pattern exhasutiveness
+                     -- checker complains about "NoSig <- resultSig"
+    where kindRdrNameFromSig k = nub (fst (extract_lkind k ([],[])))
 
 extractDataDefnKindVars :: HsDataDefn RdrName -> [RdrName]
 -- Get the scoped kind variables mentioned free in the constructor decls
