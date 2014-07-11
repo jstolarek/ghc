@@ -251,8 +251,9 @@ cvtDec (ForeignD ford)
 cvtDec (FamilyD flav tc tvs kind)
   = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tvs
        ; kind' <- cvtMaybeKind kind
+       -- JSTOLAREK: this needs fixing. Add TH support for injectivity
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (cvtFamFlavour flav) tc' tvs' kind' }
+         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan []) tc' tvs' kind' }
   where
     cvtFamFlavour TypeFam = OpenTypeFamily
     cvtFamFlavour DataFam = DataFamily
@@ -296,8 +297,9 @@ cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
   = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tyvars
        ; mkind' <- cvtMaybeKind mkind
        ; eqns' <- mapM (cvtTySynEqn tc') eqns
+       -- JSTOLAREK: this needs fixing
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (ClosedTypeFamily eqns') tc' tvs' mkind' }
+         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan [])tc' tvs' mkind' }
   | otherwise
   = failWith (ptext (sLit "Illegal empty closed type family"))
 

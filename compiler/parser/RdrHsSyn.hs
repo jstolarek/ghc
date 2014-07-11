@@ -227,12 +227,14 @@ mkFamDecl :: SrcSpan
           -> FamilyInfo RdrName
           -> LHsType RdrName   -- LHS
           -> Maybe (LHsKind RdrName) -- Optional kind signature
+          -> Located [InjectivityInfo RdrName] -- injectivity conditions
           -> P (LTyClDecl RdrName)
-mkFamDecl loc info lhs ksig
+mkFamDecl loc info lhs ksig inj_cond
   = do { (tc, tparams) <- checkTyClHdr lhs
        ; tyvars <- checkTyVarsP (ppr info) equals_or_where tc tparams
        ; return (L loc (FamDecl (FamilyDecl { fdInfo = info, fdLName = tc
-                                            , fdTyVars = tyvars, fdKindSig = ksig }))) }
+                                            , fdTyVars = tyvars, fdKindSig = ksig
+                                            , fdInjective = inj_cond }))) }
   where
     equals_or_where = case info of
                         DataFamily          -> empty

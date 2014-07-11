@@ -540,6 +540,7 @@ data Token
   | ITjavascriptcallconv
   | ITmdo
   | ITfamily
+  | ITresult
   | ITrole
   | ITgroup
   | ITby
@@ -726,6 +727,7 @@ reservedWordsFM = listToUFM $
          ( "mdo",            ITmdo,           xbit RecursiveDoBit),
              -- See Note [Lexing type pseudo-keywords]
          ( "family",         ITfamily,        0 ),
+         ( "result",         ITresult,        0 ),
          ( "role",           ITrole,          0 ),
          ( "pattern",        ITpattern,       xbit PatternSynonymsBit),
          ( "group",          ITgroup,         xbit TransformComprehensionsBit),
@@ -755,14 +757,14 @@ reservedWordsFM = listToUFM $
 Note [Lexing type pseudo-keywords]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-One might think that we wish to treat 'family' and 'role' as regular old
-varids whenever -XTypeFamilies and -XRoleAnnotations are off, respectively.
-But, there is no need to do so. These pseudo-keywords are not stolen syntax:
-they are only used after the keyword 'type' at the top-level, where varids are
-not allowed. Furthermore, checks further downstream (TcTyClsDecls) ensure that
-type families and role annotations are never declared without their extensions
-on. In fact, by unconditionally lexing these pseudo-keywords as special, we
-can get better error messages.
+One might think that we wish to treat 'family', 'result' and 'role' as regular
+old varids whenever -XTypeFamilies and -XRoleAnnotations are off.  But, there is
+no need to do so. These pseudo-keywords are not stolen syntax: they are only
+used after the keyword 'type' at the top-level, where varids are not
+allowed. Furthermore, checks further downstream (TcTyClsDecls) ensure that type
+families and role annotations are never declared without their extensions on. In
+fact, by unconditionally lexing these pseudo-keywords as special, we can get
+better error messages.
 
 Also, note that these are included in the `varid` production in the parser --
 a key detail to make all this work.

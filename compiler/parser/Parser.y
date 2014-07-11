@@ -261,6 +261,7 @@ incorrect.
  'unsafe'       { L _ ITunsafe }
  'mdo'          { L _ ITmdo }
  'family'       { L _ ITfamily }
+ 'result'       { L _ ITresult }
  'role'         { L _ ITrole }
  'stdcall'      { L _ ITstdcallconv }
  'ccall'        { L _ ITccallconv }
@@ -663,10 +664,10 @@ ty_decl :: { LTyClDecl RdrName }
                 {% mkTySynonym (comb2 $1 $4) $2 $4 }
 
            -- type family declarations
-        | 'type' 'family' type opt_kind_sig where_type_family
+        | 'type' 'family' type opt_kind_sig opt_injective_info where_type_family
                 -- Note the use of type for the head; this allows
                 -- infix type constructors to be declared
-                {% mkFamDecl (comb4 $1 $3 $4 $5) (unLoc $5) $3 (unLoc $4) }
+                {% mkFamDecl (comb4 $1 $3 $4 $6) (unLoc $6) $3 (unLoc $4) $5 }
 
           -- ordinary data type or newtype declaration
         | data_or_newtype capi_ctype tycl_hdr constrs deriving
@@ -686,7 +687,7 @@ ty_decl :: { LTyClDecl RdrName }
 
           -- data/newtype family
         | 'data' 'family' type opt_kind_sig
-                {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4) }
+                {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4) (noLoc []) }
 
 inst_decl :: { LInstDecl RdrName }
         : 'instance' overlap_pragma inst_type where_inst
@@ -720,6 +721,26 @@ overlap_pragma :: { Maybe OverlapMode }
   | '{-# INCOHERENT'      '#-}' { Just Incoherent }
   | {- empty -}                 { Nothing }
 
+
+-- Injective type families
+
+opt_injective_info :: { Located [InjectivityInfo RdrName] }
+        :                               { noLoc []   }
+        | '|' injectivity_conds         { LL (reverse (unLoc $2)) }
+
+injectivity_conds :: { Located [InjectivityInfo RdrName] }
+        : injectivity_conds ',' injectivity_cond { LL (unLoc $3 : unLoc $1) }
+        | injectivity_cond                       { LL [unLoc $1]            }
+
+injectivity_cond :: { Located (InjectivityInfo RdrName) }
+        : 'result' '->' inj_varids
+          { LL $ InjectivityInfo [] (reverse (unLoc $3)) }
+        | 'result' inj_varids '->' inj_varids
+          { LL $ InjectivityInfo (reverse (unLoc $2)) (reverse (unLoc $4)) }
+
+inj_varids :: { Located [LHsType RdrName] }
+        : inj_varids varid  { LL ((L1 (HsTyVar (unLoc $2))) : unLoc $1) }
+        | varid             { LL  [L1 (HsTyVar (unLoc $1))]             }
 
 -- Closed type families
 
@@ -758,14 +779,14 @@ ty_fam_inst_eqn :: { LTyFamInstEqn RdrName }
 at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_kind_sig
-                {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3 (unLoc $4)) }
+                {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3 (unLoc $4) (noLoc [])) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
-        | 'type' type opt_kind_sig
-                {% liftM mkTyClD (mkFamDecl (comb3 $1 $2 $3) OpenTypeFamily $2 (unLoc $3)) }
-        | 'type' 'family' type opt_kind_sig
-                {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) OpenTypeFamily $3 (unLoc $4)) }
+        | 'type' type opt_kind_sig opt_injective_info
+                {% liftM mkTyClD (mkFamDecl (comb4 $1 $2 $3 $4) OpenTypeFamily $2 (unLoc $3) $4) }
+        | 'type' 'family' type opt_kind_sig opt_injective_info
+                {% liftM mkTyClD (mkFamDecl (comb4 $1 $3 $4 $5) OpenTypeFamily $3 (unLoc $4) $5) }
 
            -- default type instances, with optional 'instance' keyword
         | 'type' ty_fam_inst_eqn
@@ -2144,7 +2165,7 @@ qvarid :: { Located RdrName }
         | QVARID                { sL1 $1 $! mkQual varName (getQVARID $1) }
         | PREFIXQVARSYM         { sL1 $1 $! mkQual varName (getPREFIXQVARSYM $1) }
 
--- Note that 'role' and 'family' get lexed separately regardless of
+-- Note that 'role', 'family' and 'result' get lexed separately regardless of
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.
 varid :: { Located RdrName }
@@ -2156,6 +2177,7 @@ varid :: { Located RdrName }
         | 'forall'              { sL1 $1 $! mkUnqual varName (fsLit "forall") }
         | 'family'              { sL1 $1 $! mkUnqual varName (fsLit "family") }
         | 'role'                { sL1 $1 $! mkUnqual varName (fsLit "role") }
+        | 'result'              { sL1 $1 $! mkUnqual varName (fsLit "result") }
 
 qvarsym :: { Located RdrName }
         : varsym                { $1 }
@@ -2179,7 +2201,7 @@ varsym_no_minus :: { Located RdrName } -- varsym not including '-'
 
 -- These special_ids are treated as keywords in various places,
 -- but as ordinary ids elsewhere.   'special_id' collects all these
--- except 'unsafe', 'interruptible', 'forall', 'family', and 'role',
+-- except 'unsafe', 'interruptible', 'forall', 'family', 'result' and 'role',
 -- whose treatment differs depending on context
 special_id :: { Located FastString }
 special_id
