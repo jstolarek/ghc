@@ -973,10 +973,10 @@ zonkStmt env _ (LetStmtA binds)
   = do (env1, new_binds) <- zonkLocalBinds env binds
        return (env1, LetStmtA new_binds)
 
-zonkStmt env zBody (RecStmtA { recS_stmts = segStmts, recS_later_ids = lvs, recS_rec_ids = rvs
-                             , recS_fix_fn = fix_id
-                             , recS_later_rets = later_rets, recS_rec_rets = rec_rets
-                             , recS_ret_ty = ret_ty })
+zonkStmt env zBody (RecStmtA { recS_stmts = segStmts, recS_later_ids = lvs
+                             , recS_rec_ids = rvs, recS_fix_fn = fix_id
+                             , recS_later_rets = later_rets
+                             , recS_rec_rets = rec_rets, recS_ret_ty = ret_ty })
   = do { new_rvs <- zonkIdBndrs env rvs
        ; new_lvs <- zonkIdBndrs env lvs
        ; new_ret_ty  <- zonkTcTypeToType env ret_ty
@@ -991,7 +991,8 @@ zonkStmt env zBody (RecStmtA { recS_stmts = segStmts, recS_later_ids = lvs, recS
                  RecStmtA { recS_stmts = new_segStmts, recS_later_ids = new_lvs
                           , recS_rec_ids = new_rvs, recS_fix_fn = new_fix_id
                           , recS_later_rets = new_later_rets
-                          , recS_rec_rets = new_rec_rets, recS_ret_ty = new_ret_ty }) }
+                          , recS_rec_rets = new_rec_rets
+                          , recS_ret_ty = new_ret_ty }) }
 
 -------------------------------------------------------------------------
 zonkRecFields :: ZonkEnv -> HsRecordBinds TcId -> TcM (HsRecordBinds TcId)

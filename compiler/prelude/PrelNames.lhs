@@ -1839,7 +1839,8 @@ proxyHashKey :: Unique
 proxyHashKey = mkPreludeMiscIdUnique 502
 
 -- Rebindable Arrow notation
-bindAClassOpKey, thenAClassOpKey, fixAClassOpKey, ifThenElseAClassOpKey :: Unique
+bindAClassOpKey, thenAClassOpKey,
+  fixAClassOpKey, ifThenElseAClassOpKey :: Unique
 bindAClassOpKey       = mkPreludeMiscIdUnique 503
 thenAClassOpKey       = mkPreludeMiscIdUnique 504
 fixAClassOpKey        = mkPreludeMiscIdUnique 505

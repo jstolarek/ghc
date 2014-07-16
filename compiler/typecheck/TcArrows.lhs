@@ -363,17 +363,19 @@ tcArrDoStmt env _ (BodyStmtA rhs then_op _) res_ty thing_inside
 --        ; c <- newFlexiTyVarTy liftedTypeKind
         -- thenA :: Arrow a => a (e,s) b -> a (e,s) c -> a (e,s) c
         -- do { cmd; ss } = cmd `bind_` do { ss }
-        ; trace ("tcArrDoStmt BodyStmtA, elt_ty: " ++ showSDoc unsafeGlobalDynFlags (ppr elt_ty)) $ return ()
-        ; trace ("tcArrDoStmt BodyStmtA, res_ty: " ++ showSDoc unsafeGlobalDynFlags (ppr res_ty)) $ return ()
-	; then_op' <- tcSyntaxOp DoOrigin then_op
-			   (mkFunTys [ mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) elt_ty
-                                     , mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty]
-                                      (mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty))
+        ; trace ("tcArrDoStmt BodyStmtA, elt_ty: " ++
+                showSDoc unsafeGlobalDynFlags (ppr elt_ty)) $ return ()
+        ; trace ("tcArrDoStmt BodyStmtA, res_ty: " ++
+                showSDoc unsafeGlobalDynFlags (ppr res_ty)) $ return ()
+	; then_op' <- tcSyntaxOp DoOrigin then_op (mkFunTys
+                         [ mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) elt_ty
+                         , mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty]
+                         (mkCmdArrTy env (mkBoxedTupleTy [b, unitTy]) res_ty))
 {-
-	; then_op' <- tcSyntaxOp DoOrigin then_op
-			   (mkFunTys [ mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) b
-                                     , mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty]
-                                      (mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty))
+	; then_op' <- tcSyntaxOp DoOrigin then_op (mkFunTys
+                         [ mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) b
+                         , mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty]
+                         (mkCmdArrTy env (mkBoxedTupleTy [elt_ty, s]) res_ty))
 -}
 	; return (BodyStmtA rhs' then_op' elt_ty, thing) }
 
@@ -385,7 +387,8 @@ tcArrDoStmt env ctxt (BindStmtA pat rhs _) res_ty thing_inside
         -- go here.
 	; return (BindStmtA pat' rhs' noSyntaxExpr, thing) }
 
-tcArrDoStmt env ctxt (RecStmtA { recS_stmts = stmts, recS_later_ids = later_names
+tcArrDoStmt env ctxt (RecStmtA
+                            { recS_stmts = stmts, recS_later_ids = later_names
                             , recS_rec_ids = rec_names }) res_ty thing_inside
   = do  { let tup_names = rec_names ++ filterOut (`elem` rec_names) later_names
         ; tup_elt_tys <- newFlexiTyVarTys (length tup_names) liftedTypeKind

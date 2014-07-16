@@ -46,7 +46,7 @@ import NameEnv
 import NameSet
 import RdrName          ( RdrName, rdrNameOcc )
 import SrcLoc
-import ListSetOps	( findDupsEq )
+import ListSetOps       ( findDupsEq )
 import BasicTypes	( RecFlag(..) )
 import Digraph		( SCC(..) )
 import Bag

@@ -14,10 +14,11 @@ TcMatches: Typecheck some @Matches@
 --     http://ghc.haskell.org/trac/ghc/wiki/Commentary/CodingStyle#TabsvsSpaces
 -- for details
 
-module TcMatches ( tcMatchesFun, tcGRHS, tcGRHSsPat, tcMatchesCase, tcMatchLambda,
-		   TcMatchCtxt(..), TcStmtChecker, TcExprStmtChecker, TcCmdStmtChecker,
-		   tcStmts, tcStmtsAndThen, tcDoStmts, tcBody,
-		   tcDoStmt, tcGuardStmt
+module TcMatches
+       tcMatchesFun, tcGRHS, tcGRHSsPat, tcMatchesCase, tcMatchLambda,
+       TcMatchCtxt(..), TcStmtChecker, TcExprStmtChecker, TcCmdStmtChecker,
+       tcStmts, tcStmtsAndThen, tcDoStmts, tcBody,
+       tcDoStmt, tcGuardStmt
        ) where
 
 import {-# SOURCE #-}	TcExpr( tcSyntaxOp, tcInferRhoNC, tcInferRho, tcCheckId,

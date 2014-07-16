@@ -400,9 +400,11 @@ rnCmdTop = wrapLocFstM rnCmdTop'
    = do { (cmd', fvCmd) <- rnLCmd cmd
         ; let cmd_names = [arrAName, composeAName, firstAName] ++
                           nameSetToList (methodNamesCmd (unLoc cmd'))
-              -- JSTOLAREK: perhaps we can simplify the syntax table in HsCmdTop?
+              -- JSTOLAREK: perhaps we can simplify the syntax table in
+              -- HsCmdTop? We could just apply HsVar at every use site.
               cmd_exprs = map HsVar cmd_names
-        ; return (HsCmdTop cmd' placeHolderType placeHolderType (cmd_names `zip` cmd_exprs),
+        ; return (HsCmdTop cmd' placeHolderType placeHolderType
+                           (cmd_names `zip` cmd_exprs),
                   fvCmd) }
 
 rnLCmd :: LHsCmd RdrName -> RnM (LHsCmd Name, FreeVars)
@@ -472,7 +474,8 @@ rnCmd (HsCmdLet binds cmd)
       ; return (HsCmdLet binds' cmd', fvExpr) }
 
 rnCmd (HsCmdDo stmts _)
-  = do  { ((stmts', _), fvs) <- rnStmts ArrowExpr rnLCmd stmts (\ _ -> return ((), emptyFVs))
+  = do  { ((stmts', _), fvs)
+              <- rnStmts ArrowExpr rnLCmd stmts (\ _ -> return ((), emptyFVs))
         ; return ( HsCmdDo stmts' placeHolderType, fvs ) }
 
 rnCmd cmd@(HsCmdCast {}) = pprPanic "rnCmd" (ppr cmd)
@@ -546,14 +549,16 @@ methodNamesStmt (BodyStmt cmd _ _)               = methodNamesLCmd cmd
 methodNamesStmt (BodyStmtA cmd _ _)              = methodNamesLCmd cmd
 methodNamesStmt (BindStmt _ cmd _ _)             = methodNamesLCmd cmd
 methodNamesStmt (BindStmtA _ cmd _)              = methodNamesLCmd cmd
-methodNamesStmt (RecStmt { recS_stmts = stmts }) = methodNamesStmts stmts `addOneFV` loopAName
-methodNamesStmt (RecStmtA { recS_stmts = stmts })= methodNamesStmts stmts `addOneFV` loopAName
+methodNamesStmt (RecStmt { recS_stmts = stmts }) =
+    methodNamesStmts stmts `addOneFV` loopAName
+methodNamesStmt (RecStmtA { recS_stmts = stmts })=
+    methodNamesStmts stmts `addOneFV` loopAName
 methodNamesStmt (LetStmt {})                     = emptyFVs
 methodNamesStmt (LetStmtA {})                    = emptyFVs
 methodNamesStmt (ParStmt {})                     = emptyFVs
 methodNamesStmt (TransStmt {})                   = emptyFVs
-   -- ParStmt and TransStmt can't occur in commands, but it's not convenient to error
-   -- here so we just do what's convenient
+   -- ParStmt and TransStmt can't occur in commands, but it's not convenient to
+   -- error here so we just do what's convenient
 \end{code}
 
 
@@ -661,8 +666,8 @@ rnStmt ctxt rnBody (L loc (BodyStmt body _ _)) thing_inside
                               then lookupStmtName ctxt guardMName
                               else return (noSyntaxExpr, emptyFVs)
                               -- Only list/parr/monad comprehensions use 'guard'
-                              -- Also for sub-stmts of same eg [ e | x<-xs, gd | blah ]
-                              -- Here "gd" is a guard
+                              -- Also for sub-stmts of same eg.
+                              -- [ e | x<-xs, gd | blah ]. Here "gd" is a guard
         ; (thing, fvs3)    <- thing_inside []
         ; return (([L loc (BodyStmt body' then_op guard_op)], thing),
                   fv_expr `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) }
@@ -726,7 +731,7 @@ rnStmt ctxt rnBody (L _ (RecStmt { recS_stmts = rec_stmts })) thing_inside
                                             emptyNameSet segs
         ; (thing, fvs_later) <- thing_inside bndrs
         ; let (rec_stmts', fvs) = segmentRecStmts ctxt empty_rec_stmt segs fvs_later
-        ; return ((rec_stmts', thing), fvs `plusFV` fvs1 `plusFV` fvs2 `plusFV` fvs3) } }
+        ; return ((rec_stmts', thing), plusFVs [ fvs, fvs1, fvs2, fvs3]) } }
 
 rnStmt ctxt rnBody (L _ (RecStmtA { recS_stmts = rec_stmts })) thing_inside
   = do  { (fix_op,   fvs1)  <- lookupStmtName ctxt fixAName
@@ -742,23 +747,26 @@ rnStmt ctxt rnBody (L _ (RecStmtA { recS_stmts = rec_stmts })) thing_inside
         -- (This set may not be empty, because we're in a recursive
         -- context.)
         ; rnRecStmtsAndThen rnBody rec_stmts   $ \ segs -> do
-        { let bndrs = nameSetToList $ foldr (unionNameSets . (\(ds,_,_,_) -> ds))
+        { let bndrs = nameSetToList $ foldr (unionNameSets . (\(ds,_,_,_) ->ds))
                                             emptyNameSet segs
         ; (thing, fvs_later) <- thing_inside bndrs
-        ; let (rec_stmts', fvs) = segmentRecStmts ctxt empty_rec_stmt segs fvs_later
+        ; let (rec_stmts', fvs) = segmentRecStmts ctxt empty_rec_stmt segs
+                                                  fvs_later
         ; return ((rec_stmts', thing), fvs `plusFV` fvs1) } }
 
 rnStmt ctxt _ (L loc (ParStmt segs _ _)) thing_inside
   = do  { (mzip_op, fvs1)   <- lookupStmtName ctxt mzipName
         ; (bind_op, fvs2)   <- lookupStmtName ctxt bindMName
         ; (return_op, fvs3) <- lookupStmtName ctxt returnMName
-        ; ((segs', thing), fvs4) <- rnParallelStmts (ParStmtCtxt ctxt) return_op segs thing_inside
+        ; ((segs', thing), fvs4)
+            <- rnParallelStmts (ParStmtCtxt ctxt) return_op segs thing_inside
         ; return ( ([L loc (ParStmt segs' mzip_op bind_op)], thing)
                  , fvs1 `plusFV` fvs2 `plusFV` fvs3 `plusFV` fvs4) }
 
-rnStmt ctxt _ (L loc (TransStmt { trS_stmts = stmts, trS_by = by, trS_form = form
-                              , trS_using = using })) thing_inside
-  = do { -- Rename the 'using' expression in the context before the transform is begun
+rnStmt ctxt _ (L loc (TransStmt { trS_stmts = stmts, trS_by = by, trS_form =form
+                                , trS_using = using })) thing_inside
+  = do { -- Rename the 'using' expression in the context before the transform is
+         -- begun
          (using', fvs1) <- rnLExpr using
 
          -- Rename the stmts and the 'by' expression
@@ -769,8 +777,9 @@ rnStmt ctxt _ (L loc (TransStmt { trS_stmts = stmts, trS_by = by, trS_form = for
                    ; (thing, fvs_thing) <- thing_inside bndrs
                    ; let fvs = fvs_by `plusFV` fvs_thing
                          used_bndrs = filter (`elemNameSet` fvs) bndrs
-                         -- The paper (Fig 5) has a bug here; we must treat any free varaible
-                         -- of the "thing inside", **or of the by-expression**, as used
+                         -- The paper (Fig 5) has a bug here; we must treat any
+                         -- free varaible of the "thing inside", **or of the
+                         -- by-expression**, as used
                    ; return ((by', used_bndrs, thing), fvs) }
 
        -- Lookup `return`, `(>>=)` and `liftM` for monad comprehensions
@@ -785,11 +794,13 @@ rnStmt ctxt _ (L loc (TransStmt { trS_stmts = stmts, trS_by = by, trS_form = for
              bndr_map = used_bndrs `zip` used_bndrs
              -- See Note [TransStmt binder map] in HsExpr
 
-       ; traceRn (text "rnStmt: implicitly rebound these used binders:" <+> ppr bndr_map)
-       ; return (([L loc (TransStmt { trS_stmts = stmts', trS_bndrs = bndr_map
-                                    , trS_by = by', trS_using = using', trS_form = form
-                                    , trS_ret = return_op, trS_bind = bind_op
-                                    , trS_fmap = fmap_op })], thing), all_fvs) }
+       ; traceRn (text "rnStmt: implicitly rebound these used binders:" <+>
+                       ppr bndr_map)
+       ; return (([L loc (TransStmt
+                          { trS_stmts = stmts', trS_bndrs = bndr_map
+                          , trS_by = by', trS_using = using', trS_form = form
+                          , trS_ret = return_op, trS_bind = bind_op
+                          , trS_fmap = fmap_op })], thing), all_fvs) }
 
 rnParallelStmts :: forall thing. HsStmtContext Name
                 -> SyntaxExpr Name
@@ -814,7 +825,8 @@ rnParallelStmts ctxt return_op segs thing_inside
       = do { ((stmts', (used_bndrs, segs', thing)), fvs)
                     <- rnStmts ctxt rnLExpr stmts $ \ bndrs ->
                        setLocalRdrEnv env       $ do
-                       { ((segs', thing), fvs) <- rn_segs env (bndrs ++ bndrs_so_far) segs
+                       { ((segs', thing), fvs)
+                             <- rn_segs env (bndrs ++ bndrs_so_far) segs
                        ; let used_bndrs = filter (`elemNameSet` fvs) bndrs
                        ; return ((used_bndrs, segs', thing), fvs) }
 
@@ -823,7 +835,7 @@ rnParallelStmts ctxt return_op segs thing_inside
 
     cmpByOcc n1 n2 = nameOccName n1 `compare` nameOccName n2
     dupErr vs = addErr (ptext (sLit "Duplicate binding in parallel list comprehension for:")
-                    <+> quotes (ppr (head vs)))
+                                  <+> quotes (ppr (head vs)))
 
 lookupStmtName :: HsStmtContext Name -> Name -> RnM (HsExpr Name, FreeVars)
 -- Like lookupSyntaxName, but ListComp/PArrComp are never rebindable
@@ -854,7 +866,8 @@ Renaming parallel statements is painful.  Given, say
            | c <- bs, a <- ds ]
 Note that
   (a) In order to report "Defined by not used" about 'bs', we must rename
-      each group of Stmts with a thing_inside whose FreeVars include at least {a,c}
+      each group of Stmts with a thing_inside whose FreeVars include at
+      least {a,c}
 
   (b) We want to report that 'a' is illegally bound in both branches
 
@@ -976,10 +989,12 @@ rn_rec_stmt_lhs fix_env (L loc (LetStmtA (HsValBinds binds)))
                  )]
 
 -- XXX Do we need to do something with the return and mfix names?
-rn_rec_stmt_lhs fix_env (L _ (RecStmt { recS_stmts = stmts }))  -- Flatten Rec inside Rec
+-- Flatten Rec inside Rec
+rn_rec_stmt_lhs fix_env (L _ (RecStmt { recS_stmts = stmts }))
     = rn_rec_stmts_lhs fix_env stmts
 
-rn_rec_stmt_lhs fix_env (L _ (RecStmtA { recS_stmts = stmts }))  -- Flatten Rec inside Rec
+-- Flatten Rec inside Rec
+rn_rec_stmt_lhs fix_env (L _ (RecStmtA { recS_stmts = stmts }))
     = rn_rec_stmts_lhs fix_env stmts
 
 rn_rec_stmt_lhs _ stmt@(L _ (ParStmt {}))       -- Syntactically illegal in mdo
@@ -1322,9 +1337,11 @@ checkLastStmt ctxt lstmt@(L loc stmt)
     check_do    -- Expect BodyStmt, and change it to LastStmt
       = case stmt of
           BodyStmt e _ _ -> return (L loc (mkLastStmt e))
-          LastStmt {}    -> return lstmt   -- "Deriving" clauses may generate a
-                                           -- LastStmt directly (unlike the parser)
-          _              -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
+          LastStmt {}    -> return lstmt -- "Deriving" clauses may generate a
+                                         -- LastStmt directly (unlike the
+                                         -- parser)
+          _              -> do { addErr (hang last_error 2 (ppr stmt))
+                               ; return lstmt }
     last_error = (ptext (sLit "The last statement in") <+> pprAStmtContext ctxt
                   <+> ptext (sLit "must be an expression"))
 
@@ -1337,7 +1354,8 @@ checkLastStmt ctxt lstmt@(L loc stmt)
     check_arrow
       = case stmt of
           BodyStmtA e _ _ -> return (L loc (LastStmtA e))
-          _               -> do { addErr (hang last_error 2 (ppr stmt)); return lstmt }
+          _               -> do { addErr (hang last_error 2 (ppr stmt))
+                                ; return lstmt }
 
     check_other -- Behave just as if this wasn't the last stmt
       = do { checkStmt ctxt lstmt; return lstmt }
@@ -1352,7 +1370,8 @@ checkStmt ctxt (L _ stmt)
            Nothing    -> return ()
            Just extra -> addErr (msg $$ extra) }
   where
-   msg = sep [ ptext (sLit "Unexpected") <+> pprStmtCat stmt <+> ptext (sLit "statement")
+   msg = sep [ ptext (sLit "Unexpected") <+> pprStmtCat stmt <+>
+               ptext (sLit "statement")
              , ptext (sLit "in") <+> pprAStmtContext ctxt ]
 
 pprStmtCat :: Stmt a body -> SDoc

@@ -926,11 +926,11 @@ checkCmdLStmt :: ExprLStmt RdrName -> P (CmdLStmt RdrName)
 checkCmdLStmt = locMap checkCmdStmt
 
 checkCmdStmt :: SrcSpan -> ExprStmt RdrName -> P (CmdStmt RdrName)
-checkCmdStmt _ (LastStmt e r) = 
-    checkCommand e >>= (\c -> return $ LastStmt c r)
-checkCmdStmt _ (BindStmt pat e _ _) = 
+checkCmdStmt _ (LastStmt e _) =
+    checkCommand e >>= (\c -> return $ LastStmtA c)
+checkCmdStmt _ (BindStmt pat e _ _) =
     checkCommand e >>= (\c -> return $ BindStmtA pat c noSyntaxExpr)
-checkCmdStmt _ (BodyStmt e _ _) = 
+checkCmdStmt _ (BodyStmt e _ _) =
     checkCommand e >>= (\c -> return $ BodyStmtA c noSyntaxExpr placeHolderType)
 checkCmdStmt _ (LetStmt bnds) = return $ LetStmt bnds
 checkCmdStmt _ stmt@(RecStmt { recS_stmts = stmts }) = do

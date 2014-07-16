@@ -6,7 +6,7 @@ Here we collect a variety of helper functions that construct or
 analyse HsSyn.  All these functions deal with generic HsSyn; functions
 which deal with the instantiated versions are located elsewhere:
 
-   Parameterised by	Module
+   Parameterised by     Module
    ----------------     -------------
    RdrName		parser/RdrHsSyn
    Name			rename/RnHsSyn
@@ -53,7 +53,7 @@ module HsUtils(
   -- Stmts
   mkTransformStmt, mkTransformByStmt, mkBodyStmt, mkBindStmt, mkLastStmt,
   emptyTransStmt, mkGroupUsingStmt, mkGroupByUsingStmt, 
-  emptyRecStmt, emptyRecStmtA, mkRecStmt, 
+  emptyRecStmt, emptyRecStmtA, mkRecStmt,
 
   -- Template Haskell
   mkHsSpliceTy, mkHsSpliceE, mkHsSpliceTE, mkHsSplice,
@@ -245,9 +245,10 @@ emptyRecStmt = RecStmt { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
                        , recS_bind_fn = noSyntaxExpr, recS_later_rets = []
                        , recS_rec_rets = [], recS_ret_ty = placeHolderType }
 
-emptyRecStmtA = RecStmtA { recS_stmts = [], recS_later_ids = [], recS_rec_ids = []
-                         , recS_fix_fn = noSyntaxExpr, recS_later_rets = []
-                         , recS_rec_rets = [], recS_ret_ty = placeHolderType }
+emptyRecStmtA = RecStmtA { recS_stmts      = [], recS_later_ids = []
+                         , recS_rec_ids    = [], recS_fix_fn    = noSyntaxExpr
+                         , recS_later_rets = [], recS_rec_rets  = []
+                         , recS_ret_ty     = placeHolderType }
 
 mkRecStmt stmts = emptyRecStmt { recS_stmts = stmts }
 
