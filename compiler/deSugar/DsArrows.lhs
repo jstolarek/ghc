@@ -611,9 +611,10 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdLet binds body) env_ids = do
 --        ---> premap (\ (env,stk) -> env) c
 
 dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _) env_ids = do
+{-
     trace ("HsCmdDo") $ return ()
     dsCmdDo ids local_vars res_ty stmts env_ids
-{-
+-}
     (core_stmts, env_ids') <- dsCmdDo ids local_vars res_ty stmts env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     core_fst <- mkFstExpr env_ty stack_ty
@@ -624,7 +625,6 @@ dsCmd ids local_vars stack_ty res_ty (HsCmdDo stmts _) env_ids = do
               core_fst
               core_stmts,
               env_ids' )
--}
 
 -- D |- e :: forall e. a1 (e,stk1) t1 -> ... an (e,stkn) tn -> a (e,stk) t
 -- D; xs |-a ci :: stki --> ti
@@ -738,20 +738,22 @@ dsCmdDo _ _ _ [] _ = panic "dsCmdDo"
 --        ---> premap (\ (xs) -> ((xs), ())) c
 
 dsCmdDo ids local_vars res_ty [L _ (LastStmtA body)] env_ids = do
+{-
     trace ("desugaring LastStmtA: " ++ showSDoc unsafeGlobalDynFlags (ppr body)) $ return ()
     dsLCmd ids local_vars unitTy res_ty body env_ids
-{-
+-}
+    (core_body, env_ids') <- dsLCmd ids local_vars unitTy res_ty body env_ids
     let env_ty = mkBigCoreVarTupTy env_ids
     env_var <- newSysLocalDs env_ty
     let core_map = Lam env_var (mkCorePairExpr (Var env_var) mkCoreUnitExpr)
     return (do_premap ids
-                      env_ty
-                      (mkCorePairTy env_ty unitTy)
-                      res_ty
-                      core_map
-                      core_body,
-                      env_ids')
--}
+                        env_ty
+			(mkCorePairTy env_ty unitTy)
+                        res_ty
+                        core_map
+                        core_body,
+	env_ids')
+
 
 dsCmdDo ids local_vars res_ty (stmt:stmts) env_ids = do
     trace ("desugaring do notation stmt: " ++ showSDoc unsafeGlobalDynFlags (ppr stmt)) $ return ()
