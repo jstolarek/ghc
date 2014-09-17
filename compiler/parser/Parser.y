@@ -738,9 +738,9 @@ injectivity_cond :: { Located (InjectivityInfo RdrName) }
         | 'result' inj_varids '->' inj_varids
           { LL $ InjectivityInfo (reverse (unLoc $2)) (reverse (unLoc $4)) }
 
-inj_varids :: { Located [LHsType RdrName] }
-        : inj_varids varid  { LL ((L1 (HsTyVar (unLoc $2))) : unLoc $1) }
-        | varid             { LL  [L1 (HsTyVar (unLoc $1))]             }
+inj_varids :: { Located [Located RdrName] }
+        : inj_varids varid  { LL ((L1 (unLoc $2)) : unLoc $1) }
+        | varid             { LL  [L1 (unLoc $1)]             }
 
 -- Closed type families
 

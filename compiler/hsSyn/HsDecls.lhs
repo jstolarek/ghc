@@ -526,7 +526,7 @@ data FamilyDecl name = FamilyDecl
 deriving instance (DataId id) => Data (FamilyDecl id)
 
 data InjectivityInfo name
-  = InjectivityInfo [LHsType name] [LHsType name]
+  = InjectivityInfo [Located name] [Located name]
   deriving( Data, Typeable )
 
 data FamilyInfo name
