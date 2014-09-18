@@ -2166,7 +2166,7 @@ qvarid :: { Located RdrName }
         | QVARID                { sL1 $1 $! mkQual varName (getQVARID $1) }
         | PREFIXQVARSYM         { sL1 $1 $! mkQual varName (getPREFIXQVARSYM $1) }
 
--- Note that 'role' and 'family'get lexed separately regardless of
+-- Note that 'role' and 'family' get lexed separately regardless of
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.
 varid :: { Located RdrName }
@@ -2201,7 +2201,7 @@ varsym_no_minus :: { Located RdrName } -- varsym not including '-'
 
 -- These special_ids are treated as keywords in various places,
 -- but as ordinary ids elsewhere.   'special_id' collects all these
--- except 'unsafe', 'interruptible', 'forall', 'family' and 'role',
+-- except 'unsafe', 'interruptible', 'forall', 'family', and 'role',
 -- whose treatment differs depending on context
 special_id :: { Located FastString }
 special_id

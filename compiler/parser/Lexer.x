@@ -755,7 +755,7 @@ reservedWordsFM = listToUFM $
 Note [Lexing type pseudo-keywords]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-One might think that we wish to treat 'family', and 'role' as regular old
+One might think that we wish to treat 'family' and 'role' as regular old
 varids whenever -XTypeFamilies and -XRoleAnnotations are off, respectively.
 But, there is no need to do so. These pseudo-keywords are not stolen syntax:
 they are only used after the keyword 'type' at the top-level, where varids are
