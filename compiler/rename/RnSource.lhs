@@ -1165,8 +1165,8 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
 
      rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
      rn_injectivity (InjectivityInfo inj_from inj_to) = do
-        inj_from' <- mapM rnLHsTyVar inj_from
-        inj_to'   <- mapM rnLHsTyVar inj_to
+        inj_from' <- mapM (rnLTyVar True) inj_from
+        inj_to'   <- mapM (rnLTyVar True) inj_to
         return $ InjectivityInfo inj_from' inj_to'
 \end{code}
 
@@ -1450,11 +1450,6 @@ rnHsTyVars tvs  = mapM rnHsTyVar tvs
 
 rnHsTyVar :: RdrName -> RnM Name
 rnHsTyVar tyvar = lookupOccRn tyvar
-
-rnLHsTyVar :: Located RdrName -> RnM (Located Name)
-rnLHsTyVar (L loc tyvar) = do
-  tyvar' <- lookupOccRn tyvar
-  return (L loc tyvar')
 \end{code}
 
 
