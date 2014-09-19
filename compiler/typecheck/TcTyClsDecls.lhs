@@ -415,8 +415,18 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName = L _ name
   = do { (fam_kind, _) <-
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
            do { res_k <- case ksig of
-                           Just k  -> tcLHsKind k
-                           Nothing
+                           KindOnlySig k  -> tcLHsKind k
+                           -- JSTOLAREK: double-check that this is correct
+                           -- Nope, not correct - non-exhaustive patterns.
+                           -- Needs careful thought.
+                           KindedTyVarSig (L _ bndr)
+                             | KindedTyVar _ ki <- bndr -> tcLHsKind ki
+                             | UserTyVar   _    <- bndr -> newMetaKindVar
+                           NoSig
+                           -- JSTOLAREK: Something is wrong here. I believe the
+                           -- first branch will never be taken, because
+                           -- famDeclHasCusk will return false if fdKindSig is
+                           -- NoSig.
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }

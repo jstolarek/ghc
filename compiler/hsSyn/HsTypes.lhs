@@ -32,8 +32,8 @@ module HsTypes (
 
         ConDeclField(..), LConDeclField, pprConDeclFields,
         
-        mkHsQTvs, hsQTvBndrs, isHsKindedTyVar, hsTvbAllKinded,
-        mkExplicitHsForAllTy, mkImplicitHsForAllTy, mkQualifiedHsForAllTy,
+        mkHsQTvs, addHsQTv, hsQTvBndrs, isHsKindedTyVar, hsTvbAllKinded,
+        mkExplicitHsForAllTy, mkImplicitHsForAllTy,  mkQualifiedHsForAllTy,
         hsExplicitTvs,
         hsTyVarName, mkHsWithBndrs, hsLKiTyVarNames,
         hsLTyVarName, hsLTyVarNames, hsLTyVarLocName, hsLTyVarLocNames,
@@ -157,6 +157,9 @@ mkHsQTvs :: [LHsTyVarBndr RdrName] -> LHsTyVarBndrs RdrName
 -- We put an empty list (rather than a panic) for the kind vars so
 -- that the pretty printer works ok on them.
 mkHsQTvs tvs = HsQTvs { hsq_kvs = [], hsq_tvs = tvs }
+
+addHsQTv :: LHsTyVarBndrs name -> LHsTyVarBndr name -> LHsTyVarBndrs name
+addHsQTv tv_bndrs@(HsQTvs { hsq_tvs = tvs }) tv = tv_bndrs { hsq_tvs = tv:tvs }
 
 emptyHsQTvs :: LHsTyVarBndrs name   -- Use only when you know there are no kind binders
 emptyHsQTvs =  HsQTvs { hsq_kvs = [], hsq_tvs = [] }

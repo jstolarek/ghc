@@ -11,7 +11,7 @@ module RnTypes (
         rnHsType, rnLHsType, rnLHsTypes, rnContext,
         rnHsKind, rnLHsKind, rnLHsMaybeKind,
         rnHsSigType, rnLHsInstType, rnConDeclFields,
-        rnLTyVar,
+        rnLTyVar, rnTvBndr,
         newTyVarNameRn,
 
         -- Precence related stuff
@@ -363,7 +363,7 @@ rnForAll doc exp kvs forall_tyvars ctxt ty
         -- of kind *.
 
   | otherwise
-  = bindHsTyVars doc Nothing kvs forall_tyvars $ \ new_tyvars ->
+  = bindHsTyVars doc Nothing kvs forall_tyvars Nothing $ \ new_tyvars ->
     do { (new_ctxt, fvs1) <- rnContext doc ctxt
        ; (new_ty, fvs2) <- rnLHsType doc ty
        ; return (HsForAllTy exp new_tyvars new_ctxt new_ty, fvs1 `plusFV` fvs2) }
@@ -389,13 +389,14 @@ bindHsTyVars :: HsDocContext
              -> Maybe a                 -- Just _  => an associated type decl
              -> [RdrName]               -- Kind variables from scope
              -> LHsTyVarBndrs RdrName   -- Type variables
+             -> Maybe (LHsTyVarBndr RdrName) -- result type variable
              -> (LHsTyVarBndrs Name -> RnM (b, FreeVars))
              -> RnM (b, FreeVars)
 -- (a) Bring kind variables into scope
 --     both (i)  passed in (kv_bndrs)
 --     and  (ii) mentioned in the kinds of tv_bndrs
 -- (b) Bring type variables into scope
-bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
+bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs resTyVar thing_inside
   = do { rdr_env <- getLocalRdrEnv
        ; let tvs = hsQTvBndrs tv_bndrs
              kvs_from_tv_bndrs = [ kv | L _ (KindedTyVar _ kind) <- tvs
@@ -420,23 +421,19 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
        ; bindLocalNamesFV kv_names $
     do { let tv_names_w_loc = hsLTyVarLocNames tv_bndrs
 
-             rn_tv_bndr :: LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
-             rn_tv_bndr (L loc (UserTyVar rdr))
-               = do { nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
-                    ; return (L loc (UserTyVar nm), emptyFVs) }
-             rn_tv_bndr (L loc (KindedTyVar rdr kind))
-               = do { sig_ok <- xoptM Opt_KindSignatures
-                    ; unless sig_ok (badSigErr False doc kind)
-                    ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
-                    ; (kind', fvs) <- rnLHsKind doc kind
-                    ; return (L loc (KindedTyVar nm kind'), fvs) }
-
        -- Check for duplicate or shadowed tyvar bindrs
        ; checkDupRdrNames tv_names_w_loc
        ; when (isNothing mb_assoc) (checkShadowedRdrNames tv_names_w_loc)
 
-       ; (tv_bndrs', fvs1) <- mapFvRn rn_tv_bndr tvs
-       ; (res, fvs2) <- bindLocalNamesFV (map hsLTyVarName tv_bndrs') $
+       ; (tv_bndrs', fvs1) <- mapFvRn (rnTvBndr doc mb_assoc) tvs
+       ; tv_bndrs'' <- case resTyVar of
+                         Nothing       -> return tv_bndrs'
+                         Just res_bndr -> do
+                             -- JSTOLAREK: ingoring free variables here.
+                             -- Is that OK?
+                             (res_bndr', _) <- rnTvBndr doc mb_assoc res_bndr
+                             return $ res_bndr' : tv_bndrs'
+       ; (res, fvs2) <- bindLocalNamesFV (map hsLTyVarName tv_bndrs'') $
                         do { inner_rdr_env <- getLocalRdrEnv
                            ; traceRn (text "bhtv" <+> vcat
                                  [ ppr tvs, ppr kv_bndrs, ppr kvs_from_tv_bndrs
@@ -445,6 +442,24 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
                                  , ppr all_kvs, ppr rdr_env, ppr inner_rdr_env ])
                            ; thing_inside (HsQTvs { hsq_tvs = tv_bndrs', hsq_kvs = kv_names }) }
        ; return (res, fvs1 `plusFV` fvs2) } }
+
+-- JSTOLAREK: I decided to retreive RdrEnv inside rnTvBdr so that the function
+-- takes less arguments. But I'm not sure if that's correct. Perhaps it should
+-- take RdrENv from the caller?
+rnTvBndr :: HsDocContext
+         -> Maybe a                 -- Just _  => an associated type decl
+         -> LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
+rnTvBndr _ mb_assoc (L loc (UserTyVar rdr))
+  = do { rdr_env <- getLocalRdrEnv
+       ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
+       ; return (L loc (UserTyVar nm), emptyFVs) }
+rnTvBndr doc mb_assoc (L loc (KindedTyVar rdr kind))
+  = do { rdr_env <- getLocalRdrEnv
+       ; sig_ok <- xoptM Opt_KindSignatures
+       ; unless sig_ok (badSigErr False doc kind)
+       ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
+       ; (kind', fvs) <- rnLHsKind doc kind
+       ; return (L loc (KindedTyVar nm kind'), fvs) }
 
 newTyVarNameRn :: Maybe a -> LocalRdrEnv -> SrcSpan -> RdrName -> RnM Name
 newTyVarNameRn mb_assoc rdr_env loc rdr
@@ -953,9 +968,17 @@ extractHsTysRdrTyVars ty
   = case extract_ltys ty ([],[]) of
      (kvs, tvs) -> (nub kvs, nub tvs)
 
-extractRdrKindSigVars :: Maybe (LHsKind RdrName) -> [RdrName]
-extractRdrKindSigVars Nothing = []
-extractRdrKindSigVars (Just k) = nub (fst (extract_lkind k ([],[])))
+-- JSTOLAREK: here the intention is to return the KIND
+extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
+extractRdrKindSigVars NoSig = []
+extractRdrKindSigVars (KindOnlySig k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (KindedTyVarSig k) =
+    -- JSTOLAREK: SPJ says there must be a better way of doing this
+    -- Is setting hsq_kvs to [] correct?. I'm not sure if passing in k
+    -- to hsq_tvs is correct - after all this function cares about the return
+    -- kind, not type variables.
+    let tv_bndrs = HsQTvs { hsq_tvs = [k], hsq_kvs = [] }
+    in nub (fst (extract_hs_tv_bndrs tv_bndrs ([],[]) ([],[])))
 
 extractDataDefnKindVars :: HsDataDefn RdrName -> [RdrName]
 -- Get the scoped kind variables mentioned free in the constructor decls

@@ -313,6 +313,9 @@ repSynDecl tc bndrs ty
   = do { ty1 <- repLTy ty
        ; repTySyn tc bndrs ty1 }
 
+-- JSTOLAREK: Looks like this delegates calls to Template Haskell. I need to
+-- update this to take injectivity into account once Template Haskell is
+-- updated.
 repFamilyDecl :: LFamilyDecl Name -> DsM (SrcSpan, Core TH.DecQ)
 repFamilyDecl (L loc (FamilyDecl { fdInfo    = info,
                                    fdLName   = tc,
@@ -321,22 +324,25 @@ repFamilyDecl (L loc (FamilyDecl { fdInfo    = info,
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
        ; dec <- addTyClTyVarBinds tvs $ \bndrs ->
            case (opt_kind, info) of
-                  (Nothing, ClosedTypeFamily eqns) ->
+                  (NoSig, ClosedTypeFamily eqns) ->
                     do { eqns1 <- mapM repTyFamEqn eqns
                        ; eqns2 <- coreList tySynEqnQTyConName eqns1
                        ; repClosedFamilyNoKind tc1 bndrs eqns2 }
-                  (Just ki, ClosedTypeFamily eqns) ->
+                  (KindOnlySig ki, ClosedTypeFamily eqns) ->
                     do { eqns1 <- mapM repTyFamEqn eqns
                        ; eqns2 <- coreList tySynEqnQTyConName eqns1
                        ; ki1 <- repLKind ki
                        ; repClosedFamilyKind tc1 bndrs ki1 eqns2 }
-                  (Nothing, _) ->
+                  (NoSig, _) ->
                     do { info' <- repFamilyInfo info
                        ; repFamilyNoKind info' tc1 bndrs }
-                  (Just ki, _) ->
+                  (KindOnlySig ki, _) ->
                     do { info' <- repFamilyInfo info
                        ; ki1 <- repLKind ki
                        ; repFamilyKind info' tc1 bndrs ki1 }
+                  -- JSTOLAREK: I need to add the remaining two cases. For now
+                  -- I'll just panic.
+                  _ -> panic "Injectivity not yet implemented in TH"
        ; return (loc, dec)
        }
 

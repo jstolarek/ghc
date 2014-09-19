@@ -46,6 +46,7 @@ import ListSetOps       ( findDupsEq, removeDups )
 import Digraph          ( SCC, flattenSCC, stronglyConnCompFromEdgedVertices )
 import Util             ( mapSnd )
 
+import Control.Arrow (first)
 import Control.Monad
 import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
@@ -587,7 +588,7 @@ rnTyFamDefltEqn :: Name
 rnTyFamDefltEqn cls (TyFamEqn { tfe_tycon = tycon
                               , tfe_pats  = tyvars
                               , tfe_rhs   = rhs })
-  = bindHsTyVars ctx (Just cls) [] tyvars $ \ tyvars' ->
+  = bindHsTyVars ctx (Just cls) [] tyvars Nothing $ \ tyvars' ->
     do { tycon'      <- lookupFamInstName (Just cls) tycon
        ; (rhs', fvs) <- rnLHsType ctx rhs
        ; return (TyFamEqn { tfe_tycon = tycon'
@@ -955,7 +956,7 @@ rnTyClDecl (SynDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdRhs = rhs })
        ; let kvs = fst (extractHsTyRdrTyVars rhs)
              doc = TySynCtx tycon
        ; traceRn (text "rntycl-ty" <+> ppr tycon <+> ppr kvs)
-       ; ((tyvars', rhs'), fvs) <- bindHsTyVars doc Nothing kvs tyvars $
+       ; ((tyvars', rhs'), fvs) <- bindHsTyVars doc Nothing kvs tyvars Nothing $
                                     \ tyvars' ->
                                     do { (rhs', fvs) <- rnTySyn doc rhs
                                        ; return ((tyvars', rhs'), fvs) }
@@ -969,7 +970,7 @@ rnTyClDecl (DataDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdDataDefn = defn 
        ; let kvs = extractDataDefnKindVars defn
              doc = TyDataCtx tycon
        ; traceRn (text "rntycl-data" <+> ppr tycon <+> ppr kvs)
-       ; ((tyvars', defn'), fvs) <- bindHsTyVars doc Nothing kvs tyvars $ \ tyvars' ->
+       ; ((tyvars', defn'), fvs) <- bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
                                     do { (defn', fvs) <- rnDataDefn doc defn
                                        ; return ((tyvars', defn'), fvs) }
        ; return (DataDecl { tcdLName = tycon', tcdTyVars = tyvars'
@@ -986,7 +987,7 @@ rnTyClDecl (ClassDecl {tcdCtxt = context, tcdLName = lcls,
 
         -- Tyvars scope over superclass context and method signatures
         ; ((tyvars', context', fds', ats', sigs'), stuff_fvs)
-            <- bindHsTyVars cls_doc Nothing kvs tyvars $ \ tyvars' -> do
+            <- bindHsTyVars cls_doc Nothing kvs tyvars Nothing $ \ tyvars' -> do
                   -- Checks for distinct tyvars
              { (context', cxt_fvs) <- rnContext cls_doc context
              ; fds'  <- rnFds fds
@@ -1144,22 +1145,35 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdKindSig = kind
+                             , fdInfo = info, fdKindSig = kindSig
                              , fdInjective = L injSpan injectivity })
-  = do { ((tycon', tyvars', kind', injectivity'), fv1) <-
-           bindHsTyVars fmly_doc mb_cls kvs tyvars $ \tyvars' ->
+  = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
+           bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
-              ; (kind', fv_kind) <- rnLHsMaybeKind fmly_doc kind
-              ; injectivity'     <- mapM rn_injectivity injectivity
-              ; return ((tycon', tyvars', kind', injectivity'), fv_kind) }
+              ; (kindSig', fv_kind) <- case kindSig of
+                  NoSig -> return (NoSig, emptyFVs)
+                  KindOnlySig kind ->
+                   -- (Functor f) => f (a, b) -> f (KindOnlySig a, b)
+                   first KindOnlySig `fmap` (rnLHsKind fmly_doc kind)
+                  KindedTyVarSig tvbndr ->
+                   -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
+                   first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
+              ; injectivity' <- traverse rn_injectivity injectivity
+              ; return ( (tycon', tyvars', kindSig', injectivity')
+                       , fv_kind )  }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdKindSig = kind'
+                            , fdInfo = info', fdKindSig = kindSig'
                             , fdInjective = L injSpan injectivity' }
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
-     kvs = extractRdrKindSigVars kind
+     kvs = extractRdrKindSigVars kindSig
+     resTyVar = maybeResultBndr kindSig
+
+     maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
+     maybeResultBndr (KindedTyVarSig bndr) = Just bndr
+     maybeResultBndr _                     = Nothing
 
      rn_info (ClosedTypeFamily eqns)
        = do { (eqns', fvs) <- rnList (rnTyFamInstEqn Nothing) eqns
@@ -1170,7 +1184,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
 
      rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
      rn_injectivity (InjectivityInfo inj_from inj_to) = do
-        inj_from' <- mapM (rnLTyVar True) inj_from
+        inj_from' <- rnLTyVar True inj_from
         inj_to'   <- mapM (rnLTyVar True) inj_to
         return $ InjectivityInfo inj_from' inj_to'
 \end{code}
@@ -1309,7 +1323,7 @@ rnConDecl decl@(ConDecl { con_names = names, con_qvars = tvs
 
         ; mb_doc' <- rnMbLHsDoc mb_doc
 
-        ; bindHsTyVars doc Nothing free_kvs new_tvs $ \new_tyvars -> do
+        ; bindHsTyVars doc Nothing free_kvs new_tvs Nothing $ \new_tyvars -> do
         { (new_context, fvs1) <- rnContext doc lcxt
         ; (new_details, fvs2) <- rnConDeclDetails doc details
         ; (new_details', new_res_ty, fvs3)
