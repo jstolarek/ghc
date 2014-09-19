@@ -46,6 +46,7 @@ import ListSetOps       ( findDupsEq, removeDups )
 import Digraph          ( SCC, flattenSCC, stronglyConnCompFromEdgedVertices )
 import Util             ( mapSnd )
 
+import Control.Arrow (first)
 import Control.Monad
 import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
@@ -1139,22 +1140,33 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdKindSig = kind
+                             , fdInfo = info, fdKindSig = kindSig
                              , fdInjective = L injSpan injectivity })
-  = do { ((tycon', tyvars', kind', injectivity'), fv1) <-
+  = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
-              ; (kind', fv_kind) <- rnLHsMaybeKind fmly_doc kind
-              ; injectivity'     <- mapM rn_injectivity injectivity
-              ; return ((tycon', tyvars', kind', injectivity'), fv_kind) }
+              ; (kindSig', fv_kind) <- case kindSig of
+                  Nothing -> return (Nothing, emptyFVs)
+                  Just (Left kind) ->
+                   first (Just . Left) `fmap` (rnLHsKind fmly_doc kind)
+                   -- (Functor f) => f (a, b) -> f (Just (Left a), b)
+                  Just (Right tvbndr) ->
+                   first (Just . Right) `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
+                   -- (Functor f) => f (a, b) -> f (Just (Right a), b)
+--              ; (injectivity', fv_inj) <-
+--                         unzip `fmap` mapM rn_injectivity injectivity
+              ; injectivity' <- mapM rn_injectivity injectivity
+              ; return ( (tycon', tyvars', kindSig', injectivity')
+                       , fv_kind )  }
+--                       , plusFVs (fv_kind : fv_inj)) }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdKindSig = kind'
+                            , fdInfo = info', fdKindSig = kindSig'
                             , fdInjective = L injSpan injectivity' }
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
-     kvs = extractRdrKindSigVars kind
+     kvs = extractRdrKindSigVars kindSig
 
      rn_info (ClosedTypeFamily eqns)
        = do { (eqns', fvs) <- rnList (rnTyFamInstEqn Nothing) eqns
@@ -1162,6 +1174,15 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
             ; return (ClosedTypeFamily eqns', fvs) }
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
+
+{-
+     rn_injectivity :: InjectivityInfo RdrName
+                    -> RnM (InjectivityInfo Name, FreeVars)
+     rn_injectivity (InjectivityInfo inj_from inj_to) = do
+       (inj_from', fv1) <- unzip `fmap` mapM (rnLHsType fmly_doc) inj_from
+       (inj_to'  , fv2) <- unzip `fmap` mapM (rnLHsType fmly_doc) inj_to
+       return $ (InjectivityInfo inj_from' inj_to', plusFVs (fv1 ++ fv2))
+-}
 
      rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
      rn_injectivity (InjectivityInfo inj_from inj_to) = do

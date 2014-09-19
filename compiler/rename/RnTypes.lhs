@@ -11,7 +11,7 @@ module RnTypes (
         rnHsType, rnLHsType, rnLHsTypes, rnContext,
         rnHsKind, rnLHsKind, rnLHsMaybeKind,
         rnHsSigType, rnLHsInstType, rnConDeclFields,
-        rnLTyVar,
+        rnLTyVar, rnTvBndr,
         newTyVarNameRn,
 
         -- Precence related stuff
@@ -420,22 +420,11 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
        ; bindLocalNamesFV kv_names $
     do { let tv_names_w_loc = hsLTyVarLocNames tv_bndrs
 
-             rn_tv_bndr :: LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
-             rn_tv_bndr (L loc (UserTyVar rdr))
-               = do { nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
-                    ; return (L loc (UserTyVar nm), emptyFVs) }
-             rn_tv_bndr (L loc (KindedTyVar rdr kind))
-               = do { sig_ok <- xoptM Opt_KindSignatures
-                    ; unless sig_ok (badSigErr False doc kind)
-                    ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
-                    ; (kind', fvs) <- rnLHsKind doc kind
-                    ; return (L loc (KindedTyVar nm kind'), fvs) }
-
        -- Check for duplicate or shadowed tyvar bindrs
        ; checkDupRdrNames tv_names_w_loc
        ; when (isNothing mb_assoc) (checkShadowedRdrNames tv_names_w_loc)
 
-       ; (tv_bndrs', fvs1) <- mapFvRn rn_tv_bndr tvs
+       ; (tv_bndrs', fvs1) <- mapFvRn (rnTvBndr doc mb_assoc) tvs
        ; (res, fvs2) <- bindLocalNamesFV (map hsLTyVarName tv_bndrs') $
                         do { inner_rdr_env <- getLocalRdrEnv
                            ; traceRn (text "bhtv" <+> vcat
@@ -445,6 +434,24 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs thing_inside
                                  , ppr all_kvs, ppr rdr_env, ppr inner_rdr_env ])
                            ; thing_inside (HsQTvs { hsq_tvs = tv_bndrs', hsq_kvs = kv_names }) }
        ; return (res, fvs1 `plusFV` fvs2) } }
+
+-- JSTOLAREK: I decided to retreive RdrEnv inside rnTvBdr so that the function
+-- takes less arguments. But I'm not sure if that's correct. Perhaps it should
+-- take RdrENv from the caller?
+rnTvBndr :: HsDocContext
+         -> Maybe a                 -- Just _  => an associated type decl
+         -> LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
+rnTvBndr _ mb_assoc (L loc (UserTyVar rdr))
+  = do { rdr_env <- getLocalRdrEnv
+       ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
+       ; return (L loc (UserTyVar nm), emptyFVs) }
+rnTvBndr doc mb_assoc (L loc (KindedTyVar rdr kind))
+  = do { rdr_env <- getLocalRdrEnv
+       ; sig_ok <- xoptM Opt_KindSignatures
+       ; unless sig_ok (badSigErr False doc kind)
+       ; nm <- newTyVarNameRn mb_assoc rdr_env loc rdr
+       ; (kind', fvs) <- rnLHsKind doc kind
+       ; return (L loc (KindedTyVar nm kind'), fvs) }
 
 newTyVarNameRn :: Maybe a -> LocalRdrEnv -> SrcSpan -> RdrName -> RnM Name
 newTyVarNameRn mb_assoc rdr_env loc rdr
@@ -952,9 +959,14 @@ extractHsTysRdrTyVars ty
   = case extract_ltys ty ([],[]) of
      (kvs, tvs) -> (nub kvs, nub tvs)
 
-extractRdrKindSigVars :: Maybe (LHsKind RdrName) -> [RdrName]
+extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
 extractRdrKindSigVars Nothing = []
-extractRdrKindSigVars (Just k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (Just (Left  k)) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (Just (Right k)) =
+    -- JSTOLAREK: is there a better way to do it?
+    -- Is setting hsq_kvs to [] correct?
+    let tv_bndrs = HsQTvs { hsq_tvs = [k], hsq_kvs = [] }
+    in nub (fst (extract_hs_tv_bndrs tv_bndrs ([],[]) ([],[])))
 
 extractDataDefnKindVars :: HsDataDefn RdrName -> [RdrName]
 -- Get the scoped kind variables mentioned free in the constructor decls

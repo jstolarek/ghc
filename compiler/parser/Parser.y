@@ -663,7 +663,8 @@ ty_decl :: { LTyClDecl RdrName }
                 {% mkTySynonym (comb2 $1 $4) $2 $4 }
 
            -- type family declarations
-        | 'type' 'family' type opt_kind_sig opt_injective_info where_type_family
+        | 'type' 'family' type opt_tyfam_kind_sig opt_injective_info
+                          where_type_family
                 -- Note the use of type for the head; this allows
                 -- infix type constructors to be declared
                 {% mkFamDecl (comb4 $1 $3 $4 $6) (unLoc $6) $3 (unLoc $4) $5 }
@@ -686,8 +687,8 @@ ty_decl :: { LTyClDecl RdrName }
 
           -- data/newtype family
         | 'data' 'family' type opt_kind_sig
-                {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4)
-                                                            (noLoc []) }
+                {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3
+                             (Left `fmap` unLoc $4) (noLoc []) }
 
 inst_decl :: { LInstDecl RdrName }
         : 'instance' overlap_pragma inst_type where_inst
@@ -726,19 +727,21 @@ overlap_pragma :: { Maybe OverlapMode }
 
 opt_injective_info :: { Located [InjectivityInfo RdrName] }
         :                               { noLoc []   }
-        | '|' injectivity_conds         { LL (reverse (unLoc $2)) }
+        | '|' injectivity_conds         { sLL $1 $> (reverse (unLoc $2)) }
 
 injectivity_conds :: { Located [InjectivityInfo RdrName] }
-        : injectivity_conds ',' injectivity_cond { LL (unLoc $3 : unLoc $1) }
-        | injectivity_cond                       { LL [unLoc $1]            }
+        : injectivity_conds ',' injectivity_cond
+                                 { sLL $1 $> (unLoc $3 : unLoc $1) }
+        | injectivity_cond
+                                 { sLL $1 $> [unLoc $1]            }
 
 injectivity_cond :: { Located (InjectivityInfo RdrName) }
         : inj_varids '->' inj_varids
-          { LL $ InjectivityInfo (reverse (unLoc $1)) (reverse (unLoc $3)) }
+       { sLL $1 $> (InjectivityInfo (reverse (unLoc $1)) (reverse (unLoc $3))) }
 
 inj_varids :: { Located [Located RdrName] }
-        : inj_varids varid  { LL ($2 : unLoc $1) }
-        | varid             { L1  [$1]           }
+        : inj_varids varid  { sLL $1 $>  ($2 : unLoc $1) }
+        | varid             { sL1 $1     [$1]            }
 
 -- Closed type families
 
@@ -778,14 +781,14 @@ at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_kind_sig
                 {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                            (unLoc $4) (noLoc [])) }
+                                            (Left `fmap` unLoc $4) (noLoc [])) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
-        | 'type' type opt_kind_sig opt_injective_info
+        | 'type' type opt_tyfam_kind_sig opt_injective_info
                 {% liftM mkTyClD (mkFamDecl (comb4 $1 $2 $3 $4) OpenTypeFamily
                                             $2 (unLoc $3) $4) }
-        | 'type' 'family' type opt_kind_sig opt_injective_info
+        | 'type' 'family' type opt_tyfam_kind_sig opt_injective_info
                 {% liftM mkTyClD (mkFamDecl (comb4 $1 $3 $4 $5) OpenTypeFamily
                                             $3 (unLoc $4) $5) }
 
@@ -827,6 +830,11 @@ data_or_newtype :: { Located NewOrData }
 opt_kind_sig :: { Located (Maybe (LHsKind RdrName)) }
         :                               { noLoc Nothing }
         | '::' kind                     { sLL $1 $> (Just $2) }
+
+opt_tyfam_kind_sig :: { Located (FamilyResultSig RdrName) }
+        :                               { noLoc Nothing               }
+        | '::' kind                     { sLL $1 $> (Just (Left  $2)) }
+        | '='  tv_bndr                  { sLL $1 $> (Just (Right $2)) }
 
 -- tycl_hdr parses the header of a class or data type decl,
 -- which takes the form

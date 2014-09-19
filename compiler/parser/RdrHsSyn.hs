@@ -226,7 +226,7 @@ mkTyFamInst loc eqn
 mkFamDecl :: SrcSpan
           -> FamilyInfo RdrName
           -> LHsType RdrName   -- LHS
-          -> Maybe (LHsKind RdrName) -- Optional kind signature
+          -> FamilyResultSig RdrName           -- Optional kind signature
           -> Located [InjectivityInfo RdrName] -- injectivity conditions
           -> P (LTyClDecl RdrName)
 mkFamDecl loc info lhs ksig inj_cond

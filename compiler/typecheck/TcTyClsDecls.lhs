@@ -413,7 +413,10 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName = L _ name
   = do { (fam_kind, _) <-
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
            do { res_k <- case ksig of
-                           Just k  -> tcLHsKind k
+                           Just (Left k)  -> tcLHsKind k
+                           -- JSTOLAREK: double-check that this is correct
+                           Just (Right (L _ bndr))
+                             | KindedTyVar _ ki <- bndr -> tcLHsKind ki
                            Nothing
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar

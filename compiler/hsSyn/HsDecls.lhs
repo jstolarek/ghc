@@ -69,7 +69,7 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  InjectivityInfo(..),
+  InjectivityInfo(..), FamilyResultSig,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -512,6 +512,17 @@ tyClGroupConcat = concatMap group_tyclds
 mkTyClGroup :: [LTyClDecl name] -> TyClGroup name
 mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
+-- Signature of the return kind of a type family. This can be:
+--
+--  * ommited (Nothing):
+--       type family Plus a b where ...
+--  * a kind (Just . Left):
+--       type family Plus a b :: Nat where ...
+--  * a named type with a kind signature (Just . Right):
+--       type family Plus a b = (r :: Nat) where ...
+--
+type FamilyResultSig name = Maybe (Either (LHsKind name) (LHsTyVarBndr name))
+
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
   { fdInfo      :: FamilyInfo name               -- type or data, closed or open
@@ -521,7 +532,7 @@ data FamilyDecl name = FamilyDecl
   , fdInjective :: Located [InjectivityInfo name] -- information about injectivity
   , fdLName     :: Located name                   -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name             -- type variables
-  , fdKindSig   :: Maybe (LHsKind name) }         -- result kind
+  , fdKindSig   :: FamilyResultSig name }        -- result kind
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
@@ -720,8 +731,9 @@ instance (OutputableBndr name) => Outputable (FamilyDecl name) where
              , nest 2 $ pp_eqns ]
         where
           pp_kind = case mb_kind of
-                      Nothing   -> empty
-                      Just kind -> dcolon <+> ppr kind
+                      Nothing              -> empty
+                      Just (Left  kind   ) -> dcolon <+> ppr kind
+                      Just (Right tv_bndr) -> ptext (sLit "=") <+> ppr tv_bndr
           (pp_where, pp_eqns) = case info of
             ClosedTypeFamily eqns -> ( ptext (sLit "where")
                                      , if null eqns
