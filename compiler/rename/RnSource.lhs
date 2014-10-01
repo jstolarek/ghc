@@ -1143,7 +1143,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInfo = info, fdKindSig = kindSig
                              , fdInjective = L injSpan injectivity })
   = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
-           bindHsTyVars fmly_doc mb_cls kvs tyvars $ \tyvars' ->
+           bindHsTyVars fmly_doc mb_cls kvs extTyVars $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
               ; (kindSig', fv_kind) <- case kindSig of
                   NoSig -> return (NoSig, emptyFVs)
@@ -1167,6 +1167,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
   where
      fmly_doc = TyFamilyCtx tycon
      kvs = extractRdrKindSigVars kindSig
+     extTyVars = case kindSig of
+                   KindedTyVarSig tv_bndr -> addHsQTv tyvars tv_bndr
+                   _                      -> tyvars
 
      rn_info (ClosedTypeFamily eqns)
        = do { (eqns', fvs) <- rnList (rnTyFamInstEqn Nothing) eqns

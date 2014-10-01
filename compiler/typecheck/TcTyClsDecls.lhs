@@ -415,6 +415,8 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName = L _ name
            do { res_k <- case ksig of
                            KindOnlySig k  -> tcLHsKind k
                            -- JSTOLAREK: double-check that this is correct
+                           -- Nope, not correct - non-exhaustive patterns.
+                           -- Needs careful thought.
                            KindedTyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
                            NoSig

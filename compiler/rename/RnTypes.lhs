@@ -959,12 +959,15 @@ extractHsTysRdrTyVars ty
   = case extract_ltys ty ([],[]) of
      (kvs, tvs) -> (nub kvs, nub tvs)
 
+-- JSTOLAREK: here the intention is to return the KIND
 extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
 extractRdrKindSigVars NoSig = []
-extractRdrKindSigVars (KindOnlySig  k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (KindOnlySig k) = nub (fst (extract_lkind k ([],[])))
 extractRdrKindSigVars (KindedTyVarSig k) =
     -- JSTOLAREK: is there a better way to do it?
-    -- Is setting hsq_kvs to [] correct?
+    -- Is setting hsq_kvs to [] correct?. I'm not sure if passing in k
+    -- to hsq_tvs is correct - after all this function cares about the return
+    -- kind, not type variables.
     let tv_bndrs = HsQTvs { hsq_tvs = [k], hsq_kvs = [] }
     in nub (fst (extract_hs_tv_bndrs tv_bndrs ([],[]) ([],[])))
 
