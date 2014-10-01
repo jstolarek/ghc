@@ -250,11 +250,13 @@ cvtDec (ForeignD ford)
 
 cvtDec (FamilyD flav tc tvs kind)
   = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tvs
-       ; kind' <- cvtMaybeKind kind
+       -- JSTOLAREK: this is hoplessly broken. Fixing it requires updating TH
+       -- data type and I'm not doing that until agreed on the exact datatypes.
+       --; kind' <- cvtFamilyResultSig kind
        -- JSTOLAREK: this needs fixing. Add TH support for injectivity
        -- This fmap thing is obviously a temporary "fix".
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan []) tc' tvs' (Left `fmap` kind') }
+         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan []) tc' tvs' undefined {-kind here-} }
   where
     cvtFamFlavour TypeFam = OpenTypeFamily
     cvtFamFlavour DataFam = DataFamily
@@ -296,16 +298,12 @@ cvtDec (TySynInstD tc eqn)
 cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
   | not $ null eqns
   = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tyvars
-       ; mkind' <- cvtMaybeKind mkind
+       -- JSTOLAREK: Also broken, see above
+       ; mkind' <- undefined --cvtFamilyResultSig mkind
        ; eqns' <- mapM (cvtTySynEqn tc') eqns
        -- JSTOLAREK: this needs fixing
-<<<<<<< HEAD
        ; returnJustL $ TyClD $ FamDecl $
          FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan []) tc' tvs' mkind' }
-=======
-       ; returnL $ TyClD (FamDecl (FamilyDecl (ClosedTypeFamily eqns')
-                              (L noSrcSpan []) tc' tvs' (Left `fmap` mkind'))) }
->>>>>>> bcd7055... Implement rwbarton's syntax proposal
   | otherwise
   = failWith (ptext (sLit "Illegal empty closed type family"))
 
@@ -1060,10 +1058,15 @@ cvtTyLit (StrTyLit s) = HsStrTy (fsLit s)
 cvtKind :: TH.Kind -> CvtM (LHsKind RdrName)
 cvtKind = cvtTypeKind "kind"
 
-cvtMaybeKind :: Maybe TH.Kind -> CvtM (Maybe (LHsKind RdrName))
-cvtMaybeKind Nothing = return Nothing
-cvtMaybeKind (Just ki) = do { ki' <- cvtKind ki
-                            ; return (Just ki') }
+cvtFamilyResultSig :: FamilyResultSig TH.Kind -> CvtM (FamilyResultSig RdrName)
+cvtFamilyResultSig NoSig = return NoSig
+-- JSTOLAREK: I'll fix that later together with the rest of TH. For now I'll
+-- just panic.
+cvtFamilyResultSig (KindOnlySig _) = --do { ki' <- cvtKind ki
+                                     --          ; return (KindOnlySig ki') }
+    panic "cvtFamilyResultSig KindOnlySig"
+cvtFamilyResultSig (KindedTyVarSig _) =
+    panic "cvtFamilyResultSig KindedTyVarSig"
 
 -----------------------------------------------------------
 cvtFixity :: TH.Fixity -> Hs.Fixity

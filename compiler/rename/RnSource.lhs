@@ -1146,13 +1146,13 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
            bindHsTyVars fmly_doc mb_cls kvs tyvars $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
               ; (kindSig', fv_kind) <- case kindSig of
-                  Nothing -> return (Nothing, emptyFVs)
-                  Just (Left kind) ->
-                   first (Just . Left) `fmap` (rnLHsKind fmly_doc kind)
-                   -- (Functor f) => f (a, b) -> f (Just (Left a), b)
-                  Just (Right tvbndr) ->
-                   first (Just . Right) `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-                   -- (Functor f) => f (a, b) -> f (Just (Right a), b)
+                  NoSig -> return (NoSig, emptyFVs)
+                  KindOnlySig kind ->
+                   -- (Functor f) => f (a, b) -> f (KindOnlySig a, b)
+                   first KindOnlySig `fmap` (rnLHsKind fmly_doc kind)
+                  KindedTyVarSig tvbndr ->
+                   -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
+                   first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
 --              ; (injectivity', fv_inj) <-
 --                         unzip `fmap` mapM rn_injectivity injectivity
               ; injectivity' <- mapM rn_injectivity injectivity

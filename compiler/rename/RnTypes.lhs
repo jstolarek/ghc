@@ -960,9 +960,9 @@ extractHsTysRdrTyVars ty
      (kvs, tvs) -> (nub kvs, nub tvs)
 
 extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
-extractRdrKindSigVars Nothing = []
-extractRdrKindSigVars (Just (Left  k)) = nub (fst (extract_lkind k ([],[])))
-extractRdrKindSigVars (Just (Right k)) =
+extractRdrKindSigVars NoSig = []
+extractRdrKindSigVars (KindOnlySig  k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (KindedTyVarSig k) =
     -- JSTOLAREK: is there a better way to do it?
     -- Is setting hsq_kvs to [] correct?
     let tv_bndrs = HsQTvs { hsq_tvs = [k], hsq_kvs = [] }

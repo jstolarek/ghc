@@ -686,9 +686,9 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- constrs and deriving are both empty
 
           -- data/newtype family
-        | 'data' 'family' type opt_kind_sig
+        | 'data' 'family' type opt_datafam_kind_sig
                 {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3
-                             (Left `fmap` unLoc $4) (noLoc []) }
+                             (unLoc $4) (noLoc []) }
 
 inst_decl :: { LInstDecl RdrName }
         : 'instance' overlap_pragma inst_type where_inst
@@ -779,9 +779,9 @@ ty_fam_inst_eqn :: { LTyFamInstEqn RdrName }
 --
 at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
-          'data' opt_family type opt_kind_sig
+          'data' opt_family type opt_datafam_kind_sig
                 {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                            (Left `fmap` unLoc $4) (noLoc [])) }
+                                            (unLoc $4) (noLoc [])) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
@@ -831,10 +831,14 @@ opt_kind_sig :: { Located (Maybe (LHsKind RdrName)) }
         :                               { noLoc Nothing }
         | '::' kind                     { sLL $1 $> (Just $2) }
 
+opt_datafam_kind_sig :: { Located (FamilyResultSig RdrName) }
+        :                               { noLoc NoSig          }
+        | '::' kind                     { LL (KindOnlySig $2)  }
+
 opt_tyfam_kind_sig :: { Located (FamilyResultSig RdrName) }
-        :                               { noLoc Nothing               }
-        | '::' kind                     { sLL $1 $> (Just (Left  $2)) }
-        | '='  tv_bndr                  { sLL $1 $> (Just (Right $2)) }
+        :                               { noLoc NoSig                   }
+        | '::' kind                     { sLL $1 $> (KindOnlySig    $2) }
+        | '='  tv_bndr                  { sLL $1 $> (KindedTyVarSig $2) }
 
 -- tycl_hdr parses the header of a class or data type decl,
 -- which takes the form

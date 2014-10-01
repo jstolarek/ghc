@@ -69,7 +69,7 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  InjectivityInfo(..), FamilyResultSig,
+  FamilyResultSig(..), InjectivityInfo(..),
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -101,12 +101,18 @@ import SrcLoc
 import FastString
 
 import Bag
+<<<<<<< HEAD
 import Data.Data        hiding (TyCon,Fixity)
 #if __GLASGOW_HASKELL__ < 709
 import Data.Foldable ( Foldable )
 import Data.Traversable ( Traversable )
 #endif
 import Data.Maybe
+=======
+import Data.Data        hiding (TyCon)
+import Data.Foldable (Foldable)
+import Data.Traversable
+>>>>>>> 3e17822... Represent type family kind signature using new datatype
 \end{code}
 
 %************************************************************************
@@ -512,16 +518,20 @@ tyClGroupConcat = concatMap group_tyclds
 mkTyClGroup :: [LTyClDecl name] -> TyClGroup name
 mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
+-- JSTOLAREK: Improve this comment
 -- Signature of the return kind of a type family. This can be:
 --
---  * ommited (Nothing):
+--  * ommited (NoSig):
 --       type family Plus a b where ...
---  * a kind (Just . Left):
+--  * a kind (KindOnlySig):
 --       type family Plus a b :: Nat where ...
---  * a named type with a kind signature (Just . Right):
+--  * a named type with a kind signature (KindedTyVarSig):
 --       type family Plus a b = (r :: Nat) where ...
 --
-type FamilyResultSig name = Maybe (Either (LHsKind name) (LHsTyVarBndr name))
+data FamilyResultSig name = NoSig
+                          | KindOnlySig (LHsKind name)
+                          | KindedTyVarSig (LHsTyVarBndr name)
+                            deriving( Data, Typeable )
 
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
@@ -662,8 +672,12 @@ famDeclHasCusk :: FamilyDecl name -> Bool
 famDeclHasCusk (FamilyDecl { fdInfo = ClosedTypeFamily _
                            , fdTyVars = tyvars
                            , fdKindSig = m_sig })
-  = hsTvbAllKinded tyvars && isJust m_sig
+  = hsTvbAllKinded tyvars && existsSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
+
+existsSignature :: FamilyResultSig a -> Bool
+existsSignature NoSig = False
+existsSignature _     = True
 \end{code}
 
 Note [Complete user-supplied kind signatures]
@@ -731,9 +745,9 @@ instance (OutputableBndr name) => Outputable (FamilyDecl name) where
              , nest 2 $ pp_eqns ]
         where
           pp_kind = case mb_kind of
-                      Nothing              -> empty
-                      Just (Left  kind   ) -> dcolon <+> ppr kind
-                      Just (Right tv_bndr) -> ptext (sLit "=") <+> ppr tv_bndr
+                      NoSig                  -> empty
+                      KindOnlySig kind       -> dcolon <+> ppr kind
+                      KindedTyVarSig tv_bndr -> ptext (sLit "=") <+> ppr tv_bndr
           (pp_where, pp_eqns) = case info of
             ClosedTypeFamily eqns -> ( ptext (sLit "where")
                                      , if null eqns
