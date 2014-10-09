@@ -688,7 +688,7 @@ ty_decl :: { LTyClDecl RdrName }
           -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig
                 {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3
-                             (unLoc $4) (noLoc []) }
+                             (unLoc $4) (noLoc Nothing) }
 
 inst_decl :: { LInstDecl RdrName }
         : 'instance' overlap_pragma inst_type where_inst
@@ -725,23 +725,17 @@ overlap_pragma :: { Maybe OverlapMode }
 
 -- Injective type families
 
-opt_injective_info :: { Located [InjectivityInfo RdrName] }
-        :                               { noLoc []   }
-        | '|' injectivity_conds         { sLL $1 $> (reverse (unLoc $2)) }
-
-injectivity_conds :: { Located [InjectivityInfo RdrName] }
-        : injectivity_conds ',' injectivity_cond
-                                 { sLL $1 $> (unLoc $3 : unLoc $1) }
-        | injectivity_cond
-                                 { sLL $1 $> [unLoc $1]            }
+opt_injective_info :: { Located (Maybe (InjectivityInfo RdrName)) }
+        :                              { noLoc Nothing        }
+        | '|' injectivity_cond         { sLL $1 $> (Just (unLoc $2)) }
 
 injectivity_cond :: { Located (InjectivityInfo RdrName) }
-        : inj_varids '->' inj_varids
-       { sLL $1 $> (InjectivityInfo (reverse (unLoc $1)) (reverse (unLoc $3))) }
+        : tyvarid '->' inj_varids
+          { sLL $1 $> (InjectivityInfo $1 (reverse (unLoc $3))) }
 
 inj_varids :: { Located [Located RdrName] }
-        : inj_varids varid  { sLL $1 $>  ($2 : unLoc $1) }
-        | varid             { sL1 $1     [$1]            }
+        : inj_varids tyvarid  { sLL $1 $> ($2 : unLoc $1) }
+        | tyvarid             { sLL $1 $> [$1]            }
 
 -- Closed type families
 
@@ -781,7 +775,7 @@ at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_datafam_kind_sig
                 {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                            (unLoc $4) (noLoc [])) }
+                                            (unLoc $4) (noLoc Nothing)) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors

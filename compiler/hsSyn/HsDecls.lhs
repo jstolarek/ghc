@@ -525,7 +525,8 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --       type family Plus a b where ...
 --  * a kind (KindOnlySig):
 --       type family Plus a b :: Nat where ...
---  * a named type with a kind signature (KindedTyVarSig):
+--  * a named type, possibly with a kind signature (KindedTyVarSig):
+--       type family Plus a b = r where ...
 --       type family Plus a b = (r :: Nat) where ...
 --
 data FamilyResultSig name = NoSig
@@ -539,16 +540,24 @@ data FamilyDecl name = FamilyDecl
   -- JSTOLAREK: everything else here is Located, so I've made this located as
   -- well. But perhaps I don't have to? I'm not introducing any bindings on the
   -- one hand, but then again I'll be reporting errors later...
+<<<<<<< HEAD
   , fdInjective :: Located [InjectivityInfo name] -- information about injectivity
   , fdLName     :: Located name                   -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name             -- type variables
+=======
+  -- Might be worth making each InjectivityInfo Located.
+  , fdInjective :: Located (Maybe (InjectivityInfo name))
+                                                 -- injectivity information
+  , fdLName     :: Located name                  -- type constructor
+  , fdTyVars    :: LHsTyVarBndrs name            -- type variables
+>>>>>>> 4124df5... Fix "Not in scope" bug
   , fdKindSig   :: FamilyResultSig name }        -- result kind
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
 -- JSTOLAREK: provide a comment about this data type
 data InjectivityInfo name
-  = InjectivityInfo [Located name] [Located name]
+  = InjectivityInfo (Located name) [Located name]
   deriving( Data, Typeable )
 
 data FamilyInfo name
@@ -677,6 +686,7 @@ famDeclHasCusk _ = True  -- all open families have CUSKs!
 
 existsSignature :: FamilyResultSig a -> Bool
 existsSignature NoSig = False
+existsSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
 existsSignature _     = True
 \end{code}
 

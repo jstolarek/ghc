@@ -419,7 +419,12 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName = L _ name
                            -- Needs careful thought.
                            KindedTyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
+                             | UserTyVar   _    <- bndr -> newMetaKindVar
                            NoSig
+                           -- JSTOLAREK: Something is wrong here. I believe the
+                           -- first branch will never be taken, because
+                           -- famDeclHasCusk will return false if fdKindSig is
+                           -- NoSig.
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }

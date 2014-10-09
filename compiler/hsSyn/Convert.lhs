@@ -256,7 +256,7 @@ cvtDec (FamilyD flav tc tvs kind)
        -- JSTOLAREK: this needs fixing. Add TH support for injectivity
        -- This fmap thing is obviously a temporary "fix".
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan []) tc' tvs' undefined {-kind here-} }
+         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan Nothing) tc' tvs' undefined {-kind here-} }
   where
     cvtFamFlavour TypeFam = OpenTypeFamily
     cvtFamFlavour DataFam = DataFamily
@@ -303,7 +303,7 @@ cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
        ; eqns' <- mapM (cvtTySynEqn tc') eqns
        -- JSTOLAREK: this needs fixing
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan []) tc' tvs' mkind' }
+         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan Nothing) tc' tvs' mkind' }
   | otherwise
   = failWith (ptext (sLit "Illegal empty closed type family"))
 
