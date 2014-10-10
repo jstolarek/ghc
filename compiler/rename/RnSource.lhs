@@ -46,12 +46,13 @@ import ListSetOps       ( findDupsEq, removeDups )
 import Digraph          ( SCC, flattenSCC, stronglyConnCompFromEdgedVertices )
 import Util             ( mapSnd )
 
-import Control.Arrow (first)
+import Control.Arrow ( first )
 import Control.Monad
 import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
+import Data.Maybe ( fromJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1153,7 +1154,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              ; injectivity' <- traverse rn_injectivity injectivity
+              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
+                                                         (fromJust resTyVar))
+                                         injectivity
               ; return ( (tycon', tyvars', kindSig', injectivity')
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
@@ -1177,11 +1180,36 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
-     rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
-     rn_injectivity (InjectivityInfo inj_from inj_to) = do
-        inj_from' <- rnLTyVar True inj_from
-        inj_to'   <- mapM (rnLTyVar True) inj_to
-        return $ InjectivityInfo inj_from' inj_to'
+     rn_injectivity :: [LHsTyVarBndr RdrName] -> LHsTyVarBndr RdrName ->
+                       InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
+     rn_injectivity tyvars resTyVar (InjectivityInfo injFrom injTo) = do
+        let resName = getLHsTyVarBndrName resTyVar
+            tvNames = map getLHsTyVarBndrName tyvars
+            -- JSTOLAREK: add comments here
+            rhsValid = resName == unLoc injFrom
+            lhsValid = length tvNames == length injTo &&
+                       and (zipWith (\x y -> x == unLoc y) tvNames injTo)
+        -- JSTOLAREK: review this, perhaps improve
+        unless rhsValid $ setSrcSpan (getLoc injFrom) $ failWith
+               (vcat [ ptext (sLit "Incorrect type variable on the LHS of injectivity condition")
+                     , nest 5
+                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr resName ]
+                            , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
+
+        -- JSTOLAREK: improve srcSpan
+        unless lhsValid $ setSrcSpan injSpan $ failWith
+               (vcat [ ptext (sLit "Incorrect type variables on the RHS of injectivity condition")
+                     , nest 5
+                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr tyvars]
+                            , hcat [ptext (sLit "Actual   : "), ppr injTo] ])])
+
+        injFrom' <- rnLTyVar True injFrom
+        injTo'   <- mapM (rnLTyVar True) injTo
+        return $ InjectivityInfo injFrom' injTo'
+
+     getLHsTyVarBndrName :: LHsTyVarBndr name -> name
+     getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
+     getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
 \end{code}
 
 Note [Stupid theta]
