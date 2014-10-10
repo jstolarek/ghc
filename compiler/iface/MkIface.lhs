@@ -1609,6 +1609,7 @@ tyConToIfaceDecl env tycon
   | Just clas <- tyConClass_maybe tycon
   = classToIfaceDecl env clas
 
+  -- invariant: if the first pattern guard succeeds the second one also should
   | Just syn_rhs <- synTyConRhs_maybe tycon
   = ( tc_env1
     , IfaceSynonym { ifName    = getOccName tycon,
@@ -1619,11 +1620,14 @@ tyConToIfaceDecl env tycon
                    })
 
   | Just fam_flav <- famTyConFlav_maybe tycon
+  -- JSTOLAREK: check this!
+  , Just injectivity <- isInjectiveTypeFamilyTyCon tycon
   = ( tc_env1
     , IfaceFamily { ifName    = getOccName tycon,
                     ifTyVars  = if_tc_tyvars,
                     ifFamFlav = to_if_fam_flav fam_flav,
-                    ifFamKind = tidyToIfaceType tc_env1 (synTyConResKind tycon)
+                    ifFamKind = tidyToIfaceType tc_env1 (synTyConResKind tycon),
+                    ifFamInj  = injectivity
                   })
 
   | isAlgTyCon tycon

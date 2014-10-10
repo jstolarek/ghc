@@ -109,6 +109,7 @@ typeNatLeqTyCon =
     (take 2 $ tyVarList typeNatKind)
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    [False, False] -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "<=?")
@@ -126,6 +127,7 @@ typeNatCmpTyCon =
     (take 2 $ tyVarList typeNatKind)
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    [False, False] -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpNat")
@@ -143,6 +145,7 @@ typeSymbolCmpTyCon =
     (take 2 $ tyVarList typeSymbolKind)
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    [False, False] -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpSymbol")
@@ -165,6 +168,7 @@ mkTypeNatFunTyCon2 op tcb =
     (take 2 $ tyVarList typeNatKind)
     (BuiltInSynFamTyCon tcb)
     NoParentTyCon
+    [False, False] -- because we have 2 type variables
 
 
 

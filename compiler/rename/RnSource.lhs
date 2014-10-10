@@ -46,12 +46,13 @@ import ListSetOps       ( findDupsEq, removeDups )
 import Digraph          ( SCC, flattenSCC, stronglyConnCompFromEdgedVertices )
 import Util             ( mapSnd )
 
-import Control.Arrow (first)
+import Control.Arrow ( first )
 import Control.Monad
 import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
+import Data.Maybe ( fromJust, isNothing )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1158,7 +1159,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              ; injectivity' <- traverse rn_injectivity injectivity
+              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
+                                                         (fromJust resTyVar))
+                                         injectivity
               ; return ( (tycon', tyvars', kindSig', injectivity')
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
@@ -1182,11 +1185,90 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
-     rn_injectivity :: InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
-     rn_injectivity (InjectivityInfo inj_from inj_to) = do
-        inj_from' <- rnLTyVar True inj_from
-        inj_to'   <- mapM (rnLTyVar True) inj_to
-        return $ InjectivityInfo inj_from' inj_to'
+     rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
+                                               -- type family head
+                    -> LHsTyVarBndr RdrName    -- result type variable
+                    -> InjectivityInfo RdrName -- injectivity information
+                    -> RnM (InjectivityInfo Name)
+     rn_injectivity tyvars resTyVar (InjectivityInfo injFrom injTo) = do
+        let resName    = getLHsTyVarBndrName resTyVar
+            tvNames    = map getLHsTyVarBndrName tyvars
+            -- the only type variable allowed on the LHS of injectivity
+            -- condition is the variable naming the result in type family head
+            lhsValid   = resName == unLoc injFrom
+            -- verifying RHS of injectivity condition is more involved. We
+            -- require that:
+            --  1. only variables defined in type family head appear on the RHS
+            --     and each variable appears at most once
+            --  2. variables are listed in the order in which they were bound in
+            --     type family head
+            -- Breaking any of these assumptions results in an error.
+            rhsValid   = merge tvNames injTo
+            merge :: [RdrName] -> [Located RdrName] -> Maybe (SDoc, SrcSpan)
+            merge _     [] = Nothing
+            merge [] (L lx _:_) = -- we've run out of type variables in type
+                                  -- family head but there are still some
+                                  -- variables left in the injectivity condition
+                Just ( vcat [ ptext $ sLit ("Too many type variables on RHS of "
+                                          ++ "injectivity condition.")
+                            , nest 5
+                            ( vcat [ hcat [ ptext (sLit "You listed ")
+                                          , speakN (length injTo)
+                                          , ptext (sLit " : ")
+                                          , interpp'SP injTo
+                                          ]
+                                   , hcat [ ptext (sLit "But at most ")
+                                          , speakN (length tyvars)
+                                          , ptext (sLit " are allowed : ")
+                                          , interpp'SP tvNames
+                                          ]
+                                   ] )
+                            ], lx)
+            merge (x:xs) ys'@(L ly y:ys)
+                | x == y    = merge xs ys
+                | otherwise = -- type variables in head and injectivity
+                              -- condition are not equal
+                    case merge xs ys' of
+                      Nothing -> Nothing   -- this may be perfectly fine if a
+                                           -- variable was simply skipped
+                      Just _ -> Just (vcat -- but it may also be wrong if
+                                           -- variables were listed in incorrect
+                                           -- order. In that case discard
+                                           -- previous error and construct error
+                                           -- here. This ensures that we will
+                                           -- always report on the first
+                                           -- offending variable.
+                         [ hcat [ ptext (sLit ("Unexpected type variable on " ++
+                                        "the RHS of injectivity condition: "))
+                                , ppr y]
+                         , ptext (sLit ("All variables should be bound in type "
+                                 ++ "family head and appear at most once in "
+                                 ++ "exactly the same order as they were bound."
+                                 )) ], ly)
+
+        unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
+               (vcat [ ptext (sLit ("Incorrect type variable on the LHS" ++
+                                    " of injectivity condition"))
+                     , nest 5
+                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr resName ]
+                            , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
+
+        unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
+               addErr (fst (fromJust rhsValid))
+
+        when (resName `elem` tvNames) $ setSrcSpan (getLoc resTyVar) $
+               addErr (hcat [ ptext (sLit "Type variable ")
+                            , pprQuotedList [resName]
+                            , ptext (sLit (" naming a type family result also"
+                                       ++  " names one of the arguments."))])
+
+        injFrom' <- rnLTyVar True injFrom
+        injTo'   <- mapM (rnLTyVar True) injTo
+        return $ InjectivityInfo injFrom' injTo'
+
+     getLHsTyVarBndrName :: LHsTyVarBndr name -> name
+     getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
+     getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
 \end{code}
 
 Note [Stupid theta]

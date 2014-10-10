@@ -446,8 +446,7 @@ potentially-overlapping group is closed.
 
 As another example, consider this:
 
-type family G x
-type instance where
+type family G x where
   G Int = Bool
   G a   = Double
 

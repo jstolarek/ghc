@@ -47,6 +47,7 @@ module TyCon(
         isFamilyTyCon, isOpenFamilyTyCon,
         isTypeFamilyTyCon, isDataFamilyTyCon,
         isOpenTypeFamilyTyCon, isClosedSynFamilyTyCon_maybe,
+        isInjectiveTypeFamilyTyCon,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -150,6 +151,7 @@ Note [Type synonym families]
     a SynTyCon 'G', whose SynTyConRhs is ClosedSynFamilyTyCon, with the
     appropriate CoAxiom representing the equations
 
+-- JSTOLAREK: oh yes, we do :-) Update
 * In the future we might want to support
     * injective type families (allow decomposition)
   but we don't at the moment [2013]
@@ -492,7 +494,9 @@ data TyCon
 
         famTcParent  :: TyConParent   -- ^ TyCon of enclosing class for
                                       -- associated type families
-
+        -- JSTOLAREK: change name to famTcInj
+        synInjective :: [Bool]        -- ^ is this an injective type family?
+        -- invariant: length tyConTyVars = length synInjective
     }
 
   -- | Primitive types; cannot be defined in Haskell. This includes
@@ -1108,9 +1112,9 @@ mkSynonymTyCon name kind tyvars roles rhs
     }
 
 -- | Create a type family 'TyCon'
-mkFamilyTyCon:: Name -> Kind -> [TyVar] -> FamTyConFlav -> TyConParent
+mkFamilyTyCon:: Name -> Kind -> [TyVar] -> FamTyConFlav -> TyConParent -> [Bool]
              -> TyCon
-mkFamilyTyCon name kind tyvars flav parent
+mkFamilyTyCon name kind tyvars flav parent inj
   = FamilyTyCon
       { tyConUnique = nameUnique name
       , tyConName   = name
@@ -1119,6 +1123,7 @@ mkFamilyTyCon name kind tyvars flav parent
       , tyConTyVars = tyvars
       , famTcFlav   = flav
       , famTcParent = parent
+      , synInjective = inj
       }
 
 
@@ -1286,6 +1291,7 @@ isTypeSynonymTyCon _                 = False
 --
 
 isDecomposableTyCon :: TyCon -> Bool
+-- JSTOLAREK: this comment needs updating
 -- True iff we can decompose (T a b c) into ((T a b) c)
 --   I.e. is it injective?
 -- Specifically NOT true of synonyms (open and otherwise)
@@ -1338,6 +1344,10 @@ isClosedSynFamilyTyCon_maybe :: TyCon -> Maybe (CoAxiom Branched)
 isClosedSynFamilyTyCon_maybe
   (FamilyTyCon {famTcFlav = ClosedSynFamilyTyCon ax}) = Just ax
 isClosedSynFamilyTyCon_maybe _                        = Nothing
+
+isInjectiveTypeFamilyTyCon :: TyCon -> Maybe [Bool]
+isInjectiveTypeFamilyTyCon (SynTyCon { synInjective = inj }) = Just inj
+isInjectiveTypeFamilyTyCon _                                 = Nothing
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
 isBuiltInSynFamTyCon_maybe
