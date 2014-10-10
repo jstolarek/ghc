@@ -419,7 +419,7 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName = L _ name
                            -- Needs careful thought.
                            KindedTyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
-                             | UserTyVar   _    <- bndr -> newMetaKindVar
+                             | otherwise                -> newMetaKindVar
                            NoSig
                            -- JSTOLAREK: Something is wrong here. I believe the
                            -- first branch will never be taken, because
@@ -678,17 +678,20 @@ tcTyClDecl1 _parent rec_info
 \begin{code}
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent
-            (FamilyDecl {fdInfo = OpenTypeFamily, fdLName = L _ tc_name, fdTyVars = tvs})
+            (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
+                        , fdTyVars = tvs, fdInjective = L _ inj})
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; let roles = map (const Nominal) tvs'
   ; tycon <- buildSynTyCon tc_name tvs' roles OpenSynFamilyTyCon kind parent
+                           (isJust inj)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
             (FamilyDecl { fdInfo = ClosedTypeFamily eqns
-                        , fdLName = lname@(L _ tc_name), fdTyVars = tvs })
+                        , fdLName = lname@(L _ tc_name), fdTyVars = tvs
+                        , fdInjective = L _ inj })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
 -- Note: eqns might be empty, in a hs-boot file!
@@ -729,6 +732,7 @@ tcFamDecl1 parent
                        else ClosedSynFamilyTyCon co_ax
              roles   = map (const Nominal) tvs'
        ; tycon <- buildSynTyCon tc_name tvs' roles syn_rhs kind parent
+                                (isJust inj)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
@@ -763,7 +767,7 @@ tcTySynRhs rec_info tc_name tvs kind hs_ty
        ; rhs_ty <- zonkTcTypeToType emptyZonkEnv rhs_ty
        ; let roles = rti_roles rec_info tc_name
        ; tycon <- buildSynTyCon tc_name tvs roles (SynonymTyCon rhs_ty)
-                                kind NoParentTyCon
+                                kind NoParentTyCon False
        ; return [ATyCon tycon] }
 
 tcDataDefn :: RecTyInfo -> Name

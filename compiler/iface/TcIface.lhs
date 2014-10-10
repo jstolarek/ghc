@@ -490,13 +490,14 @@ tc_iface_decl parent _ (IfaceData {ifName = occ_name,
 tc_iface_decl parent _ (IfaceSyn {ifName = occ_name, ifTyVars = tv_bndrs,
                                   ifRoles = roles,
                                   ifSynRhs = mb_rhs_ty,
-                                  ifSynKind = kind })
+                                  ifSynKind = kind,
+                                  ifSynInj = inj })
    = bindIfaceTyVars_AT tv_bndrs $ \ tyvars -> do
      { tc_name  <- lookupIfaceTop occ_name
      ; rhs_kind <- tcIfaceKind kind     -- Note [Synonym kind loop]
      ; rhs      <- forkM (mk_doc tc_name) $
                    tc_syn_rhs mb_rhs_ty
-     ; tycon    <- buildSynTyCon tc_name tyvars roles rhs rhs_kind parent
+     ; tycon    <- buildSynTyCon tc_name tyvars roles rhs rhs_kind parent inj
      ; return (ATyCon tycon) }
    where
      mk_doc n = ptext (sLit "Type syonym") <+> ppr n

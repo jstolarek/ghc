@@ -44,6 +44,7 @@ variables (for flattening) and consult the inerts (for efficiency).
 
 The execution plan for canonicalization is the following:
 
+--JSTOLAREK: this comment might need updating
   1) Decomposition of equalities happens as necessary until we reach a
      variable or type family in one side. There is no decomposition step
      for other forms of constraints.

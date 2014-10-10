@@ -1609,7 +1609,8 @@ tyConToIfaceDecl env tycon
                   ifTyVars  = if_tc_tyvars,
                   ifRoles   = tyConRoles tycon,
                   ifSynRhs  = to_ifsyn_rhs syn_rhs,
-                  ifSynKind = tidyToIfaceType tc_env1 (synTyConResKind tycon) })
+                  ifSynKind = tidyToIfaceType tc_env1 (synTyConResKind tycon),
+                  ifSynInj  = isDecomposableTyCon tycon })
 
   | isAlgTyCon tycon
   = ( tc_env1

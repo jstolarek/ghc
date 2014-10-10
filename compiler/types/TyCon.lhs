@@ -407,8 +407,9 @@ data TyCon
         synTcRhs     :: SynTyConRhs,       -- ^ Contains information about the
                                            -- expansion of the synonym
 
-        synTcParent  :: TyConParent     -- ^ Gives the family declaration 'TyCon'
+        synTcParent  :: TyConParent,    -- ^ Gives the family declaration 'TyCon'
                                         -- of 'TyCon's representing family instances
+        synInjective :: Bool            -- ^ is this an injective type family?
 
     }
 
@@ -1007,8 +1008,9 @@ mkPrimTyCon' name kind roles rep is_unlifted
     }
 
 -- | Create a type synonym 'TyCon'
-mkSynTyCon :: Name -> Kind -> [TyVar] -> [Role] -> SynTyConRhs -> TyConParent -> TyCon
-mkSynTyCon name kind tyvars roles rhs parent
+mkSynTyCon :: Name -> Kind -> [TyVar] -> [Role] -> SynTyConRhs -> TyConParent ->
+              Bool -> TyCon
+mkSynTyCon name kind tyvars roles rhs parent injectivity
   = SynTyCon {
         tyConName = name,
         tyConUnique = nameUnique name,
@@ -1017,7 +1019,8 @@ mkSynTyCon name kind tyvars roles rhs parent
         tyConTyVars = tyvars,
         tc_roles = roles,
         synTcRhs = rhs,
-        synTcParent = parent
+        synTcParent = parent,
+        synInjective = injectivity
     }
 
 -- | Create a promoted data constructor 'TyCon'
@@ -1189,6 +1192,7 @@ isSynTyCon _             = False
 --
 
 isDecomposableTyCon :: TyCon -> Bool
+-- JSTOLAREK: this comment needs updating
 -- True iff we can decompose (T a b c) into ((T a b) c)
 --   I.e. is it injective?
 -- Specifically NOT true of synonyms (open and otherwise)
@@ -1198,8 +1202,8 @@ isDecomposableTyCon :: TyCon -> Bool
 -- It'd be unusual to call isDecomposableTyCon on a regular H98
 -- type synonym, because you should probably have expanded it first
 -- But regardless, it's not decomposable
-isDecomposableTyCon (SynTyCon {}) = False
-isDecomposableTyCon _other        = True
+isDecomposableTyCon (SynTyCon {synInjective = inj}) = inj
+isDecomposableTyCon _other                          = True
 
 -- | Is this an algebraic 'TyCon' declared with the GADT syntax?
 isGadtSyntaxTyCon :: TyCon -> Bool

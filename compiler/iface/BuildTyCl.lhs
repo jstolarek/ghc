@@ -49,9 +49,10 @@ buildSynTyCon :: Name -> [TyVar] -> [Role]
               -> SynTyConRhs
               -> Kind                   -- ^ Kind of the RHS
               -> TyConParent
+              -> Bool
               -> TcRnIf m n TyCon
-buildSynTyCon tc_name tvs roles rhs rhs_kind parent
-  = return (mkSynTyCon tc_name kind tvs roles rhs parent)
+buildSynTyCon tc_name tvs roles rhs rhs_kind parent injectivity
+  = return (mkSynTyCon tc_name kind tvs roles rhs parent injectivity)
   where kind = mkPiKinds tvs rhs_kind
 
 

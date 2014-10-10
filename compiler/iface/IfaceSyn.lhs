@@ -105,7 +105,8 @@ data IfaceDecl
                 ifTyVars  :: [IfaceTvBndr],     -- Type variables
                 ifRoles   :: [Role],            -- Roles
                 ifSynKind :: IfaceKind,         -- Kind of the *rhs* (not of the tycon)
-                ifSynRhs  :: IfaceSynTyConRhs }
+                ifSynRhs  :: IfaceSynTyConRhs,
+                ifSynInj  :: Bool }             -- is injective type family?
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Context...
                  ifName    :: IfaceTopBndr,             -- Name of the class TyCon
@@ -1390,13 +1391,14 @@ instance Binary IfaceDecl where
         put_ bh a9
         put_ bh a10
 
-    put_ bh (IfaceSyn a1 a2 a3 a4 a5) = do
+    put_ bh (IfaceSyn a1 a2 a3 a4 a5 a6) = do
         putByte bh 3
         put_ bh (occNameFS a1)
         put_ bh a2
         put_ bh a3
         put_ bh a4
         put_ bh a5
+        put_ bh a6
 
     put_ bh (IfaceClass a1 a2 a3 a4 a5 a6 a7 a8 a9) = do
         putByte bh 4
@@ -1457,8 +1459,9 @@ instance Binary IfaceDecl where
                     a3 <- get bh
                     a4 <- get bh
                     a5 <- get bh
+                    a6 <- get bh
                     occ <- return $! mkTcOccFS a1
-                    return (IfaceSyn occ a2 a3 a4 a5)
+                    return (IfaceSyn occ a2 a3 a4 a5 a6)
             4 -> do a1 <- get bh
                     a2 <- get bh
                     a3 <- get bh

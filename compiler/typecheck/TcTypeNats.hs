@@ -102,6 +102,7 @@ typeNatLeqTyCon =
     [Nominal,Nominal]
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    False
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "<=?")
@@ -120,6 +121,7 @@ typeNatCmpTyCon =
     [Nominal,Nominal]
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    False
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpNat")
@@ -138,6 +140,7 @@ typeSymbolCmpTyCon =
     [Nominal,Nominal]
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
+    False
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpSymbol")
@@ -161,6 +164,7 @@ mkTypeNatFunTyCon2 op tcb =
     [Nominal,Nominal]
     (BuiltInSynFamTyCon tcb)
     NoParentTyCon
+    False
 
 
 
