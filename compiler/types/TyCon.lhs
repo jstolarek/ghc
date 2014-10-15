@@ -1202,8 +1202,8 @@ isDecomposableTyCon :: TyCon -> Bool
 -- It'd be unusual to call isDecomposableTyCon on a regular H98
 -- type synonym, because you should probably have expanded it first
 -- But regardless, it's not decomposable
-isDecomposableTyCon (SynTyCon {synInjective = inj}) = inj
-isDecomposableTyCon _other                          = True
+isDecomposableTyCon (SynTyCon {}) = False
+isDecomposableTyCon _other        = True
 
 -- | Is this an algebraic 'TyCon' declared with the GADT syntax?
 isGadtSyntaxTyCon :: TyCon -> Bool
