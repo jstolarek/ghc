@@ -60,7 +60,7 @@ from the axiom.
 
 For example, consider the axiom derived from the following declaration:
 
-type instance where
+type instance F a where
   F [Int] = Bool
   F [a]   = Double
   F (a b) = Char
@@ -98,7 +98,7 @@ apply, not branch 2. This is a vital consistency check; without it, we could
 derive Int ~ Bool, and that is a Bad Thing.
 
 Note [Branched axioms]
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 Although a CoAxiom has the capacity to store many branches, in certain cases,
 we want only one. These cases are in data/newtype family instances, newtype
 coercions, and type family instances declared with "type instance ...", not
@@ -113,6 +113,7 @@ declaring whether it is known to be a singleton or not. The list of branches
 is stored using a special form of list, declared below, that ensures that the
 type variable is accurate.
 
+-- JSTOLAREK: Change this to a data kind
 As of this writing (Dec 2012), it would not be appropriate to use a promoted
 type as the phantom type, so we use empty datatypes. We wish to have GHC
 remain compilable with GHC 7.2.1. If you are revising this code and GHC no
@@ -130,7 +131,7 @@ code to use promoted types.
 type BranchIndex = Int  -- The index of the branch in the list of branches
                         -- Counting from zero
 
--- the phantom type labels
+-- the phantom type labels. See Note [Branched axioms]
 data Unbranched deriving Typeable
 data Branched deriving Typeable
 
