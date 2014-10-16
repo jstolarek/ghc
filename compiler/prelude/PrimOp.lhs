@@ -17,7 +17,7 @@ module PrimOp (
         primOpOkForSpeculation, primOpOkForSideEffects,
         primOpIsCheap, primOpFixity,
 
-        getPrimOpResultInfo,  PrimOpResultInfo(..),
+        getPrimOpResultInfo,  PrimOpResultInfo(..), isComparisonPrimOp,
 
         PrimCall(..)
     ) where
@@ -614,6 +614,11 @@ getPrimOpResultInfo op
                         -- All primops return a tycon-app result
                         -- The tycon can be an unboxed tuple, though, which
                         -- gives rise to a ReturnAlg
+
+isComparisonPrimOp :: PrimOp -> Bool
+isComparisonPrimOp op = case (primOpInfo op) of
+                         Compare _ _ -> True
+                         _           -> False
 \end{code}
 
 We do not currently make use of whether primops are commutable.
