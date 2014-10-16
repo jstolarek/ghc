@@ -212,7 +212,7 @@ Against omitting !Q!, !R!
   - May put a heap-check into the inner loop.  Suppose
         the main loop is P -> R -> P -> R...
         Q is the loop exit, and only it does allocation.
-    This only hurts us if P does no allocation.  If P allocates,
+    This only hurts us if P does no allocation (see #1498). If P allocates,
     then there is a heap check in the inner loop anyway.
 
   - May do more allocation than reqd.  This sometimes bites us
@@ -290,97 +290,60 @@ data GcPlan
 -------------------------------------
 cgCase :: StgExpr -> Id -> AltType -> [StgAlt] -> FCode ReturnKind
 
-cgCase (StgOpApp (StgPrimOp op) args _) bndr (AlgAlt tycon) alts
-  | isEnumerationTyCon tycon -- Note [case on bool]
-  = do { tag_expr <- do_enum_primop op args
+cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
+  | isComparisonPrimOp op
+  = do { dflags <- getDynFlags -- see Note [Case on primops]
+       ; tmp <- newTemp (bWord dflags)
+       ; cgPrimOp [tmp] op args
+       ; emitAssign (CmmLocal (idToReg dflags (NonVoid bndr)))
+                    (CmmReg (CmmLocal tmp))
+       ; _ <- bindArgsToRegs [NonVoid bndr]
+       ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
 
-       -- If the binder is not dead, convert the tag to a constructor
-       -- and assign it.
-       ; when (not (isDeadBinder bndr)) $ do
-            { dflags <- getDynFlags
-            ; tmp_reg <- bindArgToReg (NonVoid bndr)
-            ; emitAssign (CmmLocal tmp_reg)
-                         (tagToClosure dflags tycon tag_expr) }
+-- Note [Case on primops]
+-- ~~~~~~~~~~~~~~~~~~~~~~
+--
+-- Up to GHC 7.6 (inclusive) we had comparison primops that returned Bool
+-- values. This involved implicit generation of calls to tagToEnum# that later
+-- had to be optimized away by a special case in the code generator. GHC 7.8
+-- received new comparison primops that return Int# values instead of Bool. This
+-- means that there are no implicit calls to tagToEnum# generated in the
+-- compiler. All tagToEnum# calls come from the actual source code, which means
+-- that we are now able to optimize them away in the Core simplifier (see
+-- #8317). But now we have this special case for generating code of case
+-- expressions that scrutinize primop application. It is triggered when the
+-- scrutinee is a call to a primop and the alternatives are of primitive type
+-- (unboxed). In such case we assign the result of the primop to a register and
+-- then compile the alternatives. The most important bit here (the reason for
+-- case-on-primops being a special case) is that we don't place heap checks in
+-- the case alternatives. If we did we would end up with poor Cmm code and
+-- object files larger than necessary. See #8326.
 
-       ; (mb_deflt, branches) <- cgAlgAltRhss (NoGcInAlts,AssignedDirectly)
-                                              (NonVoid bndr) alts
-       ; emitSwitch tag_expr branches mb_deflt 0 (tyConFamilySize tycon - 1)
-       ; return AssignedDirectly
-       }
-  where
-    do_enum_primop :: PrimOp -> [StgArg] -> FCode CmmExpr
-    do_enum_primop TagToEnumOp [arg]  -- No code!
-      = getArgAmode (NonVoid arg)
-    do_enum_primop primop args
-      = do dflags <- getDynFlags
-           tmp <- newTemp (bWord dflags)
-           cgPrimOp [tmp] primop args
-           return (CmmReg (CmmLocal tmp))
+-- Note [Ticket #3132]
+-- ~~~~~~~~~~~~~~~~~~~
+--
+-- We might be looking at a case of a lifted Id
+-- that was cast to an unlifted type.  The Id will always be bottom,
+-- but we don't want the code generator to fall over here.  If we
+-- just emit an assignment here, the assignment will be
+-- type-incorrect Cmm.  Hence, we emit the usual enter/return code,
+-- (and because bottom must be untagged, it will be entered and the
+-- program will crash).
+-- The Sequel is a type-correct assignment, albeit bogus.
+-- The (dead) continuation loops; it would be better to invoke some kind
+-- of panic function here.
+--
+-- However, we also want to allow an assignment to be generated
+-- in the case when the types are compatible, because this allows
+-- some slightly-dodgy but occasionally-useful casts to be used,
+-- such as in RtClosureInspect where we cast an HValue to a MutVar#
+-- so we can print out the contents of the MutVar#.  If we generate
+-- code that enters the HValue, then we'll get a runtime panic, because
+-- the HValue really is a MutVar#.  The types are compatible though,
+-- so we can just generate an assignment.
 
-{-
-Note [case on bool]
-~~~~~~~~~~~~~~~~~~~
-This special case handles code like
-
-  case a <# b of
-    True ->
-    False ->
-
--->  case tagToEnum# (a <$# b) of
-        True -> .. ; False -> ...
-
---> case (a <$# b) of r ->
-    case tagToEnum# r of
-        True -> .. ; False -> ...
-
-If we let the ordinary case code handle it, we'll get something like
-
- tmp1 = a < b
- tmp2 = Bool_closure_tbl[tmp1]
- if (tmp2 & 7 != 0) then ... // normal tagged case
-
-but this junk won't optimise away.  What we really want is just an
-inline comparison:
-
- if (a < b) then ...
-
-So we add a special case to generate
-
- tmp1 = a < b
- if (tmp1 == 0) then ...
-
-and later optimisations will further improve this.
-
-Now that #6135 has been resolved it should be possible to remove that
-special case. The idea behind this special case and pre-6135 implementation
-of Bool-returning primops was that tagToEnum# was added implicitly in the
-codegen and then optimized away. Now the call to tagToEnum# is explicit
-in the source code, which allows to optimize it away at the earlier stages
-of compilation (i.e. at the Core level).
--}
-
-
-  -- Note [ticket #3132]: we might be looking at a case of a lifted Id
-  -- that was cast to an unlifted type.  The Id will always be bottom,
-  -- but we don't want the code generator to fall over here.  If we
-  -- just emit an assignment here, the assignment will be
-  -- type-incorrect Cmm.  Hence, we emit the usual enter/return code,
-  -- (and because bottom must be untagged, it will be entered and the
-  -- program will crash).
-  -- The Sequel is a type-correct assignment, albeit bogus.
-  -- The (dead) continuation loops; it would be better to invoke some kind
-  -- of panic function here.
-  --
-  -- However, we also want to allow an assignment to be generated
-  -- in the case when the types are compatible, because this allows
-  -- some slightly-dodgy but occasionally-useful casts to be used,
-  -- such as in RtClosureInspect where we cast an HValue to a MutVar#
-  -- so we can print out the contents of the MutVar#.  If we generate
-  -- code that enters the HValue, then we'll get a runtime panic, because
-  -- the HValue really is a MutVar#.  The types are compatible though,
-  -- so we can just generate an assignment.
 cgCase (StgApp v []) bndr alt_type@(PrimAlt _) alts
-  | isUnLiftedType (idType v)
+  | isUnLiftedType (idType v) -- See Note [Ticket #3132]
   || reps_compatible
   = -- assignment suffices for unlifted types
     do { dflags <- getDynFlags

@@ -16,7 +16,7 @@ import Type hiding      ( substTy, extendTvSubst, substTyVar )
 import SimplEnv
 import SimplUtils
 import FamInstEnv       ( FamInstEnv )
-import Literal          ( litIsLifted ) --, mkMachInt ) -- temporalily commented out. See #8326
+import Literal          ( litIsLifted, mkMachInt )
 import Id
 import MkId             ( seqId, voidPrimId )
 import MkCore           ( mkImpossibleExpr, castBottomExpr )
@@ -26,8 +26,8 @@ import Coercion hiding  ( substCo, substTy, substCoVar, extendTvSubst )
 import OptCoercion      ( optCoercion )
 import FamInstEnv       ( topNormaliseType_maybe )
 import DataCon          ( DataCon, dataConWorkId, dataConRepStrictness
-                        , isMarkedStrict ) --, dataConTyCon, dataConTag, fIRST_TAG )
---import TyCon            ( isEnumerationTyCon ) -- temporalily commented out. See #8326
+                        , isMarkedStrict, dataConTyCon, dataConTag, fIRST_TAG )
+import TyCon            ( isEnumerationTyCon )
 import CoreMonad        ( Tick(..), SimplifierMode(..) )
 import CoreSyn
 import Demand           ( StrictSig(..), dmdTypeDepth, isStrictDmd )
@@ -35,13 +35,13 @@ import PprCore          ( pprParendExpr, pprCoreExpr )
 import CoreUnfold
 import CoreUtils
 import CoreArity
---import PrimOp           ( tagToEnumKey ) -- temporalily commented out. See #8326
+import PrimOp           ( tagToEnumKey )
 import Rules            ( lookupRule, getRules )
-import TysPrim          ( voidPrimTy ) --, intPrimTy ) -- temporalily commented out. See #8326
+import TysPrim          ( voidPrimTy, intPrimTy )
 import BasicTypes       ( TopLevelFlag(..), isTopLevel, RecFlag(..) )
 import MonadUtils       ( foldlM, mapAccumLM, liftIO )
 import Maybes           ( orElse )
---import Unique           ( hasKey ) -- temporalily commented out. See #8326
+import Unique           ( hasKey )
 import Control.Monad
 import Data.List        ( mapAccumL )
 import Outputable
@@ -1565,7 +1565,6 @@ tryRules :: SimplEnv -> [CoreRule]
 tryRules env rules fn args call_cont
   | null rules
   = return Nothing
-{- Disabled until we fix #8326
   | fn `hasKey` tagToEnumKey   -- See Note [Optimising tagToEnum#]
   , [_type_arg, val_arg] <- args
   , Select dup bndr ((_,[],rhs1) : rest_alts) se cont <- call_cont
@@ -1585,7 +1584,6 @@ tryRules env rules fn args call_cont
              new_bndr = setIdType bndr intPrimTy
                  -- The binder is dead, but should have the right type
       ; return (Just (val_arg, Select dup new_bndr new_alts se cont)) }
--}
   | otherwise
   = do { dflags <- getDynFlags
        ; case lookupRule dflags (getUnfoldingInRuleMatch env) (activeRule env)

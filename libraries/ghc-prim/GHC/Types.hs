@@ -166,26 +166,23 @@ data Coercible a b = MkCoercible ((~#) a b)
 -- | Alias for 'tagToEnum#'. Returns True if its parameter is 1# and False
 --   if it is 0#.
 
-{-# INLINE isTrue# #-}
-isTrue# :: Int# -> Bool   -- See Note [Optimizing isTrue#]
-isTrue# x = tagToEnum# x
+-- See Note [Optimizing isTrue# and isFalse#]
 
--- Note [Optimizing isTrue#]
+{-# INLINE isTrue# #-}
+isTrue# :: Int# -> Bool
+isTrue# 1# = True
+isTrue# _  = False
+
+{-# INLINE isFalse# #-}
+isFalse# :: Int# -> Bool
+isFalse# 0# = True
+isFalse# _  = False
+
+-- Note [Optimizing isTrue# and isFalse#]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
--- Current definition of isTrue# is a temporary workaround. We would like to
--- have functions isTrue# and isFalse# defined like this:
---
---     isTrue# :: Int# -> Bool
---     isTrue# 1# = True
---     isTrue# _  = False
---
---     isFalse# :: Int# -> Bool
---     isFalse# 0# = True
---     isFalse# _  = False
---
 -- These functions would allow us to safely check if a tag can represent True
--- or False. Using isTrue# and isFalse# as defined above will not introduce
+-- or False. Using isTrue# and isFalse# as defined above does not introduce
 -- additional case into the code. When we scrutinize return value of isTrue#
 -- or isFalse#, either explicitly in a case expression or implicitly in a guard,
 -- the result will always be a single case expression (given that optimizations
@@ -218,12 +215,7 @@ isTrue# x = tagToEnum# x
 --   1# -> e1
 --   _  -> e2
 --
--- While we get good Core here, the code generator will generate very bad Cmm
--- if e1 or e2 do allocation. It will push heap checks into case alternatives
--- which results in about 2.5% increase in code size. Until this is improved we
--- just make isTrue# an alias to tagToEnum#. This is a temporary solution (if
--- you're reading this in 2023 then things went wrong). See #8326.
---
+-- See also #8326.
 
 -- | 'SPEC' is used by GHC in the @SpecConstr@ pass in order to inform
 -- the compiler when to be particularly aggressive. In particular, it
