@@ -1,14 +1,14 @@
 
 ==================== Tidy Core ====================
-Result size of Tidy Core = {terms: 26, types: 11, coercions: 0}
+Result size of Tidy Core = {terms: 27, types: 10, coercions: 0}
 
 Rec {
-$wxs :: GHC.Prim.Int# -> ()
+xs :: GHC.Prim.Int# -> ()
 [GblId, Arity=1, Caf=NoCafRefs, Str=DmdType <S,1*U>]
-$wxs =
-  \ (ww :: GHC.Prim.Int#) ->
-    case ww of ds1 {
-      __DEFAULT -> $wxs (GHC.Prim.-# ds1 1);
+xs =
+  \ (m :: GHC.Prim.Int#) ->
+    case GHC.Prim.<=# m 1 of _ [Occ=Dead] {
+      __DEFAULT -> xs (GHC.Prim.-# m 1);
       1 -> GHC.Tuple.()
     }
 end Rec }
@@ -18,9 +18,9 @@ foo [InlPrag=NOINLINE] :: Int -> ()
 foo =
   \ (n :: Int) ->
     case n of _ [Occ=Dead] { GHC.Types.I# y ->
-    case GHC.Prim.tagToEnum# @ Bool (GHC.Prim.<# 0 y) of _ [Occ=Dead] {
-      False -> GHC.Tuple.();
-      True -> $wxs y
+    case GHC.Prim.<# 0 y of _ [Occ=Dead] {
+      __DEFAULT -> $wxs y
+      1 -> GHC.Tuple.();
     }
     }
 
