@@ -1,6 +1,6 @@
 
 ==================== Tidy Core ====================
-Result size of Tidy Core = {terms: 162, types: 61, coercions: 0}
+Result size of Tidy Core = {terms: 156, types: 55, coercions: 0}
 
 Roman.foo3 :: GHC.Types.Int
 [GblId, Str=DmdType b]
@@ -24,21 +24,17 @@ Roman.foo_$s$wgo =
                 (GHC.Prim.+# (GHC.Prim.+# (GHC.Prim.+# sc1 sc1) sc1) sc1) sc1)
              sc1)
           sc1 } in
-    case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<=# sc 0)
-    of _ [Occ=Dead] {
-      GHC.Types.False ->
-        case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<# sc 100)
-        of _ [Occ=Dead] {
-          GHC.Types.False ->
-            case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<# sc 500)
-            of _ [Occ=Dead] {
-              GHC.Types.False ->
-                Roman.foo_$s$wgo (GHC.Prim.-# sc 1) (GHC.Prim.+# a a);
-              GHC.Types.True -> Roman.foo_$s$wgo (GHC.Prim.-# sc 3) a
+    case GHC.Prim.<=# sc 0 of _ [Occ=Dead] {
+      __DEFAULT ->
+        case GHC.Prim.<# sc 100 of _ [Occ=Dead] {
+          __DEFAULT ->
+            case GHC.Prim.<# sc 500 of _ [Occ=Dead] {
+              __DEFAULT -> Roman.foo_$s$wgo (GHC.Prim.-# sc 1) (GHC.Prim.+# a a);
+              1 -> Roman.foo_$s$wgo (GHC.Prim.-# sc 3) a
             };
-          GHC.Types.True -> Roman.foo_$s$wgo (GHC.Prim.-# sc 2) sc1
+          1 -> Roman.foo_$s$wgo (GHC.Prim.-# sc 2) sc1
         };
-      GHC.Types.True -> 0
+      1 -> 0
     }
 end Rec }
 
@@ -49,7 +45,7 @@ Roman.$wgo [InlPrag=[0]]
  Arity=2,
  Str=DmdType <S,1*U><S,1*U>,
  Unf=Unf{Src=<vanilla>, TopLvl=True, Value=True, ConLike=True,
-         WorkFree=True, Expandable=True, Guidance=IF_ARGS [60 30] 256 0}]
+         WorkFree=True, Expandable=True, Guidance=IF_ARGS [60 30] 253 0}]
 Roman.$wgo =
   \ (w :: GHC.Base.Maybe GHC.Types.Int)
     (w1 :: GHC.Base.Maybe GHC.Types.Int) ->
@@ -71,21 +67,17 @@ Roman.$wgo =
           GHC.Base.Nothing -> Roman.foo_$s$wgo 10 a;
           GHC.Base.Just n ->
             case n of _ [Occ=Dead] { GHC.Types.I# x2 ->
-            case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<=# x2 0)
-            of _ [Occ=Dead] {
-              GHC.Types.False ->
-                case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<# x2 100)
-                of _ [Occ=Dead] {
-                  GHC.Types.False ->
-                    case GHC.Prim.tagToEnum# @ GHC.Types.Bool (GHC.Prim.<# x2 500)
-                    of _ [Occ=Dead] {
-                      GHC.Types.False ->
-                        Roman.foo_$s$wgo (GHC.Prim.-# x2 1) (GHC.Prim.+# a a);
-                      GHC.Types.True -> Roman.foo_$s$wgo (GHC.Prim.-# x2 3) a
+            case GHC.Prim.<=# x2 0 of _ [Occ=Dead] {
+              __DEFAULT ->
+                case GHC.Prim.<# x2 100 of _ [Occ=Dead] {
+                  __DEFAULT ->
+                    case GHC.Prim.<# x2 500 of _ [Occ=Dead] {
+                      __DEFAULT -> Roman.foo_$s$wgo (GHC.Prim.-# x2 1) (GHC.Prim.+# a a);
+                      1 -> Roman.foo_$s$wgo (GHC.Prim.-# x2 3) a
                     };
-                  GHC.Types.True -> Roman.foo_$s$wgo (GHC.Prim.-# x2 2) ipv
+                  1 -> Roman.foo_$s$wgo (GHC.Prim.-# x2 2) ipv
                 };
-              GHC.Types.True -> 0
+              1 -> 0
             }
             }
         }
