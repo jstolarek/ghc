@@ -20,7 +20,7 @@ module GHC.Types (
         Bool(..), Char(..), Int(..), Word(..),
         Float(..), Double(..),
         Ordering(..), IO(..),
-        isTrue#,
+        isTrue#, isFalse#,
         SPEC(..),
         Coercible,
     ) where
