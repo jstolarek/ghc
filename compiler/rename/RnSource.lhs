@@ -1212,7 +1212,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                           , ptext (sLit " : ")
                                           , interpp'SP injTo
                                           ]
-                                   , hcat [ ptext (sLit "At most ")
+                                   , hcat [ ptext (sLit "But at most ")
                                           , speakN (length tyvars)
                                           , ptext (sLit " are allowed : ")
                                           , interpp'SP tvNames
@@ -1241,7 +1241,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                  ++ "exactly the same order as they were bound."
                                  )) ], ly)
 
-        unless lhsValid $ setSrcSpan (getLoc injFrom) $ failWith
+        unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
                (vcat [ ptext (sLit ("Incorrect type variable on the LHS" ++
                                     " of injectivity condition"))
                      , nest 5
@@ -1249,12 +1249,13 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                             , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
 
         unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
-               failWith (fst (fromJust rhsValid))
+               addErr (fst (fromJust rhsValid))
 
-        setSrcSpan (getLoc resTyVar) $ warnIf (resName `elem` tvNames)
-                      (ptext . sLit $ "Type variable naming a type family "
-                                   ++ "result also names one of the arguments."
-                                   ++ " This might become error in the future.")
+        when (resName `elem` tvNames) $ setSrcSpan (getLoc resTyVar) $
+               addErr (hcat [ ptext (sLit "Type variable ")
+                            , pprQuotedList [resName]
+                            , ptext (sLit (" naming a type family result also"
+                                       ++  " names one of the arguments."))])
 
         injFrom' <- rnLTyVar True injFrom
         injTo'   <- mapM (rnLTyVar True) injTo
