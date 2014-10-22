@@ -46,6 +46,7 @@ module TyCon(
         isFamilyTyCon, isOpenFamilyTyCon,
         isSynFamilyTyCon, isDataFamilyTyCon,
         isOpenSynFamilyTyCon, isClosedSynFamilyTyCon_maybe,
+        isInjectiveTypeFamilyTyCon,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -149,6 +150,7 @@ Note [Type synonym families]
     a SynTyCon 'G', whose SynTyConRhs is ClosedSynFamilyTyCon, with the
     appropriate CoAxiom representing the equations
 
+-- JSTOLAREK: oh yes, we do :-) Update
 * In the future we might want to support
     * injective type families (allow decomposition)
   but we don't at the moment [2013]
@@ -409,8 +411,9 @@ data TyCon
 
         synTcParent  :: TyConParent,    -- ^ Gives the family declaration 'TyCon'
                                         -- of 'TyCon's representing family instances
-        synInjective :: Bool            -- ^ is this an injective type family?
-
+        synInjective :: [Bool]          -- ^ is this an type family injective in
+                                        -- its type variables?
+        -- invariant: length tyConTyVars = length synInjective
     }
 
   -- | Primitive types; cannot be defined in Haskell. This includes
@@ -1009,8 +1012,10 @@ mkPrimTyCon' name kind roles rep is_unlifted
 
 -- | Create a type synonym 'TyCon'
 mkSynTyCon :: Name -> Kind -> [TyVar] -> [Role] -> SynTyConRhs -> TyConParent ->
-              Bool -> TyCon
+              [Bool] -> TyCon
 mkSynTyCon name kind tyvars roles rhs parent injectivity
+-- JSTOLAREK: Assert here to verify the invariant that
+-- length tyvars = length injectivity ?
   = SynTyCon {
         tyConName = name,
         tyConUnique = nameUnique name,
@@ -1250,6 +1255,10 @@ isClosedSynFamilyTyCon_maybe :: TyCon -> Maybe (CoAxiom Branched)
 isClosedSynFamilyTyCon_maybe
   (SynTyCon {synTcRhs = ClosedSynFamilyTyCon ax}) = Just ax
 isClosedSynFamilyTyCon_maybe _ = Nothing
+
+isInjectiveTypeFamilyTyCon :: TyCon -> Maybe [Bool]
+isInjectiveTypeFamilyTyCon (SynTyCon { synInjective = inj }) = Just inj
+isInjectiveTypeFamilyTyCon _                                 = Nothing
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
 isBuiltInSynFamTyCon_maybe

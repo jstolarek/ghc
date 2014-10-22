@@ -52,7 +52,7 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
-import Data.Maybe ( fromJust )
+import Data.Maybe ( fromJust, isNothing )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1180,28 +1180,81 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
-     rn_injectivity :: [LHsTyVarBndr RdrName] -> LHsTyVarBndr RdrName ->
-                       InjectivityInfo RdrName -> RnM (InjectivityInfo Name)
+     rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
+                                               -- type family head
+                    -> LHsTyVarBndr RdrName    -- result type variable
+                    -> InjectivityInfo RdrName -- injectivity information
+                    -> RnM (InjectivityInfo Name)
      rn_injectivity tyvars resTyVar (InjectivityInfo injFrom injTo) = do
-        let resName = getLHsTyVarBndrName resTyVar
-            tvNames = map getLHsTyVarBndrName tyvars
-            -- JSTOLAREK: add comments here
-            rhsValid = resName == unLoc injFrom
-            lhsValid = length tvNames == length injTo &&
-                       and (zipWith (\x y -> x == unLoc y) tvNames injTo)
-        -- JSTOLAREK: review this, perhaps improve
-        unless rhsValid $ setSrcSpan (getLoc injFrom) $ failWith
-               (vcat [ ptext (sLit "Incorrect type variable on the LHS of injectivity condition")
+        let resName    = getLHsTyVarBndrName resTyVar
+            tvNames    = map getLHsTyVarBndrName tyvars
+            -- the only type variable allowed on the LHS of injectivity
+            -- condition is the variable naming the result in type family head
+            lhsValid   = resName == unLoc injFrom
+            -- verifying RHS of injectivity condition is more involved. We
+            -- require that:
+            --  1. only variables defined in type family head appear on the RHS
+            --     and each variable appears at most once
+            --  2. variables are listed in the order in which they were bound in
+            --     type family head
+            -- Breaking any of these assumptions results in an error.
+            rhsValid   = merge tvNames injTo
+            merge :: [RdrName] -> [Located RdrName] -> Maybe (SDoc, SrcSpan)
+            merge _     [] = Nothing
+            merge [] (L lx _:_) = -- we've run out of type variables in type
+                                  -- family head but there are still some
+                                  -- variables left in the injectivity condition
+                Just ( vcat [ ptext $ sLit ("Too many type variables on RHS of "
+                                          ++ "injectivity condition.")
+                            , nest 5
+                            ( vcat [ hcat [ ptext (sLit "You listed ")
+                                          , speakN (length injTo)
+                                          , ptext (sLit " : ")
+                                          , interpp'SP injTo
+                                          ]
+                                   , hcat [ ptext (sLit "At most ")
+                                          , speakN (length tyvars)
+                                          , ptext (sLit " are allowed : ")
+                                          , interpp'SP tvNames
+                                          ]
+                                   ] )
+                            ], lx)
+            merge (x:xs) ys'@(L ly y:ys)
+                | x == y    = merge xs ys
+                | otherwise = -- type variables in head and injectivity
+                              -- condition are not equal
+                    case merge xs ys' of
+                      Nothing -> Nothing   -- this may be perfectly fine if a
+                                           -- variable was simply skipped
+                      Just _ -> Just (vcat -- but it may also be wrong if
+                                           -- variables were listed in incorrect
+                                           -- order. In that case discard
+                                           -- previous error and construct error
+                                           -- here. This ensures that we will
+                                           -- always report on the first
+                                           -- offending variable.
+                         [ hcat [ ptext (sLit ("Unexpected type variable on " ++
+                                        "the RHS of injectivity condition: "))
+                                , ppr y]
+                         , ptext (sLit ("All variables should be bound in type "
+                                 ++ "family head and appear at most once in "
+                                 ++ "exactly the same order as they were bound."
+                                 )) ], ly)
+
+        unless lhsValid $ setSrcSpan (getLoc injFrom) $ failWith
+               (vcat [ ptext (sLit ("Incorrect type variable on the LHS" ++
+                                    " of injectivity condition"))
                      , nest 5
                      ( vcat [ hcat [ptext (sLit "Expected : "), ppr resName ]
                             , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
 
-        -- JSTOLAREK: improve srcSpan
-        unless lhsValid $ setSrcSpan injSpan $ failWith
-               (vcat [ ptext (sLit "Incorrect type variables on the RHS of injectivity condition")
-                     , nest 5
-                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr tyvars]
-                            , hcat [ptext (sLit "Actual   : "), ppr injTo] ])])
+        unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
+               failWith (fst (fromJust rhsValid))
+
+        setSrcSpan (getLoc resTyVar) $ warnIf (resName `elem` tvNames)
+                      (ptext . sLit $ "Type variable naming a type family "
+                                   ++ "result also names one of the arguments."
+                                   ++ " This might become error in the future.")
 
         injFrom' <- rnLTyVar True injFrom
         injTo'   <- mapM (rnLTyVar True) injTo

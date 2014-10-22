@@ -106,7 +106,9 @@ data IfaceDecl
                 ifRoles   :: [Role],            -- Roles
                 ifSynKind :: IfaceKind,         -- Kind of the *rhs* (not of the tycon)
                 ifSynRhs  :: IfaceSynTyConRhs,
-                ifSynInj  :: Bool }             -- is injective type family?
+                ifSynInj  :: [Bool] }           -- is type family injective in
+                                                -- its arguments?
+                -- invariant: length ifTyVars = length ifSynInj
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Context...
                  ifName    :: IfaceTopBndr,             -- Name of the class TyCon

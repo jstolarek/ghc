@@ -77,7 +77,7 @@ two passes over the instance decls.
 
 Note [How instance declarations are translated]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Here is how we translation instance declarations into Core
+Here is how we translate instance declarations into Core
 
 Running example:
         class C a where

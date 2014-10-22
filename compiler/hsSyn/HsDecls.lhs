@@ -69,7 +69,7 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  FamilyResultSig(..), InjectivityInfo(..),
+  FamilyResultSig(..), InjectivityInfo(..), extractInjectivityInformation,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -101,18 +101,12 @@ import SrcLoc
 import FastString
 
 import Bag
-<<<<<<< HEAD
 import Data.Data        hiding (TyCon,Fixity)
 #if __GLASGOW_HASKELL__ < 709
 import Data.Foldable ( Foldable )
 import Data.Traversable ( Traversable )
 #endif
 import Data.Maybe
-=======
-import Data.Data        hiding (TyCon)
-import Data.Foldable (Foldable)
-import Data.Traversable
->>>>>>> 3e17822... Represent type family kind signature using new datatype
 \end{code}
 
 %************************************************************************
@@ -540,17 +534,10 @@ data FamilyDecl name = FamilyDecl
   -- JSTOLAREK: everything else here is Located, so I've made this located as
   -- well. But perhaps I don't have to? I'm not introducing any bindings on the
   -- one hand, but then again I'll be reporting errors later...
-<<<<<<< HEAD
-  , fdInjective :: Located [InjectivityInfo name] -- information about injectivity
-  , fdLName     :: Located name                   -- type constructor
-  , fdTyVars    :: LHsTyVarBndrs name             -- type variables
-=======
-  -- Might be worth making each InjectivityInfo Located.
   , fdInjective :: Located (Maybe (InjectivityInfo name))
                                                  -- injectivity information
   , fdLName     :: Located name                  -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name            -- type variables
->>>>>>> 4124df5... Fix "Not in scope" bug
   , fdKindSig   :: FamilyResultSig name }        -- result kind
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
@@ -688,6 +675,38 @@ existsSignature :: FamilyResultSig a -> Bool
 existsSignature NoSig = False
 existsSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
 existsSignature _     = True
+
+extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
+extractInjectivityInformation (FamilyDecl { fdInjective = L _ Nothing
+                                          , fdTyVars = tvbndrs } ) =
+  -- No injectivity information => type family is not injective in any
+  -- of its arguments. Return a list of Falses.
+  replicate (length (hsq_tvs tvbndrs)) False
+extractInjectivityInformation (FamilyDecl
+                { fdInjective = L _ (Just (InjectivityInfo _ lInjNames))
+                , fdTyVars = tvbndrs } ) =
+  merge tvNames injNames
+    where
+      tvNames  = hsLTyVarNames tvbndrs
+      injNames = map unLoc lInjNames
+      -- Assumptions for merge:
+      --  1. all type variables appearing in injNames appear in tvNames.
+      --  2. order of type variables in injNames is identical to their order
+      --     in tvNames
+      --  3. some variables mentioned in tvNames may be skipped in injNames
+      -- If the above assumptions hold merge returns a list of Bools with
+      -- length equal to (length tvNames), where True means that corresponding
+      -- type variable was mentioned in injNames (type family is injective in
+      -- that argument) and False means that it was not mentioned in injNames
+      -- (type family is not injective in that type variable).
+      merge :: Eq name => [name] -> [name] -> [Bool]
+      merge []     [] = []
+      merge (_:xs) [] = False : merge xs []
+      merge (x:xs) inj@(y:ys)
+          | x == y    = True  : merge xs ys
+          | otherwise = False : merge xs inj
+      -- if we pass validation in rnFamDecl this panic should never happen
+      merge [] (_:_)  = panic "Can't extract injectivity information"
 \end{code}
 
 Note [Complete user-supplied kind signatures]

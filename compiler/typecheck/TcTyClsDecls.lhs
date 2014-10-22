@@ -678,25 +678,28 @@ tcTyClDecl1 _parent rec_info
 \begin{code}
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent
-            (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
-                        , fdTyVars = tvs, fdInjective = L _ inj})
+            famDecl@(FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
+                                , fdTyVars = tvs })
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; let roles = map (const Nominal) tvs'
+  -- JSTOLAREK: it looks that here we are just constructing an open type family
+  -- declaration without checking the equations
   ; tycon <- buildSynTyCon tc_name tvs' roles OpenSynFamilyTyCon kind parent
-                           (isJust inj)
+                           (extractInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
-            (FamilyDecl { fdInfo = ClosedTypeFamily eqns
-                        , fdLName = lname@(L _ tc_name), fdTyVars = tvs
-                        , fdInjective = L _ inj })
+            famDecl@(FamilyDecl { fdInfo = ClosedTypeFamily eqns
+                                , fdLName = lname@(L _ tc_name), fdTyVars = tvs
+                                })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
 -- Note: eqns might be empty, in a hs-boot file!
   = do { traceTc "closed type family:" (ppr tc_name)
          -- the variables in the header have no scope:
+         -- JSTOLAREK: now they do during renaming
        ; (tvs', kind) <- tcTyClTyVars tc_name tvs $ \ tvs' kind ->
                          return (tvs', kind)
 
@@ -732,7 +735,7 @@ tcFamDecl1 parent
                        else ClosedSynFamilyTyCon co_ax
              roles   = map (const Nominal) tvs'
        ; tycon <- buildSynTyCon tc_name tvs' roles syn_rhs kind parent
-                                (isJust inj)
+                                (extractInjectivityInformation famDecl)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
@@ -767,7 +770,8 @@ tcTySynRhs rec_info tc_name tvs kind hs_ty
        ; rhs_ty <- zonkTcTypeToType emptyZonkEnv rhs_ty
        ; let roles = rti_roles rec_info tc_name
        ; tycon <- buildSynTyCon tc_name tvs roles (SynonymTyCon rhs_ty)
-                                kind NoParentTyCon False
+                                kind NoParentTyCon
+                                (replicate (length tvs) False)
        ; return [ATyCon tycon] }
 
 tcDataDefn :: RecTyInfo -> Name

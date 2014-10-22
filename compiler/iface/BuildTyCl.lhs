@@ -49,7 +49,8 @@ buildSynTyCon :: Name -> [TyVar] -> [Role]
               -> SynTyConRhs
               -> Kind                   -- ^ Kind of the RHS
               -> TyConParent
-              -> Bool
+-- JSTOLAREK: refer to a note once it is made
+              -> [Bool]                 -- injectivity information
               -> TcRnIf m n TyCon
 buildSynTyCon tc_name tvs roles rhs rhs_kind parent injectivity
   = return (mkSynTyCon tc_name kind tvs roles rhs parent injectivity)
