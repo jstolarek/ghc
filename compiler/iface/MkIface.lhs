@@ -1827,11 +1827,13 @@ instanceToIfaceInst (ClsInst { is_dfun = dfun_id, is_flag = oflag
 famInstToIfaceFamInst :: FamInst -> IfaceFamInst
 famInstToIfaceFamInst (FamInst { fi_axiom    = axiom,
                                  fi_fam      = fam,
-                                 fi_tcs      = roughs })
+                                 fi_tcs      = roughs,
+                                 fi_inj      = injectivity })
   = IfaceFamInst { ifFamInstAxiom    = coAxiomName axiom
                  , ifFamInstFam      = fam
                  , ifFamInstTys      = map do_rough roughs
-                 , ifFamInstOrph     = orph }
+                 , ifFamInstOrph     = orph
+                 , ifFamInstInj      = injectivity }
   where
     do_rough Nothing  = Nothing
     do_rough (Just n) = Just (toIfaceTyCon_name n)

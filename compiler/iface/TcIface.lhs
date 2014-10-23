@@ -740,13 +740,14 @@ tcIfaceInst (IfaceClsInst { ifDFun = dfun_occ, ifOFlag = oflag
 
 tcIfaceFamInst :: IfaceFamInst -> IfL FamInst
 tcIfaceFamInst (IfaceFamInst { ifFamInstFam = fam, ifFamInstTys = mb_tcs
-                             , ifFamInstAxiom = axiom_name } )
+                             , ifFamInstAxiom = axiom_name
+                             , ifFamInstInj = injectivity } )
     = do { axiom' <- forkM (ptext (sLit "Axiom") <+> ppr axiom_name) $
                      tcIfaceCoAxiom axiom_name
              -- will panic if branched, but that's OK
          ; let axiom'' = toUnbranchedAxiom axiom'
                mb_tcs' = map (fmap ifaceTyConName) mb_tcs
-         ; return (mkImportedFamInst fam mb_tcs' axiom'') }
+         ; return (mkImportedFamInst fam mb_tcs' axiom'' injectivity) }
 \end{code}
 
 

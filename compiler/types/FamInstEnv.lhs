@@ -102,6 +102,10 @@ data FamInst  -- See Note [FamInsts and CoAxioms]
                                  -- fresh. See Note [Template tyvars are fresh]
                                  -- in InstEnv
 
+            , fi_inj    :: [Bool]  -- injectivity information
+                -- JSTOLAREK: not sure about invariant. fi_tvs or fi_tys?
+                -- INVARIANT: length fi_inj == length fi_tvs
+
             , fi_tys    :: [Type]       --   and its arg types
                 -- INVARIANT: fi_tvs = coAxiomTyVars fi_axiom
 
@@ -237,8 +241,9 @@ also.
 mkImportedFamInst :: Name               -- Name of the family
                   -> [Maybe Name]       -- Rough match info
                   -> CoAxiom Unbranched -- Axiom introduced
+                  -> [Bool]             -- Injectivity information
                   -> FamInst            -- Resulting family instance
-mkImportedFamInst fam mb_tcs axiom
+mkImportedFamInst fam mb_tcs axiom inj
   = FamInst {
       fi_fam    = fam,
       fi_tcs    = mb_tcs,
@@ -246,7 +251,8 @@ mkImportedFamInst fam mb_tcs axiom
       fi_tys    = tys,
       fi_rhs    = rhs,
       fi_axiom  = axiom,
-      fi_flavor = flavor }
+      fi_flavor = flavor,
+      fi_inj    = inj }
   where
      -- See Note [Lazy axiom match]
      ~(CoAxiom { co_ax_branches =

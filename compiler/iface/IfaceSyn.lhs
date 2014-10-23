@@ -225,6 +225,8 @@ data IfaceFamInst
                  , ifFamInstTys      :: [Maybe IfaceTyCon]   -- See above
                  , ifFamInstAxiom    :: IfExtName            -- The axiom
                  , ifFamInstOrph     :: Maybe OccName        -- Just like IfaceClsInst
+                 , ifFamInstInj      :: [Bool]               -- Injectivity
+                   -- INVARIANT: length ifFamInstInj == length ifFamInstTys
                  }
 
 data IfaceRule
@@ -1616,17 +1618,19 @@ instance Binary IfaceClsInst where
         return (IfaceClsInst cls tys dfun flag orph)
 
 instance Binary IfaceFamInst where
-    put_ bh (IfaceFamInst fam tys name orph) = do
+    put_ bh (IfaceFamInst fam tys name orph inj) = do
         put_ bh fam
         put_ bh tys
         put_ bh name
         put_ bh orph
+        put_ bh inj
     get bh = do
         fam      <- get bh
         tys      <- get bh
         name     <- get bh
         orph     <- get bh
-        return (IfaceFamInst fam tys name orph)
+        inj      <- get bh
+        return (IfaceFamInst fam tys name orph inj)
 
 instance Binary IfaceRule where
     put_ bh (IfaceRule a1 a2 a3 a4 a5 a6 a7 a8) = do
