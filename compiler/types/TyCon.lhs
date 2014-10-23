@@ -1345,6 +1345,7 @@ isClosedSynFamilyTyCon_maybe
   (FamilyTyCon {famTcFlav = ClosedSynFamilyTyCon ax}) = Just ax
 isClosedSynFamilyTyCon_maybe _                        = Nothing
 
+-- JSTOLAREK: better name: maybeInjectiveTyCon
 isInjectiveTypeFamilyTyCon :: TyCon -> Maybe [Bool]
 isInjectiveTypeFamilyTyCon (SynTyCon { synInjective = inj }) = Just inj
 isInjectiveTypeFamilyTyCon _                                 = Nothing

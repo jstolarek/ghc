@@ -13,7 +13,7 @@ module FamInstEnv (
         pprFamInst, pprFamInsts,
         mkImportedFamInst,
 
-        FamInstEnvs, FamInstEnv, emptyFamInstEnv, emptyFamInstEnvs,
+        FamInstEnvs, FamInstEnv, FamInjEnv, emptyFamInstEnv, emptyFamInstEnvs,
         extendFamInstEnv, deleteFromFamInstEnv, extendFamInstEnvList,
         identicalFamInst, famInstEnvElts, familyInstances, orphNamesOfFamInst,
 
@@ -23,6 +23,8 @@ module FamInstEnv (
 
         FamInstMatch(..),
         lookupFamInstEnv, lookupFamInstEnvConflicts,
+        lookupFamInjInstEnvConflicts,
+
         chooseBranch, isDominatedBy,
 
         -- Normalisation
@@ -318,6 +320,9 @@ type FamInstEnvs = (FamInstEnv, FamInstEnv)
 newtype FamilyInstEnv
   = FamIE [FamInst]     -- The instances for a particular family, in any order
 
+type FamInjEnv = UniqFM [(TyVar,Bool)] -- maps type family to its injctivity
+                                       -- information
+
 instance Outputable FamilyInstEnv where
   ppr (FamIE fs) = ptext (sLit "FamIE") <+> vcat (map ppr fs)
 
@@ -485,6 +490,23 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
+-- JSTOLAREK: comment this
+injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
+injectivityCompatibleBranches injectivity
+                              (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
+                              (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
+  = let get_inj  = map snd . filter fst . zip injectivity
+    in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
+      -- JSTOLAREK: Voodoo programming here. Does that make sense?
+      SurelyApart -> case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
+                       SurelyApart -> True
+                       _           -> False
+      Unifiable subst
+        | Type.substTy subst rhs1 `eqType` Type.substTy subst rhs2
+        -> True
+      _ -> False
+
+
 -- takes a CoAxiom with unknown branch incompatibilities and computes
 -- the compatibilities
 -- See Note [Storing compatibility] in CoAxiom
@@ -613,7 +635,7 @@ lookupFamInstEnv
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnv
-   = lookup_fam_inst_env match
+   = lookup_fam_inst_env False match
    where
      match _ tpl_tvs tpl_tys tys = tcMatchTys tpl_tvs tpl_tys tys
 
@@ -629,7 +651,7 @@ lookupFamInstEnvConflicts
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
-  = lookup_fam_inst_env my_unify envs fam tys
+  = lookup_fam_inst_env False my_unify envs fam tys
   where
     (fam, tys) = famInstSplitLHS fam_inst
         -- In example above,   fam tys' = F [b]
@@ -647,6 +669,36 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 
     noSubst = panic "lookupFamInstEnvConflicts noSubst"
     new_branch = coAxiomSingleBranch new_axiom
+
+
+lookupFamInjInstEnvConflicts :: FamInjEnv
+                             -> FamInstEnvs
+                             -> FamInst
+                             -> [FamInstMatch]
+                             -- Conflicting matches (don't look at the fim_tys field)
+lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
+  = case injInfo of
+      Nothing  -> []
+      Just inj -> lookup_fam_inst_env True (my_unify (map snd inj)) envs fam tys
+    where
+      (fam, tys) = famInstSplitLHS fam_inst
+      -- In example above,   fam tys' = F [b]
+      injInfo = lookupUFM injEnv (tyConName fam)
+
+      my_unify inj (FamInst { fi_axiom = old_axiom }) tpl_tvs tpl_tys _
+          = ASSERT2( tyVarsOfTypes tys `disjointVarSet` tpl_tvs,
+                       (ppr fam <+> ppr tys) $$
+                       (ppr tpl_tvs <+> ppr tpl_tys) )
+      -- Unification will break badly if the variables overlap
+      -- They shouldn't because we allocate separate uniques for them
+            if injectivityCompatibleBranches inj (coAxiomSingleBranch old_axiom)
+                                                  new_branch
+            then Nothing
+            else Just noSubst
+      -- JSTOLAREK: this probably deserves a note
+
+      noSubst = panic "lookupFamInjInstEnvConflicts noSubst"
+      new_branch = coAxiomSingleBranch new_axiom
 \end{code}
 
 Note [Family instance overlap conflicts]
@@ -672,11 +724,13 @@ type MatchFun =  FamInst                -- The FamInst template
               -> Maybe TvSubst
 
 lookup_fam_inst_env'          -- The worker, local to this module
-    :: MatchFun
+    :: Bool                   -- True  <=> injectivity check
+                              -- False <=> conflicts check
+    -> MatchFun
     -> FamInstEnv
     -> TyCon -> [Type]        -- What we are looking for
     -> [FamInstMatch]
-lookup_fam_inst_env' match_fun ie fam match_tys
+lookup_fam_inst_env' injectivityCheck match_fun ie fam match_tys
   | isOpenFamilyTyCon fam
   , Just (FamIE insts) <- lookupUFM ie fam
   = find insts    -- The common case
@@ -687,7 +741,7 @@ lookup_fam_inst_env' match_fun ie fam match_tys
     find (item@(FamInst { fi_tcs = mb_tcs, fi_tvs = tpl_tvs,
                           fi_tys = tpl_tys }) : rest)
         -- Fast check for no match, uses the "rough match" fields
-      | instanceCantMatch rough_tcs mb_tcs
+      | not injectivityCheck && instanceCantMatch rough_tcs mb_tcs
       = find rest
 
         -- Proper check
@@ -721,16 +775,18 @@ lookup_fam_inst_env' match_fun ie fam match_tys
       = (roughMatchTcs pre_match_tys1, pre_match_tys1, pre_match_tys2)
 
 lookup_fam_inst_env           -- The worker, local to this module
-    :: MatchFun
+    :: Bool                   -- True  <=> injectivity check
+                              -- False <=> conflicts check
+    -> MatchFun
     -> FamInstEnvs
     -> TyCon -> [Type]          -- What we are looking for
     -> [FamInstMatch]           -- Successful matches
 
 -- Precondition: the tycon is saturated (or over-saturated)
 
-lookup_fam_inst_env match_fun (pkg_ie, home_ie) fam tys
-  =  lookup_fam_inst_env' match_fun home_ie fam tys
-  ++ lookup_fam_inst_env' match_fun pkg_ie  fam tys
+lookup_fam_inst_env injectivityCheck match_fun (pkg_ie, home_ie) fam tys
+  =  lookup_fam_inst_env' injectivityCheck match_fun home_ie fam tys
+  ++ lookup_fam_inst_env' injectivityCheck match_fun pkg_ie  fam tys
 
 \end{code}
 

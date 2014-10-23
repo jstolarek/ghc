@@ -1010,7 +1010,10 @@ reifyInstances th_nm th_tys
               hs_tvbs    = mkHsQTvs tv_bndrs
           -- Rename  to HsType Name
         ; ((rn_tvbs, rn_ty), _fvs)
-            <- bindHsTyVars doc Nothing kvs hs_tvbs $ \ rn_tvbs ->
+        -- JSTOLAREK: that second nothing is wrong. It means there is no result
+        -- type variable, which does not need to be true. I must reify the
+        -- result type variable here
+            <- bindHsTyVars doc Nothing kvs hs_tvbs Nothing $ \ rn_tvbs ->
                do { (rn_ty, fvs) <- rnLHsType doc rdr_ty
                   ; return ((rn_tvbs, rn_ty), fvs) }
         ; (ty, _kind) <- tcHsTyVarBndrs rn_tvbs $ \ _tvs ->
