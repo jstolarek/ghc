@@ -13,7 +13,7 @@ module FamInstEnv (
         pprFamInst, pprFamInsts,
         mkImportedFamInst,
 
-        FamInstEnvs, FamInstEnv, emptyFamInstEnv, emptyFamInstEnvs,
+        FamInstEnvs, FamInstEnv, FamInjEnv, emptyFamInstEnv, emptyFamInstEnvs,
         extendFamInstEnv, deleteFromFamInstEnv, extendFamInstEnvList,
         identicalFamInst, famInstEnvElts, familyInstances, orphNamesOfFamInst,
 
@@ -23,6 +23,8 @@ module FamInstEnv (
 
         FamInstMatch(..),
         lookupFamInstEnv, lookupFamInstEnvConflicts,
+        lookupFamInjInstEnvConflicts,
+
         chooseBranch, isDominatedBy,
 
         -- Normalisation
@@ -318,6 +320,9 @@ type FamInstEnvs = (FamInstEnv, FamInstEnv)
 newtype FamilyInstEnv
   = FamIE [FamInst]     -- The instances for a particular family, in any order
 
+type FamInjEnv = UniqFM [(TyVar,Bool)] -- maps type family to its injctivity
+                                       -- information
+
 instance Outputable FamilyInstEnv where
   ppr (FamIE fs) = ptext (sLit "FamIE") <+> vcat (map ppr fs)
 
@@ -485,6 +490,23 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
+-- JSTOLAREK: comment this
+injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
+injectivityCompatibleBranches injectivity
+                              (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
+                              (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
+  = trace "Injectivity check" $ let get_inj  = map snd . filter fst . zip injectivity
+    in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
+      -- JSTOLAREK: Voodoo programming here. Does that make sense?
+      SurelyApart -> case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
+                       SurelyApart -> True
+                       _           -> False
+      Unifiable subst
+        | Type.substTy subst rhs1 `eqType` Type.substTy subst rhs2
+        -> True
+      _ -> False
+
+
 -- takes a CoAxiom with unknown branch incompatibilities and computes
 -- the compatibilities
 -- See Note [Storing compatibility] in CoAxiom
@@ -647,6 +669,36 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 
     noSubst = panic "lookupFamInstEnvConflicts noSubst"
     new_branch = coAxiomSingleBranch new_axiom
+
+
+lookupFamInjInstEnvConflicts :: FamInjEnv
+                             -> FamInstEnvs
+                             -> FamInst
+                             -> [FamInstMatch]
+                             -- Conflicting matches (don't look at the fim_tys field)
+lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
+  = case injInfo of
+      Nothing  -> []
+      Just inj -> trace "Just" $ lookup_fam_inst_env undefined {- (my_unify (map snd inj))-} envs fam tys
+    where
+      (fam, tys) = famInstSplitLHS fam_inst
+      -- In example above,   fam tys' = F [b]
+      injInfo = lookupUFM injEnv (tyConName fam)
+
+      my_unify inj (FamInst { fi_axiom = old_axiom }) tpl_tvs tpl_tys _
+          = {-ASSERT2( tyVarsOfTypes tys `disjointVarSet` tpl_tvs,
+                       (ppr fam <+> ppr tys) $$
+                       (ppr tpl_tvs <+> ppr tpl_tys) )-}
+      -- Unification will break badly if the variables overlap
+      -- They shouldn't because we allocate separate uniques for them
+            if injectivityCompatibleBranches inj (coAxiomSingleBranch old_axiom)
+                                                 new_branch
+            then Nothing
+            else Just noSubst
+      -- JSTOLAREK: this probably deserves a note
+
+      noSubst = panic "lookupFamInjInstEnvConflicts noSubst"
+      new_branch = coAxiomSingleBranch new_axiom
 \end{code}
 
 Note [Family instance overlap conflicts]
@@ -687,17 +739,18 @@ lookup_fam_inst_env' match_fun ie fam match_tys
     find (item@(FamInst { fi_tcs = mb_tcs, fi_tvs = tpl_tvs,
                           fi_tys = tpl_tys }) : rest)
         -- Fast check for no match, uses the "rough match" fields
-      | instanceCantMatch rough_tcs mb_tcs
-      = find rest
-
+-- JSTOLAREK: design decission here?
+--      | trace "instanceCantMatch" $ instanceCantMatch rough_tcs mb_tcs
+--      = find rest
+--trace ("this trace says we have Nothing: " ++ show (isNothing $ match_fun item (mkVarSet tpl_tvs) tpl_tys match_tys1)) $ 
         -- Proper check
       | Just subst <- match_fun item (mkVarSet tpl_tvs) tpl_tys match_tys1
-      = (FamInstMatch { fim_instance = item
+      = trace "this one does not" $ (FamInstMatch { fim_instance = item
                       , fim_tys      = substTyVars subst tpl_tvs `chkAppend` match_tys2 })
         : find rest
 
         -- No match => try next
-      | otherwise
+      | trace "and then we hit a catch-all guard" $ otherwise
       = find rest
 
       where

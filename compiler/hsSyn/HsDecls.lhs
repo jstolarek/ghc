@@ -526,7 +526,8 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 data FamilyResultSig name = NoSig
                           | KindOnlySig (LHsKind name)
                           | KindedTyVarSig (LHsTyVarBndr name)
-                            deriving( Data, Typeable )
+                            deriving( Typeable )
+deriving instance (DataId name) => Data (FamilyResultSig name)
 
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
