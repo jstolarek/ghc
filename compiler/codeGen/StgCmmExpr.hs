@@ -290,6 +290,9 @@ data GcPlan
 -------------------------------------
 cgCase :: StgExpr -> Id -> AltType -> [StgAlt] -> FCode ReturnKind
 
+-- JSTOLAREK: this special case should be unnecessary once propoer
+-- solution is implemneted. But the note still is useful. I should
+-- probably placereference to it in the general case for cgCase.
 cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
   | isComparisonPrimOp op
   = do { dflags <- getDynFlags -- see Note [Case on primops]
@@ -407,6 +410,24 @@ cgCase scrut bndr alt_type alts
        ; _ <- bindArgsToRegs ret_bndrs
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
        }
+
+-- JSTOLAREK: Note #8326 solution idea
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-- Create a function based on forkAlts that compiles the branches but
+-- instead of setting the heap usage in the state returns that heap
+-- usage for each alternative. I can use that function to compile the
+-- alternatives in cgCase and analyze heao usage in alternatives to
+-- construct gc_plan. Once I have that I'll pass the pre-compiled
+-- alternatives to cgAlts, which in the end will pass it down to
+-- cgAltRhss. There I probably need to modify the call to
+-- forkAlts. Now, there's a problem: in cgCase I don't really want to
+-- compile the alternatives. I only want to create FCode () actions
+-- that can be called in cg_alt in cgAltRhss instead of cgExpr
+-- rhs. But if I don't compile the code then I probably can't get the
+-- amount of heap used by each alternative.  Also, I probbaly should
+-- create a new data type based on StgAlt that will store compiled rhs
+-- (represented as an FCode action).
 
 
 {-
