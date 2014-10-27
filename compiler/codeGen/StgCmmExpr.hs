@@ -293,6 +293,7 @@ cgCase :: StgExpr -> Id -> AltType -> [StgAlt] -> FCode ReturnKind
 -- JSTOLAREK: this special case should be unnecessary once propoer
 -- solution is implemneted. But the note still is useful. I should
 -- probably placereference to it in the general case for cgCase.
+{-
 cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
   | isComparisonPrimOp op
   = do { dflags <- getDynFlags -- see Note [Case on primops]
@@ -302,6 +303,7 @@ cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
                     (CmmReg (CmmLocal tmp))
        ; _ <- bindArgsToRegs [NonVoid bndr]
        ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
+-}
 
 -- Note [Case on primops]
 -- ~~~~~~~~~~~~~~~~~~~~~~
@@ -395,9 +397,20 @@ cgCase scrut bndr alt_type alts
        ; let ret_bndrs = chooseReturnBndrs bndr alt_type alts
              alt_regs  = map (idToReg dflags) ret_bndrs
        ; simple_scrut <- isSimpleScrut scrut alt_type
-       ; let do_gc  | not simple_scrut = True
+       -- JSTOLAREK: hackery ahead. This line was located further in
+       -- the code. Is that OK?
+       ; _ <- bindArgsToRegs ret_bndrs
+       ; (precompiledRhss, altsCgStates) <-
+                 preForkAlts (map (\(_,_,_,rhs) -> cgExpr rhs) alts)
+       ; let precompiledAlts = zipWith (\(altCon,parms,mask,_) rhs ->
+                                            (altCon,parms,mask,rhs))
+                                       alts precompiledRhss
+             allAllocate = all (>0) (map (virtHp . cgs_hp_usg) altsCgStates)
+             -- JSTOLAREK: virtHp here ??  ^ Or heapHWM?
+             do_gc  | not simple_scrut = True
                     | isSingleton alts = False
                     | up_hp_usg > 0    = False
+                    | allAllocate      = False
                     | otherwise        = True
                -- cf Note [Compiling case expressions]
              gc_plan = if do_gc then GcInAlts alt_regs else NoGcInAlts
@@ -407,9 +420,18 @@ cgCase scrut bndr alt_type alts
        ; let sequel = AssignTo alt_regs do_gc{- Note [scrut sequel] -}
        ; ret_kind <- withSequel sequel (cgExpr scrut)
        ; restoreCurrentCostCentre mb_cc
-       ; _ <- bindArgsToRegs ret_bndrs
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
        }
+
+-- JSTOLAREK: hackery here. 
+type CompiledStgAlt
+  = (AltCon,            -- alts: data constructor,
+     [Id],            -- constructor's parameters,
+     [Bool],            -- "use mask", same length as
+                        -- parameters; a True in a
+                        -- param's position if it is
+                        -- used in the ...
+     FCode ReturnKind)  -- ...right-hand side.
 
 -- JSTOLAREK: Note #8326 solution idea
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

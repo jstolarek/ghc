@@ -27,7 +27,7 @@ module StgCmmMonad (
         mkCmmIfThenElse, mkCmmIfThen, mkCmmIfGoto,
         mkCall, mkCmmCall,
 
-        forkClosureBody, forkLneBody, forkAlts, codeOnly,
+        forkClosureBody, forkLneBody, forkAlts, preForkAlts, codeOnly,
 
         ConTagZ,
 
@@ -46,6 +46,7 @@ module StgCmmMonad (
 
         -- ideally we wouldn't export these, but some other modules access internal state
         getState, setState, getSelfLoop, withSelfLoop, getInfoDown, getDynFlags, getThisPackage,
+        stateIncUsage,
 
         -- more localised access to monad state
         CgIdInfo(..),
@@ -632,6 +633,34 @@ forkAlts branch_fcodes
         ; setState $ foldl stateIncUsage state branch_out_states
                 -- NB foldl.  state is the *left* argument to stateIncUsage
         ; return branch_results }
+
+-- JSTOLAREK: comment this
+preForkAlts :: [FCode a] -> FCode ([a],[CgState])
+preForkAlts branch_fcodes
+  = do  { info_down <- getInfoDown
+        ; us <- newUniqSupply
+        ; state <- getState
+        ; let compile us branch
+                = (us2, doFCode branch info_down branch_state)
+                where
+                  (us1,us2) = splitUniqSupply us
+                  branch_state = (initCgState us1) {
+                                        cgs_binds  = cgs_binds state
+                                      , cgs_hp_usg = cgs_hp_usg state }
+              (_us, results) = mapAccumL compile us branch_fcodes
+        ; return $ unzip results }
+{-
+withState :: FCode a -> CgState -> FCode (a,CgState)
+withInfoDown :: FCode a -> CgInfoDownwards -> FCode a
+
+withState (withInfoDown branch info_down) branch_state :: FCode (a,CgState)
+
+doFCode :: FCode a -> CgInfoDownwards -> CgState -> (a,CgState)
+doFCode (FCode fcode) info_down state =
+  case fcode info_down state of
+    (# a, s #) -> ( a, s )
+-}
+
 
 -- collect the code emitted by an FCode computation
 getCodeR :: FCode a -> FCode (a, CmmAGraph)
