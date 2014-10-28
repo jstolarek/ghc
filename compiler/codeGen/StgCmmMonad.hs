@@ -22,7 +22,7 @@ module StgCmmMonad (
         emitOutOfLine, emitAssign, emitStore, emitComment,
 
         getCmm, aGraphToGraph,
-        getCodeR, getCode, getHeapUsage,
+        getCodeR, getCode, getHeapUsage, readHeapUsage,
 
         mkCmmIfThenElse, mkCmmIfThen, mkCmmIfGoto,
         mkCall, mkCmmCall,
@@ -653,6 +653,7 @@ getCode fcode = do { (_,stmts) <- getCodeR fcode; return stmts }
 --
 -- Note the slightly subtle fixed point behaviour needed here
 
+--JSTOLAREK: rename to withHeapUsage
 getHeapUsage :: (VirtualHpOffset -> FCode a) -> FCode a
 getHeapUsage fcode
   = do  { info_down <- getInfoDown
@@ -663,6 +664,17 @@ getHeapUsage fcode
 
         ; setState $ fstate_out { cgs_hp_usg = cgs_hp_usg state }
         ; return r }
+
+readHeapUsage :: FCode a -> FCode (a, VirtualHpOffset)
+readHeapUsage fcode
+  = do  { info_down <- getInfoDown
+        ; state <- getState
+        ; let   fstate_in = state { cgs_hp_usg  = initHpUsage }
+                (r, fstate_out) = doFCode fcode info_down fstate_in
+                hp_hw = heapHWM (cgs_hp_usg fstate_out)
+
+        ; setState $ fstate_out { cgs_hp_usg = cgs_hp_usg state }
+        ; return (r, hp_hw) }
 
 -- ----------------------------------------------------------------------------
 -- Combinators for emitting code

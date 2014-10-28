@@ -46,7 +46,7 @@ import Util
 import FastString
 import Outputable
 
-import Control.Monad (when,void)
+import Control.Monad (when,void,liftM)
 
 #if __GLASGOW_HASKELL__ >= 709
 import Prelude hiding ((<*>))
@@ -579,14 +579,27 @@ cgAltRhss gc_plan bndr alts = do
   dflags <- getDynFlags
   let
     base_reg = idToReg dflags bndr
-    cg_alt :: StgAlt -> FCode (AltCon, CmmAGraph)
+    cg_alt :: StgAlt -> FCode (AltCon, VirtualHpOffset)
     cg_alt (con, bndrs, _uses, rhs)
-      = getCodeR                  $
-        maybeAltHeapCheck gc_plan $
+      = readHeapUsage $
         do { _ <- bindConArgs con base_reg bndrs
            ; _ <- cgExpr rhs
            ; return con }
-  forkAlts (map cg_alt alts)
+  (_altCons, heapUsage) <- unzip `liftM` mapM cg_alt alts
+  let allAllocate = True -- all (>0) heapUsage
+      -- JSTOLAREK: wrong. This might reverse earlier decissionEg. if
+      -- scrutinee is not simple this will lead to incorrect result.
+      gc_plan' = case (gc_plan, allAllocate) of
+                   (_,False)           -> gc_plan
+                   ((_,retKind),True) -> (NoGcInAlts,retKind)
+      cg_alt' :: StgAlt -> FCode (AltCon, CmmAGraph)
+      cg_alt' (con, bndrs, _uses, rhs)
+        = getCodeR                   $
+          maybeAltHeapCheck gc_plan' $
+          do { _ <- bindConArgs con base_reg bndrs
+             ; _ <- cgExpr rhs
+             ; return con }
+  forkAlts (map cg_alt' alts)
 
 maybeAltHeapCheck :: (GcPlan,ReturnKind) -> FCode a -> FCode a
 maybeAltHeapCheck (NoGcInAlts,_)  code = code
