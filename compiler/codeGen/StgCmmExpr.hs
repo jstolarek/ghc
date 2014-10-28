@@ -46,7 +46,7 @@ import Util
 import FastString
 import Outputable
 
-import Control.Monad (when,void)
+import Control.Monad (when,void,liftM)
 
 #if __GLASGOW_HASKELL__ >= 709
 import Prelude hiding ((<*>))
@@ -301,7 +301,7 @@ cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
        ; emitAssign (CmmLocal (idToReg dflags (NonVoid bndr)))
                     (CmmReg (CmmLocal tmp))
        ; _ <- bindArgsToRegs [NonVoid bndr]
-       ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
+       ; liftM fst $ cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
 
 -- Note [Case on primops]
 -- ~~~~~~~~~~~~~~~~~~~~~~
@@ -355,7 +355,7 @@ cgCase (StgApp v []) bndr alt_type@(PrimAlt _) alts
        ; v_info <- getCgIdInfo v
        ; emitAssign (CmmLocal (idToReg dflags (NonVoid bndr))) (idInfoToAmode v_info)
        ; _ <- bindArgsToRegs [NonVoid bndr]
-       ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
+       ; liftM fst $ cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
   where
     reps_compatible = idPrimRep v == idPrimRep bndr
 
@@ -395,9 +395,15 @@ cgCase scrut bndr alt_type alts
        ; let ret_bndrs = chooseReturnBndrs bndr alt_type alts
              alt_regs  = map (idToReg dflags) ret_bndrs
        ; simple_scrut <- isSimpleScrut scrut alt_type
-       ; let do_gc  | not simple_scrut = True
+       ; (fcode, _) <- fixC (\(_, branch_out_states) -> do {
+       ; let allAllocate = case branch_out_states of
+                             Nothing -> False
+                             Just states ->
+                                    all (>0) (map (heapHWM . cgs_hp_usg) states)
+             do_gc  | not simple_scrut = True
                     | isSingleton alts = False
                     | up_hp_usg > 0    = False
+                    | allAllocate      = False
                     | otherwise        = True
                -- cf Note [Compiling case expressions]
              gc_plan = if do_gc then GcInAlts alt_regs else NoGcInAlts
@@ -409,25 +415,15 @@ cgCase scrut bndr alt_type alts
        ; restoreCurrentCostCentre mb_cc
        ; _ <- bindArgsToRegs ret_bndrs
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
+       })
+       ; return fcode
        }
 
 -- JSTOLAREK: Note #8326 solution idea
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--- Create a function based on forkAlts that compiles the branches but
--- instead of setting the heap usage in the state returns that heap
--- usage for each alternative. I can use that function to compile the
--- alternatives in cgCase and analyze heao usage in alternatives to
--- construct gc_plan. Once I have that I'll pass the pre-compiled
--- alternatives to cgAlts, which in the end will pass it down to
--- cgAltRhss. There I probably need to modify the call to
--- forkAlts. Now, there's a problem: in cgCase I don't really want to
--- compile the alternatives. I only want to create FCode () actions
--- that can be called in cg_alt in cgAltRhss instead of cgExpr
--- rhs. But if I don't compile the code then I probably can't get the
--- amount of heap used by each alternative.  Also, I probbaly should
--- create a new data type based on StgAlt that will store compiled rhs
--- (represented as an FCode action).
+-- Tie a knot. But that doesn't work, because gc_plan is scrutinized
+-- by maybeAltHeapCheck.
 
 
 {-
@@ -499,19 +495,21 @@ chooseReturnBndrs _ _ _ = panic "chooseReturnBndrs"
 
 -------------------------------------
 cgAlts :: (GcPlan,ReturnKind) -> NonVoid Id -> AltType -> [StgAlt]
-       -> FCode ReturnKind
+       -> FCode (ReturnKind, Maybe [CgState])
 -- At this point the result of the case are in the binders
 cgAlts gc_plan _bndr PolyAlt [(_, _, _, rhs)]
-  = maybeAltHeapCheck gc_plan (cgExpr rhs)
+  = do fcode <- maybeAltHeapCheck gc_plan (cgExpr rhs)
+       return (fcode, Nothing)
 
 cgAlts gc_plan _bndr (UbxTupAlt _) [(_, _, _, rhs)]
-  = maybeAltHeapCheck gc_plan (cgExpr rhs)
+  = do fcode <- maybeAltHeapCheck gc_plan (cgExpr rhs)
+       return (fcode, Nothing)
         -- Here bndrs are *already* in scope, so don't rebind them
 
 cgAlts gc_plan bndr (PrimAlt _) alts
   = do  { dflags <- getDynFlags
 
-        ; tagged_cmms <- cgAltRhss gc_plan bndr alts
+        ; (tagged_cmms, out_states) <- cgAltRhss gc_plan bndr alts
 
         ; let bndr_reg = CmmLocal (idToReg dflags bndr)
               (DEFAULT,deflt) = head tagged_cmms
@@ -521,12 +519,12 @@ cgAlts gc_plan bndr (PrimAlt _) alts
               tagged_cmms' = [(lit,code)
                              | (LitAlt lit, code) <- tagged_cmms]
         ; emitCmmLitSwitch (CmmReg bndr_reg) tagged_cmms' deflt
-        ; return AssignedDirectly }
+        ; return (AssignedDirectly, Just out_states) }
 
 cgAlts gc_plan bndr (AlgAlt tycon) alts
   = do  { dflags <- getDynFlags
 
-        ; (mb_deflt, branches) <- cgAlgAltRhss gc_plan bndr alts
+        ; (mb_deflt, branches, out_states) <- cgAlgAltRhss gc_plan bndr alts
 
         ; let fam_sz   = tyConFamilySize tycon
               bndr_reg = CmmLocal (idToReg dflags bndr)
@@ -538,7 +536,7 @@ cgAlts gc_plan bndr (AlgAlt tycon) alts
                    tag_expr = cmmConstrTag1 dflags (CmmReg bndr_reg)
                    branches' = [(tag+1,branch) | (tag,branch) <- branches]
                 emitSwitch tag_expr branches' mb_deflt 1 fam_sz
-                return AssignedDirectly
+                return (AssignedDirectly, Just out_states)
 
            else         -- No, get tag from info table
                 do dflags <- getDynFlags
@@ -547,7 +545,7 @@ cgAlts gc_plan bndr (AlgAlt tycon) alts
                        untagged_ptr = cmmRegOffB bndr_reg (-1)
                        tag_expr = getConstrTag dflags (untagged_ptr)
                    emitSwitch tag_expr branches mb_deflt 0 (fam_sz - 1)
-                   return AssignedDirectly }
+                   return (AssignedDirectly, Just out_states) }
 
 cgAlts _ _ _ _ = panic "cgAlts"
         -- UbxTupAlt and PolyAlt have only one alternative
@@ -576,9 +574,9 @@ cgAlts _ _ _ _ = panic "cgAlts"
 -------------------
 cgAlgAltRhss :: (GcPlan,ReturnKind) -> NonVoid Id -> [StgAlt]
              -> FCode ( Maybe CmmAGraph
-                      , [(ConTagZ, CmmAGraph)] )
+                      , [(ConTagZ, CmmAGraph)], [CgState] )
 cgAlgAltRhss gc_plan bndr alts
-  = do { tagged_cmms <- cgAltRhss gc_plan bndr alts
+  = do { (tagged_cmms, out_states) <- cgAltRhss gc_plan bndr alts
 
        ; let { mb_deflt = case tagged_cmms of
                            ((DEFAULT,rhs) : _) -> Just rhs
@@ -589,13 +587,13 @@ cgAlgAltRhss gc_plan bndr alts
                            | (DataAlt con, cmm) <- tagged_cmms ]
               }
 
-       ; return (mb_deflt, branches)
+       ; return (mb_deflt, branches, out_states)
        }
 
 
 -------------------
 cgAltRhss :: (GcPlan,ReturnKind) -> NonVoid Id -> [StgAlt]
-          -> FCode [(AltCon, CmmAGraph)]
+          -> FCode ([(AltCon, CmmAGraph)], [CgState])
 cgAltRhss gc_plan bndr alts = do
   dflags <- getDynFlags
   let
@@ -607,7 +605,7 @@ cgAltRhss gc_plan bndr alts = do
         do { _ <- bindConArgs con base_reg bndrs
            ; _ <- cgExpr rhs
            ; return con }
-  forkAlts (map cg_alt alts)
+  forkAlts' (map cg_alt alts)
 
 maybeAltHeapCheck :: (GcPlan,ReturnKind) -> FCode a -> FCode a
 maybeAltHeapCheck (NoGcInAlts,_)  code = code

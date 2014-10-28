@@ -27,7 +27,7 @@ module StgCmmMonad (
         mkCmmIfThenElse, mkCmmIfThen, mkCmmIfGoto,
         mkCall, mkCmmCall,
 
-        forkClosureBody, forkLneBody, forkAlts, codeOnly,
+        forkClosureBody, forkLneBody, forkAlts, forkAlts', codeOnly,
 
         ConTagZ,
 
@@ -110,7 +110,7 @@ infixr 9 `thenFC`
 
 --------------------------------------------------------
 
-newtype FCode a = FCode (CgInfoDownwards -> CgState -> (# a, CgState #))
+newtype FCode a = FCode {runFCode :: CgInfoDownwards -> CgState -> (# a, CgState #)}
 
 instance Functor FCode where
   fmap f (FCode g) = FCode $ \i s -> case g i s of (# a, s' #) -> (# f a, s' #)
@@ -157,13 +157,10 @@ thenFC (FCode m) k = FCode $
                    FCode kcode -> kcode info_down new_state
 
 fixC :: (a -> FCode a) -> FCode a
-fixC fcode = FCode (
+fixC fcode = FCode $
         \info_down state ->
-                let
-                        (v,s) = doFCode (fcode v) info_down state
-                in
-                        (# v, s #)
-        )
+                let (v,s) = doFCode (fcode v) info_down state
+                in  (# v, s #)
 
 --------------------------------------------------------
 --        The code generator environment
@@ -632,6 +629,24 @@ forkAlts branch_fcodes
         ; setState $ foldl stateIncUsage state branch_out_states
                 -- NB foldl.  state is the *left* argument to stateIncUsage
         ; return branch_results }
+
+forkAlts' :: [FCode a] -> FCode ([a], [CgState])
+forkAlts' branch_fcodes
+  = do  { info_down <- getInfoDown
+        ; us <- newUniqSupply
+        ; state <- getState
+        ; let compile us branch
+                = (us2, doFCode branch info_down branch_state)
+                where
+                  (us1,us2) = splitUniqSupply us
+                  branch_state = (initCgState us1) {
+                                        cgs_binds  = cgs_binds state
+                                      , cgs_hp_usg = cgs_hp_usg state }
+              (_us, results) = mapAccumL compile us branch_fcodes
+              (branch_results, branch_out_states) = unzip results
+        ; setState $ foldl stateIncUsage state branch_out_states
+                -- NB foldl.  state is the *left* argument to stateIncUsage
+        ; return (branch_results, branch_out_states) }
 
 -- collect the code emitted by an FCode computation
 getCodeR :: FCode a -> FCode (a, CmmAGraph)
