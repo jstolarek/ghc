@@ -292,7 +292,7 @@ cgCase :: StgExpr -> Id -> AltType -> [StgAlt] -> FCode ReturnKind
 
 -- JSTOLAREK: this special case should be unnecessary once propoer
 -- solution is implemneted. But the note still is useful. I should
--- probably placereference to it in the general case for cgCase.
+-- probably place reference to it in the general case for cgCase.
 {-
 cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
   | isComparisonPrimOp op
@@ -397,14 +397,16 @@ cgCase scrut bndr alt_type alts
        ; let ret_bndrs = chooseReturnBndrs bndr alt_type alts
              alt_regs  = map (idToReg dflags) ret_bndrs
        ; simple_scrut <- isSimpleScrut scrut alt_type
-       -- JSTOLAREK: hackery ahead. This line was located further in
-       -- the code. Is that OK?
+       -- JSTOLAREK: hackery ahead. This line was located before
+       -- restoring current cost center. I had to move it here to
+       -- avoid compiler panic. Is that OK?
        ; _ <- bindArgsToRegs ret_bndrs
-       ; (precompiledRhss, altsCgStates) <-
+       -- JSTOLAREK: attempt to pre-compile case alternatives
+       ; (_precompiledRhss, altsCgStates) <-
                  preForkAlts (map (\(_,_,_,rhs) -> cgExpr rhs) alts)
-       ; let precompiledAlts = zipWith (\(altCon,parms,mask,_) rhs ->
-                                            (altCon,parms,mask,rhs))
-                                       alts precompiledRhss
+       ; let --precompiledAlts = zipWith (\(altCon,parms,mask,_) rhs ->
+             --                               (altCon,parms,mask,rhs))
+             --                          alts precompiledRhss
              allAllocate = all (>0) (map (virtHp . cgs_hp_usg) altsCgStates)
              -- JSTOLAREK: virtHp here ??  ^ Or heapHWM?
              do_gc  | not simple_scrut = True
@@ -422,16 +424,6 @@ cgCase scrut bndr alt_type alts
        ; restoreCurrentCostCentre mb_cc
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
        }
-
--- JSTOLAREK: hackery here. 
-type CompiledStgAlt
-  = (AltCon,            -- alts: data constructor,
-     [Id],            -- constructor's parameters,
-     [Bool],            -- "use mask", same length as
-                        -- parameters; a True in a
-                        -- param's position if it is
-                        -- used in the ...
-     FCode ReturnKind)  -- ...right-hand side.
 
 -- JSTOLAREK: Note #8326 solution idea
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

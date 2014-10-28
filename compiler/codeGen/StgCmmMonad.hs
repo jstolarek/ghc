@@ -634,7 +634,10 @@ forkAlts branch_fcodes
                 -- NB foldl.  state is the *left* argument to stateIncUsage
         ; return branch_results }
 
--- JSTOLAREK: comment this
+-- JSTOLAREK: This compiles case alternatives returning compiled
+-- branches + a CgState after compilation for each branch. CgStates
+-- can later be used to analyze the amount of heap required for each
+-- branch.
 preForkAlts :: [FCode a] -> FCode ([a],[CgState])
 preForkAlts branch_fcodes
   = do  { info_down <- getInfoDown
@@ -649,18 +652,6 @@ preForkAlts branch_fcodes
                                       , cgs_hp_usg = cgs_hp_usg state }
               (_us, results) = mapAccumL compile us branch_fcodes
         ; return $ unzip results }
-{-
-withState :: FCode a -> CgState -> FCode (a,CgState)
-withInfoDown :: FCode a -> CgInfoDownwards -> FCode a
-
-withState (withInfoDown branch info_down) branch_state :: FCode (a,CgState)
-
-doFCode :: FCode a -> CgInfoDownwards -> CgState -> (a,CgState)
-doFCode (FCode fcode) info_down state =
-  case fcode info_down state of
-    (# a, s #) -> ( a, s )
--}
-
 
 -- collect the code emitted by an FCode computation
 getCodeR :: FCode a -> FCode (a, CmmAGraph)
