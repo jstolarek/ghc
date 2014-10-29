@@ -416,36 +416,6 @@ cgCase scrut bndr alt_type alts
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
        }
 
-preCgAlts :: NonVoid Id -> AltType -> [StgAlt]
-          -> FCode ( Maybe ReturnKind
-                   , Maybe [AltCon]
-                   , [CmmAGraph]
-                   , Maybe [VirtualHpOffset] )
--- JSTOLAREK: document the invariants here
-preCgAlts bndr altType alts
-    |  PolyAlt      <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
-    | (UbxTupAlt _) <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
-    | (PrimAlt _)   <- altType                           = multipleAlts
-    | (AlgAlt _)    <- altType                           = multipleAlts
-    | otherwise                                          = panic "preCgAlts"
-   where
-    singleAlt rhs = do
-      (retKind, aGraph) <- getCodeR $ cgExpr rhs
-      return (Just retKind, Nothing, [aGraph], Nothing)
-    multipleAlts = do
-      dflags <- getDynFlags
-      let
-          base_reg = idToReg dflags bndr
-          cg_alt :: StgAlt -> FCode ((AltCon, VirtualHpOffset), CmmAGraph)
-          cg_alt (con, bndrs, _uses, rhs)
-              = getCodeR $
-                getHeapUsage $
-                do { _ <- bindConArgs con base_reg bndrs
-                   ; _ <- cgExpr rhs
-                   ; return con }
-      (consAndHeaps, aGraphs) <- unzip `liftM` mapM cg_alt alts
-      let (altCons, heapOffs) = unzip consAndHeaps
-      return (Nothing, Just altCons, aGraphs, Just heapOffs)
 
 {-
 Note [scrut sequel]
@@ -513,6 +483,37 @@ chooseReturnBndrs bndr PolyAlt _alts
 
 chooseReturnBndrs _ _ _ = panic "chooseReturnBndrs"
         -- UbxTupALt has only one alternative
+
+preCgAlts :: NonVoid Id -> AltType -> [StgAlt]
+          -> FCode ( Maybe ReturnKind
+                   , Maybe [AltCon]
+                   , [CmmAGraph]
+                   , Maybe [VirtualHpOffset] )
+-- JSTOLAREK: document the invariants here
+preCgAlts bndr altType alts
+    |  PolyAlt      <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
+    | (UbxTupAlt _) <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
+    | (PrimAlt _)   <- altType                           = multipleAlts
+    | (AlgAlt _)    <- altType                           = multipleAlts
+    | otherwise                                          = panic "preCgAlts"
+   where
+    singleAlt rhs = do
+      (retKind, aGraph) <- getCodeR $ cgExpr rhs
+      return (Just retKind, Nothing, [aGraph], Nothing)
+    multipleAlts = do
+      dflags <- getDynFlags
+      let
+          base_reg = idToReg dflags bndr
+          cg_alt :: StgAlt -> FCode ((AltCon, VirtualHpOffset), CmmAGraph)
+          cg_alt (con, bndrs, _uses, rhs)
+              = getCodeR $
+                getHeapUsage $
+                do { _ <- bindConArgs con base_reg bndrs
+                   ; _ <- cgExpr rhs
+                   ; return con }
+      (consAndHeaps, aGraphs) <- unzip `liftM` mapM cg_alt alts
+      let (altCons, heapOffs) = unzip consAndHeaps
+      return (Nothing, Just altCons, aGraphs, Just heapOffs)
 
 -------------------------------------
 cgAlts :: (GcPlan,ReturnKind) -> NonVoid Id -> AltType -> [StgAlt]
