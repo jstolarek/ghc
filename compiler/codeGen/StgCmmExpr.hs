@@ -46,7 +46,7 @@ import Util
 import FastString
 import Outputable
 
-import Control.Monad (when,void)
+import Control.Monad (when,void,liftM)
 
 #if __GLASGOW_HASKELL__ >= 709
 import Prelude hiding ((<*>))
@@ -290,6 +290,7 @@ data GcPlan
 -------------------------------------
 cgCase :: StgExpr -> Id -> AltType -> [StgAlt] -> FCode ReturnKind
 
+{-
 cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
   | isComparisonPrimOp op
   = do { dflags <- getDynFlags -- see Note [Case on primops]
@@ -299,6 +300,7 @@ cgCase (StgOpApp (StgPrimOp op) args _) bndr alt_type@(PrimAlt _) alts
                     (CmmReg (CmmLocal tmp))
        ; _ <- bindArgsToRegs [NonVoid bndr]
        ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr) alt_type alts }
+-}
 
 -- Note [Case on primops]
 -- ~~~~~~~~~~~~~~~~~~~~~~
@@ -392,9 +394,16 @@ cgCase scrut bndr alt_type alts
        ; let ret_bndrs = chooseReturnBndrs bndr alt_type alts
              alt_regs  = map (idToReg dflags) ret_bndrs
        ; simple_scrut <- isSimpleScrut scrut alt_type
-       ; let do_gc  | not simple_scrut = True
+       ; _ <- bindArgsToRegs ret_bndrs
+       ; (maybeRetKind, maybeAltCons, precompAlts, maybeHpOffsets) <-
+           preCgAlts (NonVoid bndr) alt_type alts
+       ; let allAllocate = case maybeHpOffsets of
+                             Nothing   -> False
+                             Just offs -> all (>0) offs
+             do_gc  | not simple_scrut = True
                     | isSingleton alts = False
                     | up_hp_usg > 0    = False
+                    | allAllocate      = False
                     | otherwise        = True
                -- cf Note [Compiling case expressions]
              gc_plan = if do_gc then GcInAlts alt_regs else NoGcInAlts
@@ -404,10 +413,39 @@ cgCase scrut bndr alt_type alts
        ; let sequel = AssignTo alt_regs do_gc{- Note [scrut sequel] -}
        ; ret_kind <- withSequel sequel (cgExpr scrut)
        ; restoreCurrentCostCentre mb_cc
-       ; _ <- bindArgsToRegs ret_bndrs
        ; cgAlts (gc_plan,ret_kind) (NonVoid bndr) alt_type alts
        }
 
+preCgAlts :: NonVoid Id -> AltType -> [StgAlt]
+          -> FCode ( Maybe ReturnKind
+                   , Maybe [AltCon]
+                   , [CmmAGraph]
+                   , Maybe [VirtualHpOffset] )
+-- JSTOLAREK: document the invariants here
+preCgAlts bndr altType alts
+    |  PolyAlt      <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
+    | (UbxTupAlt _) <- altType, [(_, _, _, rhs)] <- alts = singleAlt rhs
+    | (PrimAlt _)   <- altType                           = multipleAlts
+    | (AlgAlt _)    <- altType                           = multipleAlts
+    | otherwise                                          = panic "preCgAlts"
+   where
+    singleAlt rhs = do
+      (retKind, aGraph) <- getCodeR $ cgExpr rhs
+      return (Just retKind, Nothing, [aGraph], Nothing)
+    multipleAlts = do
+      dflags <- getDynFlags
+      let
+          base_reg = idToReg dflags bndr
+          cg_alt :: StgAlt -> FCode ((AltCon, VirtualHpOffset), CmmAGraph)
+          cg_alt (con, bndrs, _uses, rhs)
+              = getCodeR $
+                getHeapUsage $
+                do { _ <- bindConArgs con base_reg bndrs
+                   ; _ <- cgExpr rhs
+                   ; return con }
+      (consAndHeaps, aGraphs) <- unzip `liftM` mapM cg_alt alts
+      let (altCons, heapOffs) = unzip consAndHeaps
+      return (Nothing, Just altCons, aGraphs, Just heapOffs)
 
 {-
 Note [scrut sequel]

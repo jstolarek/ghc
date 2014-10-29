@@ -525,7 +525,7 @@ mkGcLabel s = CmmLit (CmmLabel (mkCmmCodeLabel rtsPackageKey (fsLit s)))
 -------------------------------
 heapCheck :: Bool -> Bool -> CmmAGraph -> FCode a -> FCode a
 heapCheck checkStack checkYield do_gc code
-  = getHeapUsage $ \ hpHw ->
+  = withHeapUsage $ \ hpHw ->
     -- Emit heap checks, but be sure to do it lazily so
     -- that the conditionals on hpHw don't cause a black hole
     do  { dflags <- getDynFlags

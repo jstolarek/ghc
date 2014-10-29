@@ -463,7 +463,7 @@ tickyAllocHeap genuine hp
         ; emit $ catAGraphs $
             -- only test hp from within the emit so that the monadic
             -- computation itself is not strict in hp (cf knot in
-            -- StgCmmMonad.getHeapUsage)
+            -- StgCmmMonad.withHeapUsage)
           if hp == 0 then []
           else let !bytes = wORD_SIZE dflags * hp in [
             -- Bump the allocation total in the closure's StgEntCounter

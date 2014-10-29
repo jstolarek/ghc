@@ -22,7 +22,7 @@ module StgCmmMonad (
         emitOutOfLine, emitAssign, emitStore, emitComment,
 
         getCmm, aGraphToGraph,
-        getCodeR, getCode, getHeapUsage,
+        getCodeR, getCode, withHeapUsage, getHeapUsage,
 
         mkCmmIfThenElse, mkCmmIfThen, mkCmmIfGoto,
         mkCall, mkCmmCall,
@@ -644,7 +644,7 @@ getCodeR fcode
 getCode :: FCode a -> FCode CmmAGraph
 getCode fcode = do { (_,stmts) <- getCodeR fcode; return stmts }
 
--- 'getHeapUsage' applies a function to the amount of heap that it uses.
+-- 'withHeapUsage' applies a function to the amount of heap that it uses.
 -- It initialises the heap usage to zeros, and passes on an unchanged
 -- heap usage.
 --
@@ -653,8 +653,8 @@ getCode fcode = do { (_,stmts) <- getCodeR fcode; return stmts }
 --
 -- Note the slightly subtle fixed point behaviour needed here
 
-getHeapUsage :: (VirtualHpOffset -> FCode a) -> FCode a
-getHeapUsage fcode
+withHeapUsage :: (VirtualHpOffset -> FCode a) -> FCode a
+withHeapUsage fcode
   = do  { info_down <- getInfoDown
         ; state <- getState
         ; let   fstate_in = state { cgs_hp_usg  = initHpUsage }
@@ -663,6 +663,17 @@ getHeapUsage fcode
 
         ; setState $ fstate_out { cgs_hp_usg = cgs_hp_usg state }
         ; return r }
+
+getHeapUsage :: FCode a -> FCode (a, VirtualHpOffset)
+getHeapUsage fcode
+  = do  { info_down <- getInfoDown
+        ; state <- getState
+        ; let   fstate_in = state { cgs_hp_usg  = initHpUsage }
+                (r, fstate_out) = doFCode fcode info_down fstate_in
+                hp_hw = heapHWM (cgs_hp_usg fstate_out)
+
+        ; setState $ fstate_out { cgs_hp_usg = cgs_hp_usg state }
+        ; return (r, hp_hw) }
 
 -- ----------------------------------------------------------------------------
 -- Combinators for emitting code
