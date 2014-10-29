@@ -299,7 +299,7 @@ cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
        ; eqns' <- mapM (cvtTySynEqn tc') eqns
        -- JSTOLAREK: this needs fixing
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan [])tc' tvs' mkind' }
+         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan []) tc' tvs' mkind' }
   | otherwise
   = failWith (ptext (sLit "Illegal empty closed type family"))
 

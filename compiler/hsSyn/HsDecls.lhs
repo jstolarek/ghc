@@ -514,7 +514,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
-  { fdInfo      :: FamilyInfo name                -- type or data, closed or open
+  { fdInfo      :: FamilyInfo name               -- type or data, closed or open
   -- JSTOLAREK: everything else here is Located, so I've made this located as
   -- well. But perhaps I don't have to? I'm not introducing any bindings on the
   -- one hand, but then again I'll be reporting errors later...
@@ -525,6 +525,7 @@ data FamilyDecl name = FamilyDecl
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
+-- JSTOLAREK: provide a comment about this data type
 data InjectivityInfo name
   = InjectivityInfo [Located name] [Located name]
   deriving( Data, Typeable )
