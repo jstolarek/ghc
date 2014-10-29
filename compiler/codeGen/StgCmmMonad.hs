@@ -52,7 +52,7 @@ module StgCmmMonad (
         getBinds, setBinds,
 
         -- out of general friendliness, we also export ...
-        CgInfoDownwards(..), CgState(..)        -- non-abstract
+        CgInfoDownwards(..), CgState(..),        -- non-abstract
     ) where
 
 #include "HsVersions.h"
