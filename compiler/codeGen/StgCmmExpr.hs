@@ -532,9 +532,10 @@ cgAlts gc_plan _bndr (UbxTupAlt _) (Just retKind) Nothing [altCmmAGraph]
 cgAlts gc_plan bndr (PrimAlt _) Nothing (Just altCons) alts
   = do  { dflags <- getDynFlags
 
-        ; tagged_cmms <- cgAltRhss gc_plan altCons alts
+        ; altsWithHeapChecks <- cgAltRhss gc_plan alts
 
-        ; let bndr_reg = CmmLocal (idToReg dflags bndr)
+        ; let tagged_cmms = zip altCons altsWithHeapChecks
+              bndr_reg = CmmLocal (idToReg dflags bndr)
               (DEFAULT,deflt) = head tagged_cmms
                 -- PrimAlts always have a DEFAULT case
                 -- and it always comes first
@@ -599,32 +600,32 @@ cgAlgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CmmAGraph]
              -> FCode ( Maybe CmmAGraph
                       , [(ConTagZ, CmmAGraph)] )
 cgAlgAltRhss gc_plan altCons alts
-  = do { tagged_cmms <- cgAltRhss gc_plan altCons alts
+  = do { altsWithHeapChecks <- cgAltRhss gc_plan alts
 
-       ; let { mb_deflt = case tagged_cmms of
-                           ((DEFAULT,rhs) : _) -> Just rhs
-                           _other              -> Nothing
-                            -- DEFAULT is always first, if present
+       ; let tagged_cmms = zip altCons altsWithHeapChecks
+             mb_deflt = case tagged_cmms of
+                         ((DEFAULT,rhs) : _) -> Just rhs
+                         _other              -> Nothing
+                          -- DEFAULT is always first, if present
 
-              ; branches = [ (dataConTagZ con, cmm)
-                           | (DataAlt con, cmm) <- tagged_cmms ]
-              }
+             branches = [ (dataConTagZ con, cmm)
+                        | (DataAlt con, cmm) <- tagged_cmms ]
 
        ; return (mb_deflt, branches)
        }
 
 
 -------------------
-cgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CmmAGraph]
-          -> FCode [(AltCon, CmmAGraph)]
-cgAltRhss gc_plan altCons alts = do
+cgAltRhss :: (GcPlan,ReturnKind) -> [CmmAGraph]
+          -> FCode [CmmAGraph]
+cgAltRhss gc_plan alts = do
   let
     cg_alt :: CmmAGraph -> FCode CmmAGraph
     cg_alt altCmmAGraph
       = do ((), altWithHeapCheck)
                <- getCodeR $ maybeAltHeapCheck gc_plan altCmmAGraph
            return altWithHeapCheck
-  (zip altCons) `liftM` forkAlts (map cg_alt alts)
+  forkAlts (map cg_alt alts)
 
 maybeAltHeapCheck :: (GcPlan,ReturnKind) -> CmmAGraph -> FCode ()
 maybeAltHeapCheck (NoGcInAlts,_)  graph = emit graph
