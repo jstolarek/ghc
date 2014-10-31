@@ -295,6 +295,7 @@ data CoreToDo           -- These are diff core-to-core passes,
   | CoreDoPluginPass String PluginPass
   | CoreDoFloatInwards
   | CoreDoFloatOutwards FloatOutSwitches
+  | CoreDoFullerLaziness
   | CoreLiberateCase
   | CoreDoPrintCore
   | CoreDoStaticArgs

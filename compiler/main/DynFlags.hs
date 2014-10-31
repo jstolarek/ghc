@@ -302,6 +302,7 @@ data GeneralFlag
    | Opt_KillAbsence
    | Opt_KillOneShot
    | Opt_FullLaziness
+   | Opt_FullerLaziness
    | Opt_FloatIn
    | Opt_Specialise
    | Opt_SpecialiseAggressively
@@ -2717,6 +2718,7 @@ fFlags = [
   ( "float-in",                         Opt_FloatIn, nop ),
   ( "static-argument-transformation",   Opt_StaticArgumentTransformation, nop ),
   ( "full-laziness",                    Opt_FullLaziness, nop ),
+  ( "fuller-laziness",                  Opt_FullerLaziness, nop ),
   ( "liberate-case",                    Opt_LiberateCase, nop ),
   ( "spec-constr",                      Opt_SpecConstr, nop ),
   ( "cse",                              Opt_CSE, nop ),

@@ -350,6 +350,7 @@ Library
         CSE
         FloatIn
         FloatOut
+        FullerLaziness
         LiberateCase
         OccurAnal
         SAT
