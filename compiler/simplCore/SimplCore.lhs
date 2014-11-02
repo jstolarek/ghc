@@ -287,7 +287,9 @@ getCoreToDo dflags
                 -- catch it.  For the record, the redex is
                 --        f_el22 (f_el21 r_midblock)
 
-        runWhen fuller_laziness CoreDoFullerLaziness,
+        runWhen fuller_laziness $ CoreDoPasses
+            [ CoreDoStrictness
+            , CoreDoFullerLaziness ],
 
         runWhen cse CoreCSE,
                 -- We want CSE to follow the final full-laziness pass, because it may

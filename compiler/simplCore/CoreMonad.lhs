@@ -128,7 +128,7 @@ restoreLinkerGlobals () = return ()
 %************************************************************************
 
 These functions are not CoreM monad stuff, but they probably ought to
-be, and it makes a conveneint place.  place for them.  They print out
+be, and it makes a conveneint place for them.  They print out
 stuff before and after core passes, and do Core Lint when necessary.
 
 \begin{code}
