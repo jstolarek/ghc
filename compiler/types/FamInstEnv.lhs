@@ -23,7 +23,9 @@ module FamInstEnv (
 
         FamInstMatch(..),
         lookupFamInstEnv, lookupFamInstEnvConflicts,
-        lookupFamInjInstEnvConflicts,
+
+        -- Injectivity
+        lookupFamInjInstEnvConflicts, validateInjectivity,
 
         chooseBranch, isDominatedBy,
 
@@ -320,7 +322,7 @@ type FamInstEnvs = (FamInstEnv, FamInstEnv)
 newtype FamilyInstEnv
   = FamIE [FamInst]     -- The instances for a particular family, in any order
 
-type FamInjEnv = UniqFM [(TyVar,Bool)] -- maps type family to its injctivity
+type FamInjEnv = UniqFM [Bool] -- maps type family to its injctivity
                                        -- information
 
 instance Outputable FamilyInstEnv where
@@ -490,7 +492,8 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
--- JSTOLAREK: comment this
+-- JSTOLAREK: comment this. I should make a note that describes the whole
+-- algorithm for checking injectivity.
 injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectivityCompatibleBranches injectivity
                               (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
@@ -679,7 +682,7 @@ lookupFamInjInstEnvConflicts :: FamInjEnv
 lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
   = case injInfo of
       Nothing  -> []
-      Just inj -> lookup_fam_inst_env True (my_unify (map snd inj)) envs fam tys
+      Just inj -> lookup_fam_inst_env True (my_unify inj) envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
       -- In example above,   fam tys' = F [b]
@@ -699,6 +702,24 @@ lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axio
 
       noSubst = panic "lookupFamInjInstEnvConflicts noSubst"
       new_branch = coAxiomSingleBranch new_axiom
+
+-- JSTOLAREK: this should refer to note that describes injectivity check.
+-- This currently doesn't check if the RHS does not call type families.
+validateInjectivity :: FamInjEnv -> FamInst -> Bool
+validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+    case lookupUFM injEnv (tyConName fam) of
+      Nothing  -> True
+      Just inj -> let injTys = map fst . filter snd $ zip lhs inj
+                      injVars = getTyVars injTys
+                  in all (isJust . lookupVarSet rhsVars) injVars
+     where rhsVars  = tyVarsOfType rhs
+           (fam, _) = famInstSplitLHS fam_inst
+
+           getTyVars :: [Type] -> [TyVar]
+           getTyVars [] = []
+           getTyVars (TyVarTy var:tys) = var : getTyVars tys
+           getTyVars (_:tys) = getTyVars tys
+
 \end{code}
 
 Note [Family instance overlap conflicts]

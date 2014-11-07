@@ -52,7 +52,7 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
-import Data.Maybe ( fromJust, isNothing )
+import Data.Maybe ( fromJust, isNothing, isJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1148,6 +1148,8 @@ rnFamDecl :: Maybe Name
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInfo = info, fdKindSig = kindSig
                              , fdInjective = L injSpan injectivity })
+-- RAE: Is there anywhere that checks that the result tyvar is fresh?
+-- Can it be the same as a tyvar of an enclosing class?
   = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
@@ -1159,9 +1161,20 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
-                                                         (fromJust resTyVar))
+              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars))
                                          injectivity
+
+              -- `resTyVar` is a `Just` only the result of a type family was
+              -- named by writing `= tyvar` or `= (tyvar :: kind)`. In such case
+              -- we must check that the supplied result name is not identical to
+              -- one of already declared type family arguments.
+              ; when (isJust resTyVar && resName `elem` tvNames) $
+                      setSrcSpan (getLoc (fromJust resTyVar)) $
+                      addErr (hsep [ text "Type variable"
+                                   , pprQuotedList [resName]
+                                   , text $ "naming a type family result also "
+                                         ++ "names one of the arguments."])
+
               ; return ( (tycon', tyvars', kindSig', injectivity')
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
@@ -1171,8 +1184,10 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
-     kvs = extractRdrKindSigVars kindSig
+     kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
+     tvNames  = map getLHsTyVarBndrName (hsQTvBndrs tyvars)
+     resName  = getLHsTyVarBndrName (fromJust resTyVar)
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
      maybeResultBndr (KindedTyVarSig bndr) = Just bndr
@@ -1185,15 +1200,22 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
+     -- RAE: Does this work OK with poly-kinded type families? This
+     -- only works over *type* variables, ignoring *kind* variables. I
+     -- think this is OK, but it would be good to have some tests.
+     --
+     -- Why is this OK? Because all kind variables have to have type
+     -- variables dependent on them, and if a type family is injective
+     -- in its type variables, it then must be injective in its kind
+     -- variables. But, if/when we allow partial injectivity
+     -- annotations, this might require some more thought.
+     -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
-                    -> LHsTyVarBndr RdrName    -- result type variable
                     -> InjectivityInfo RdrName -- injectivity information
                     -> RnM (InjectivityInfo Name)
-     rn_injectivity tyvars resTyVar (InjectivityInfo injFrom injTo) = do
-        let resName    = getLHsTyVarBndrName resTyVar
-            tvNames    = map getLHsTyVarBndrName tyvars
-            -- the only type variable allowed on the LHS of injectivity
+     rn_injectivity tyvars (InjectivityInfo injFrom injTo) = do
+        let -- the only type variable allowed on the LHS of injectivity
             -- condition is the variable naming the result in type family head
             lhsValid   = resName == unLoc injFrom
             -- verifying RHS of injectivity condition is more involved. We
@@ -1209,17 +1231,17 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
             merge [] (L lx _:_) = -- we've run out of type variables in type
                                   -- family head but there are still some
                                   -- variables left in the injectivity condition
-                Just ( vcat [ ptext $ sLit ("Too many type variables on RHS of "
-                                          ++ "injectivity condition.")
+                Just ( vcat [ text $ "Too many type variables on RHS of "
+                                  ++ "injectivity condition."
                             , nest 5
-                            ( vcat [ hcat [ ptext (sLit "You listed ")
+                            ( vcat [ hsep [ text "You listed"
                                           , speakN (length injTo)
-                                          , ptext (sLit " : ")
+                                          , text ":"
                                           , interpp'SP injTo
                                           ]
-                                   , hcat [ ptext (sLit "But at most ")
+                                   , hsep [ text "But at most"
                                           , speakN (length tyvars)
-                                          , ptext (sLit " are allowed : ")
+                                          , text "are allowed :"
                                           , interpp'SP tvNames
                                           ]
                                    ] )
@@ -1238,29 +1260,27 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                            -- here. This ensures that we will
                                            -- always report on the first
                                            -- offending variable.
-                         [ hcat [ ptext (sLit ("Unexpected type variable on " ++
-                                        "the RHS of injectivity condition: "))
-                                , ppr y]
-                         , ptext (sLit ("All variables should be bound in type "
+                         [ text ("Unexpected type variable on the RHS "
+                              ++ "of injectivity condition:") <+> quotes (ppr y)
+                         , text $ "All variables should be bound in type "
                                  ++ "family head and appear at most once in "
                                  ++ "exactly the same order as they were bound."
-                                 )) ], ly)
+                                ], ly)
 
+        -- JSTOLAREK: THIS IS NOT IMPLEMENTED YET
+        -- if renaming of type variables ended with errors (there were
+        -- not-in-scope variables) don't check the validity of injectivity
+        -- declaration. This gives better error messages and saves us from
+        -- unnecessary computations if renaming of type variables fails.
         unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
-               (vcat [ ptext (sLit ("Incorrect type variable on the LHS" ++
-                                    " of injectivity condition"))
+               (vcat [ text $ "Incorrect type variable on the LHS of "
+                           ++ "injectivity condition"
                      , nest 5
-                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr resName ]
-                            , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
+                     ( vcat [ text "Expected :" <+> ppr resName
+                            , text "Actual   :" <+> ppr injFrom ])])
 
         unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
-
-        when (resName `elem` tvNames) $ setSrcSpan (getLoc resTyVar) $
-               addErr (hcat [ ptext (sLit "Type variable ")
-                            , pprQuotedList [resName]
-                            , ptext (sLit (" naming a type family result also"
-                                       ++  " names one of the arguments."))])
 
         injFrom' <- rnLTyVar True injFrom
         injTo'   <- mapM (rnLTyVar True) injTo
@@ -1269,8 +1289,8 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
      getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
-\end{code}
 
+\end{code}
 Note [Stupid theta]
 ~~~~~~~~~~~~~~~~~~~
 Trac #3850 complains about a regression wrt 6.10 for

@@ -258,6 +258,7 @@ cvtDec (FamilyD flav tc tvs kind)
        -- JSTOLAREK: this needs fixing. Add TH support for injectivity
        -- This fmap thing is obviously a temporary "fix".
        ; returnJustL $ TyClD $ FamDecl $
+       -- RAE: You could always interpret the TH to have a plain kind signature with no result name...
          FamilyDecl (cvtFamFlavour flav) (L noSrcSpan Nothing) tc' tvs' undefined {-kind here-} }
   where
     cvtFamFlavour TypeFam = OpenTypeFamily
