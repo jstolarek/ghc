@@ -407,10 +407,9 @@ conflictInstErr fam_inst conflictingMatch
 conflictInjInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
 conflictInjInstErr fam_inst conflictingMatch
   | (FamInstMatch { fim_instance = confInst }) : _ <- conflictingMatch
---JSTOLAREK: better error message here
   = addFamInstsErr (ptext (sLit "Family instance declarations violate injectivity declaration:"))
                    [fam_inst, confInst]
-  | otherwise 
+  | otherwise
   = panic "conflictInjInstErr"
 
 

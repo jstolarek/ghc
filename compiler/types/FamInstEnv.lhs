@@ -635,7 +635,7 @@ lookupFamInstEnv
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnv
-   = lookup_fam_inst_env match
+   = lookup_fam_inst_env False match
    where
      match _ tpl_tvs tpl_tys tys = tcMatchTys tpl_tvs tpl_tys tys
 
@@ -651,7 +651,7 @@ lookupFamInstEnvConflicts
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
-  = lookup_fam_inst_env my_unify envs fam tys
+  = lookup_fam_inst_env False my_unify envs fam tys
   where
     (fam, tys) = famInstSplitLHS fam_inst
         -- In example above,   fam tys' = F [b]
@@ -679,7 +679,7 @@ lookupFamInjInstEnvConflicts :: FamInjEnv
 lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
   = case injInfo of
       Nothing  -> []
-      Just inj -> lookup_fam_inst_env (my_unify (map snd inj)) envs fam tys
+      Just inj -> lookup_fam_inst_env True (my_unify (map snd inj)) envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
       -- In example above,   fam tys' = F [b]
@@ -724,11 +724,13 @@ type MatchFun =  FamInst                -- The FamInst template
               -> Maybe TvSubst
 
 lookup_fam_inst_env'          -- The worker, local to this module
-    :: MatchFun
+    :: Bool                   -- True  <=> injectivity check
+                              -- False <=> conflicts check
+    -> MatchFun
     -> FamInstEnv
     -> TyCon -> [Type]        -- What we are looking for
     -> [FamInstMatch]
-lookup_fam_inst_env' match_fun ie fam match_tys
+lookup_fam_inst_env' injectivityCheck match_fun ie fam match_tys
   | isOpenFamilyTyCon fam
   , Just (FamIE insts) <- lookupUFM ie fam
   = find insts    -- The common case
@@ -739,9 +741,8 @@ lookup_fam_inst_env' match_fun ie fam match_tys
     find (item@(FamInst { fi_tcs = mb_tcs, fi_tvs = tpl_tvs,
                           fi_tys = tpl_tys }) : rest)
         -- Fast check for no match, uses the "rough match" fields
--- JSTOLAREK: design decission here?
---      | instanceCantMatch rough_tcs mb_tcs
---      = find rest
+      | not injectivityCheck && instanceCantMatch rough_tcs mb_tcs
+      = find rest
 
         -- Proper check
       | Just subst <- match_fun item (mkVarSet tpl_tvs) tpl_tys match_tys1
@@ -774,16 +775,18 @@ lookup_fam_inst_env' match_fun ie fam match_tys
       = (roughMatchTcs pre_match_tys1, pre_match_tys1, pre_match_tys2)
 
 lookup_fam_inst_env           -- The worker, local to this module
-    :: MatchFun
+    :: Bool                   -- True  <=> injectivity check
+                              -- False <=> conflicts check
+    -> MatchFun
     -> FamInstEnvs
     -> TyCon -> [Type]          -- What we are looking for
     -> [FamInstMatch]           -- Successful matches
 
 -- Precondition: the tycon is saturated (or over-saturated)
 
-lookup_fam_inst_env match_fun (pkg_ie, home_ie) fam tys
-  =  lookup_fam_inst_env' match_fun home_ie fam tys
-  ++ lookup_fam_inst_env' match_fun pkg_ie  fam tys
+lookup_fam_inst_env injectivityCheck match_fun (pkg_ie, home_ie) fam tys
+  =  lookup_fam_inst_env' injectivityCheck match_fun home_ie fam tys
+  ++ lookup_fam_inst_env' injectivityCheck match_fun pkg_ie  fam tys
 
 \end{code}
 
