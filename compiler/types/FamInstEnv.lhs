@@ -23,7 +23,9 @@ module FamInstEnv (
 
         FamInstMatch(..),
         lookupFamInstEnv, lookupFamInstEnvConflicts,
-        lookupFamInjInstEnvConflicts,
+
+        -- Injectivity
+        lookupFamInjInstEnvConflicts, validateInjectivity,
 
         chooseBranch, isDominatedBy,
 
@@ -490,7 +492,8 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
--- JSTOLAREK: comment this
+-- JSTOLAREK: comment this. I should make a note that describes the whole
+-- algorithm for checking injectivity.
 injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectivityCompatibleBranches injectivity
                               (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
@@ -699,6 +702,25 @@ lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axio
 
       noSubst = panic "lookupFamInjInstEnvConflicts noSubst"
       new_branch = coAxiomSingleBranch new_axiom
+
+-- JSTOLAREK: this should refer to note that describes injectivity check.
+-- This currently doesn't check if the RHS does not call type families.
+validateInjectivity :: FamInjEnv -> FamInst -> Bool
+validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+    case lookupUFM injEnv (tyConName fam) of
+      Nothing  -> True
+      Just inj -> let injTys = map fst . filter snd $
+                               zipWith (\l (_,i) -> (l,i)) lhs inj
+                      injVars = getTyVars injTys
+                  in all (isJust . lookupVarSet rhsVars) injVars
+     where rhsVars  = tyVarsOfType rhs
+           (fam, _) = famInstSplitLHS fam_inst
+
+           getTyVars :: [Type] -> [TyVar]
+           getTyVars [] = []
+           getTyVars (TyVarTy var:tys) = var : getTyVars tys
+           getTyVars (_:tys) = getTyVars tys
+
 \end{code}
 
 Note [Family instance overlap conflicts]

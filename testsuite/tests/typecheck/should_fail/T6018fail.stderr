@@ -32,3 +32,7 @@ T6018fail.hs:33:15:
     Family instance declarations violate injectivity declaration:
       P 'Z m -- Defined at T6018fail.hs:33:15
       P ('S n) m -- Defined at T6018fail.hs:34:15
+
+T6018fail.hs:39:15:
+    Family instance declaration violates injectivity declaration:
+      J Int b -- Defined at T6018fail.hs:39:15

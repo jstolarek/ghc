@@ -145,7 +145,8 @@ checkFamInstConsistency famInstMods directlyImpMods
 -- however be required for a full implementation of the algorithm, eg. to check
 -- that all variables declared in an injectivity condition are actually usied in
 -- the RHS.
-             ; tyFams        = listToUFM
+             -- see Note [Structure of injectivity declarations]
+             ; injDecs       = listToUFM
                                 [ ( tyConName tyfam
                                   , zip (tyConTyVars tyfam) injInfo
                                   )
@@ -153,9 +154,8 @@ checkFamInstConsistency famInstMods directlyImpMods
                                   , tyfam <- getModTyFams hmi
                                   , let (Just injInfo)
                                             = isInjectiveTypeFamilyTyCon tyfam
--- JSTOLAREK: This "optimisation" skips type families that are not declared
--- injective. I should test that this is correct and document it in a note
-                                  , or injInfo  ]
+                                  , or injInfo ] -- skip type families without
+                                                 -- injectivity declarations
              ; hpt_fam_insts = mkModuleEnv [ (hmiModule hmi, hmiFamInstEnv hmi)
                                            | hmi <- eltsUFM hpt]
              ; groups        = map (dep_finsts . mi_deps . modIface)
@@ -168,22 +168,34 @@ checkFamInstConsistency famInstMods directlyImpMods
                  -- the difference gives us the pairs we need to check now
              }
 
-       ; mapM_ (check tyFams hpt_fam_insts) toCheckPairs
+       ; mapM_ (check injDecs hpt_fam_insts) toCheckPairs
        }
   where
     allPairs []     = []
     allPairs (m:ms) = map (ModulePair m) ms ++ allPairs ms
 
-    check tyFams hpt_fam_insts (ModulePair m1 m2)
+    check injDecs hpt_fam_insts (ModulePair m1 m2)
       = do { env1 <- getFamInsts hpt_fam_insts m1
            ; env2 <- getFamInsts hpt_fam_insts m2
            ; mapM_ (checkForConflicts (emptyFamInstEnv, env2))
                    (famInstEnvElts env1)
--- JSTOLAREK: Here I need to check if tyFams is empty or not. This will be a
--- common case, which will make things faster.
-           ; mapM_ (checkForInjectivityConflicts tyFams (emptyFamInstEnv, env2))
+           -- if there are no type families with injectivity declarations skip
+           -- the check
+           ; when (not . isNullUFM $ injDecs) $
+             mapM_ (checkForInjectivityConflicts injDecs (emptyFamInstEnv,env2))
                    (famInstEnvElts env1)
  }
+
+-- Note [Structure of injectivity declarations]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- To perform injectivity check we gather all in-scope declarations of type
+-- families (not instances!) and put these into a map. Type familie names are
+-- the keys. Values are lists of tuples, where each tuple stores a name of a
+-- type variable and a Bool that says if a type family is injective in that
+-- argument. Invariants: 1) each value contains all type variables declared as
+-- arguments for the type family; 2) order of variables in the list is identical
+-- to order of their declaration in the source file
 
 getFamInsts :: ModuleEnv FamInstEnv -> Module -> TcM FamInstEnv
 getFamInsts hpt_fam_insts mod
@@ -292,22 +304,22 @@ tcExtendLocalFamInstEnv :: [FamInst] -> TcM a -> TcM a
 tcExtendLocalFamInstEnv fam_insts thing_inside
  = do { env <- getGblEnv
       ; (_, hpt) <- getEpsAndHpt
--- JSTOLAREK: comment that we're taking families from current module and
--- imported ones
-      ; let typeEnvs    = tcg_type_env env :
+      ; let typeEnvs    = tcg_type_env env : --type families from current module
+                                 -- type families imported from other modules
                                  map (md_types . hm_details) (eltsUFM hpt)
-            tyFamTyCons = filter isSynTyCon . concatMap typeEnvTyCons $ typeEnvs
-            tyFams      = listToUFM
+            tyFamTyCons = -- all type family declarations in scope
+                          filter isSynTyCon . concatMap typeEnvTyCons $ typeEnvs
+            -- see Note [Structure of injectivity declarations]
+            injctivityDecs = listToUFM
                                [ ( tyConName tyfam
                                  , zip (tyConTyVars tyfam) injInfo
                                  )
                                  | tyfam <- tyFamTyCons
                                  , let (Just injInfo)
                                            = isInjectiveTypeFamilyTyCon tyfam
--- JSTOLAREK: This "optimisation" skips type families that are not declared
--- injective. I should test that this is correct and document it in a note
-                                 , or injInfo  ]
-      ; (inst_env', fam_insts') <- foldlM (addLocalFamInst tyFams)
+                                 , or injInfo  ] -- skip type families without
+                                                 -- injectivity declarations
+      ; (inst_env', fam_insts') <- foldlM (addLocalFamInst injctivityDecs)
                                           (tcg_fam_inst_env env, tcg_fam_insts env)
                                           fam_insts
       ; let env' = env { tcg_fam_insts    = fam_insts'
@@ -382,16 +394,20 @@ checkForConflicts inst_envs fam_inst
 
 
 checkForInjectivityConflicts :: FamInjEnv -> FamInstEnvs -> FamInst -> TcM Bool
-checkForInjectivityConflicts inj inst_envs fam_inst
-  = do { let conflicts = lookupFamInjInstEnvConflicts inj inst_envs fam_inst
+checkForInjectivityConflicts inj_env inst_envs fam_inst
+  = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
              no_conflicts = null conflicts
+             is_valid     = validateInjectivity inj_env fam_inst
        ; traceTc "checkForInjectivityConflicts" $
          vcat [ ppr (map fim_instance conflicts)
               , ppr fam_inst
               -- , ppr inst_envs
               -- , ppr inj
          ]
-       ; unless no_conflicts $ conflictInjInstErr fam_inst conflicts
+       ; unless no_conflicts $
+                    conflictInjInstErr fam_inst conflicts
+       ; unless is_valid $
+                    invalidInjInstErr fam_inst
        ; return no_conflicts }
 
 
@@ -411,6 +427,12 @@ conflictInjInstErr fam_inst conflictingMatch
                    [fam_inst, confInst]
   | otherwise
   = panic "conflictInjInstErr"
+
+
+invalidInjInstErr :: FamInst -> TcRn ()
+invalidInjInstErr fam_inst
+  = addFamInstsErr (ptext (sLit "Family instance declaration violates injectivity declaration:"))
+                   [fam_inst]
 
 
 addFamInstsErr :: SDoc -> [FamInst] -> TcRn ()

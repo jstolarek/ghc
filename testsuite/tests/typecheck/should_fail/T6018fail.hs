@@ -32,3 +32,8 @@ data N = Z | S N
 type family P (a :: N) (b :: N) = (r :: N) | r -> a b
 type instance P  Z    m = m
 type instance P (S n) m = S (P n m)
+
+-- this is not injective - not all type variables mentioned on LHS are mentioned
+-- on RHS
+type family J a b = r | r -> a b
+type instance J Int b = Char
