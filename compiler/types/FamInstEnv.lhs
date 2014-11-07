@@ -495,7 +495,7 @@ injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectivityCompatibleBranches injectivity
                               (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                               (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
-  = trace "Injectivity check" $ let get_inj  = map snd . filter fst . zip injectivity
+  = let get_inj  = map snd . filter fst . zip injectivity
     in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
       -- JSTOLAREK: Voodoo programming here. Does that make sense?
       SurelyApart -> case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
@@ -679,20 +679,20 @@ lookupFamInjInstEnvConflicts :: FamInjEnv
 lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
   = case injInfo of
       Nothing  -> []
-      Just inj -> trace "Just" $ lookup_fam_inst_env undefined {- (my_unify (map snd inj))-} envs fam tys
+      Just inj -> lookup_fam_inst_env (my_unify (map snd inj)) envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
       -- In example above,   fam tys' = F [b]
       injInfo = lookupUFM injEnv (tyConName fam)
 
       my_unify inj (FamInst { fi_axiom = old_axiom }) tpl_tvs tpl_tys _
-          = {-ASSERT2( tyVarsOfTypes tys `disjointVarSet` tpl_tvs,
+          = ASSERT2( tyVarsOfTypes tys `disjointVarSet` tpl_tvs,
                        (ppr fam <+> ppr tys) $$
-                       (ppr tpl_tvs <+> ppr tpl_tys) )-}
+                       (ppr tpl_tvs <+> ppr tpl_tys) )
       -- Unification will break badly if the variables overlap
       -- They shouldn't because we allocate separate uniques for them
             if injectivityCompatibleBranches inj (coAxiomSingleBranch old_axiom)
-                                                 new_branch
+                                                  new_branch
             then Nothing
             else Just noSubst
       -- JSTOLAREK: this probably deserves a note
@@ -740,17 +740,17 @@ lookup_fam_inst_env' match_fun ie fam match_tys
                           fi_tys = tpl_tys }) : rest)
         -- Fast check for no match, uses the "rough match" fields
 -- JSTOLAREK: design decission here?
---      | trace "instanceCantMatch" $ instanceCantMatch rough_tcs mb_tcs
+--      | instanceCantMatch rough_tcs mb_tcs
 --      = find rest
---trace ("this trace says we have Nothing: " ++ show (isNothing $ match_fun item (mkVarSet tpl_tvs) tpl_tys match_tys1)) $ 
+
         -- Proper check
       | Just subst <- match_fun item (mkVarSet tpl_tvs) tpl_tys match_tys1
-      = trace "this one does not" $ (FamInstMatch { fim_instance = item
+      = (FamInstMatch { fim_instance = item
                       , fim_tys      = substTyVars subst tpl_tvs `chkAppend` match_tys2 })
         : find rest
 
         -- No match => try next
-      | trace "and then we hit a catch-all guard" $ otherwise
+      | otherwise
       = find rest
 
       where
