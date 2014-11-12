@@ -1143,6 +1143,8 @@ rnFamDecl :: Maybe Name
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInfo = info, fdKindSig = kindSig
                              , fdInjective = L injSpan injectivity })
+-- RAE: Is there anywhere that checks that the result tyvar is fresh?
+-- Can it be the same as a tyvar of an enclosing class?
   = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
@@ -1154,6 +1156,10 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
+              -- RAE: How do I know this fromJust will succeed? Is
+              -- there a place that checks to make sure that there is
+              -- always a variable when there is an injectivity
+              -- annotation?
               ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
                                                          (fromJust resTyVar))
                                          injectivity
@@ -1180,6 +1186,15 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
+     -- RAE: Does this work OK with poly-kinded type families? This
+     -- only works over *type* variables, ignoring *kind* variables. I
+     -- think this is OK, but it would be good to have some tests.
+     --
+     -- Why is this OK? Because all kind variables have to have type
+     -- variables dependent on them, and if a type family is injective
+     -- in its type variables, it then must be injective in its kind
+     -- variables. But, if/when we allow partial injectivity
+     -- annotations, this might require some more thought.
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
                     -> LHsTyVarBndr RdrName    -- result type variable
@@ -1204,6 +1219,14 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
             merge [] (L lx _:_) = -- we've run out of type variables in type
                                   -- family head but there are still some
                                   -- variables left in the injectivity condition
+
+                -- RAE: Better to use combinators like <+> or hsep
+                -- than putting spaces in strings.
+                --
+                -- Also, with some RULES that have been added, text is
+                -- just as effective as ptext . sLit and is easier to
+                -- type. Not worth changing old code, but useful for
+                -- future.
                 Just ( vcat [ ptext $ sLit ("Too many type variables on RHS of "
                                           ++ "injectivity condition.")
                             , nest 5

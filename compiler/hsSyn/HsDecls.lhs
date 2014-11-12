@@ -535,6 +535,7 @@ data FamilyDecl name = FamilyDecl
   -- JSTOLAREK: everything else here is Located, so I've made this located as
   -- well. But perhaps I don't have to? I'm not introducing any bindings on the
   -- one hand, but then again I'll be reporting errors later...
+  -- Located should go inside Maybe
   , fdInjective :: Located (Maybe (InjectivityInfo name))
                                                  -- injectivity information
   , fdLName     :: Located name                  -- type constructor
@@ -672,11 +673,13 @@ famDeclHasCusk (FamilyDecl { fdInfo = ClosedTypeFamily _
   = hsTvbAllKinded tyvars && existsSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
 
+-- JSTOLAREK: haddockify
 existsSignature :: FamilyResultSig a -> Bool
 existsSignature NoSig = False
 existsSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
 existsSignature _     = True
 
+-- JSTOLAREK: haddockify
 extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
 extractInjectivityInformation (FamilyDecl { fdInjective = L _ Nothing
                                           , fdTyVars = tvbndrs } ) =
