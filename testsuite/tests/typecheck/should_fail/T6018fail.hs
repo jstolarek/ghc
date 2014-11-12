@@ -28,7 +28,9 @@ type instance IdProxy a = Id a
 
 data N = Z | S N
 
--- for now we also disallow self-recursion, though P really is injective
+-- P is not injective, although the user declares otherwise. This
+-- should be rejected on the grounds of calling a type family in the
+-- RHS.
 type family P (a :: N) (b :: N) = (r :: N) | r -> a b
 type instance P  Z    m = m
 type instance P (S n) m = S (P n m)

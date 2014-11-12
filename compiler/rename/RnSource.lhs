@@ -1156,10 +1156,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              -- RAE: How do I know this fromJust will succeed? Is
-              -- there a place that checks to make sure that there is
-              -- always a variable when there is an injectivity
-              -- annotation?
+              -- See Note [resTyVar/injectivity invariant]
               ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
                                                          (fromJust resTyVar))
                                          injectivity
@@ -1195,6 +1192,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      -- in its type variables, it then must be injective in its kind
      -- variables. But, if/when we allow partial injectivity
      -- annotations, this might require some more thought.
+     -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
                     -> LHsTyVarBndr RdrName    -- result type variable
@@ -1278,8 +1276,19 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
      getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
-\end{code}
 
+-- Note [resTyVar/injectivity invariant]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- The call to `fromJust resTyVar` during renaming of injectivity declaration
+-- relies on a subtle invariant. `resTyVar` is `Just sth` only when the user
+-- supplies the name for the result of a type family by writing `= tyvar` or `=
+-- (tyvar :: kind)`. Moreover, injectivity declaration can be `Just sth` only
+-- when the result of a type family is named. In other words, when `resTyVar` is
+-- `Nothing` then `injectivity` also must be `Nothing`. In such situation
+-- `fromJust resTyVar` will not be evaluated thanks to properties of `traverse`.
+
+\end{code}
 Note [Stupid theta]
 ~~~~~~~~~~~~~~~~~~~
 Trac #3850 complains about a regression wrt 6.10 for
