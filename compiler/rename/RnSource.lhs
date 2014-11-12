@@ -1219,25 +1219,17 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
             merge [] (L lx _:_) = -- we've run out of type variables in type
                                   -- family head but there are still some
                                   -- variables left in the injectivity condition
-
-                -- RAE: Better to use combinators like <+> or hsep
-                -- than putting spaces in strings.
-                --
-                -- Also, with some RULES that have been added, text is
-                -- just as effective as ptext . sLit and is easier to
-                -- type. Not worth changing old code, but useful for
-                -- future.
-                Just ( vcat [ ptext $ sLit ("Too many type variables on RHS of "
-                                          ++ "injectivity condition.")
+                Just ( vcat [ text $ "Too many type variables on RHS of "
+                                  ++ "injectivity condition."
                             , nest 5
-                            ( vcat [ hcat [ ptext (sLit "You listed ")
+                            ( vcat [ hsep [ text "You listed"
                                           , speakN (length injTo)
-                                          , ptext (sLit " : ")
+                                          , text ":"
                                           , interpp'SP injTo
                                           ]
-                                   , hcat [ ptext (sLit "But at most ")
+                                   , hsep [ text "But at most"
                                           , speakN (length tyvars)
-                                          , ptext (sLit " are allowed : ")
+                                          , text "are allowed :"
                                           , interpp'SP tvNames
                                           ]
                                    ] )
@@ -1256,29 +1248,28 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                            -- here. This ensures that we will
                                            -- always report on the first
                                            -- offending variable.
-                         [ hcat [ ptext (sLit ("Unexpected type variable on " ++
-                                        "the RHS of injectivity condition: "))
-                                , ppr y]
-                         , ptext (sLit ("All variables should be bound in type "
+                         [ text ("Unexpected type variable on the RHS "
+                               ++ "of injectivity condition:") <+> ppr y
+                         , text $ "All variables should be bound in type "
                                  ++ "family head and appear at most once in "
                                  ++ "exactly the same order as they were bound."
-                                 )) ], ly)
+                                ], ly)
 
         unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
-               (vcat [ ptext (sLit ("Incorrect type variable on the LHS" ++
-                                    " of injectivity condition"))
+               (vcat [ text $ "Incorrect type variable on the LHS of "
+                           ++ "injectivity condition"
                      , nest 5
-                     ( vcat [ hcat [ptext (sLit "Expected : "), ppr resName ]
-                            , hcat [ptext (sLit "Actual   : "), ppr injFrom]])])
+                     ( vcat [ text "Expected :" <+> ppr resName
+                            , text "Actual   :" <+> ppr injFrom ])])
 
         unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
         when (resName `elem` tvNames) $ setSrcSpan (getLoc resTyVar) $
-               addErr (hcat [ ptext (sLit "Type variable ")
+               addErr (hsep [ text "Type variable"
                             , pprQuotedList [resName]
-                            , ptext (sLit (" naming a type family result also"
-                                       ++  " names one of the arguments."))])
+                            , text $ "naming a type family result also "
+                                  ++ "names one of the arguments."])
 
         injFrom' <- rnLTyVar True injFrom
         injTo'   <- mapM (rnLTyVar True) injTo

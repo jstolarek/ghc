@@ -763,6 +763,8 @@ tcTySynRhs :: RecTyInfo
            -> Name
            -> [TyVar] -> Kind
            -> LHsType Name -> TcM [TyThing]
+-- JSTOLAREK: this probably needs to receive injectivity info. Revisit
+-- once I start tests on type classes and associated type synonyms.
 tcTySynRhs rec_info tc_name tvs kind hs_ty
   = do { env <- getLclEnv
        ; traceTc "tc-syn" (ppr tc_name $$ ppr (tcl_env env))
