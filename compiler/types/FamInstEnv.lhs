@@ -25,7 +25,8 @@ module FamInstEnv (
         lookupFamInstEnv, lookupFamInstEnvConflicts,
 
         -- Injectivity
-        lookupFamInjInstEnvConflicts, validateInjectivity,
+        lookupFamInjInstEnvConflicts, validateAllTyVarsInRHS,
+        validateNoTyFamsInRHS,
 
         chooseBranch, isDominatedBy,
 
@@ -501,6 +502,8 @@ injectivityCompatibleBranches injectivity
   = let get_inj  = map snd . filter fst . zip injectivity
     in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
       -- JSTOLAREK: Voodoo programming here. Does that make sense?
+      -- The reasoning here is reversed compared to the original
+      -- proposal on the wiki
       SurelyApart -> case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
                        SurelyApart -> True
                        _           -> False
@@ -704,21 +707,27 @@ lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axio
       new_branch = coAxiomSingleBranch new_axiom
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
--- This currently doesn't check if the RHS does not call type families.
-validateInjectivity :: FamInjEnv -> FamInst -> Bool
-validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+-- haddockify
+validateAllTyVarsInRHS :: FamInjEnv -> FamInst -> [TyVar]
+validateAllTyVarsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
     case lookupUFM injEnv (tyConName fam) of
-      Nothing  -> True
-      Just inj -> let injTys = map fst . filter snd $ zip lhs inj
-                      injVars = getTyVars injTys
-                  in all (isJust . lookupVarSet rhsVars) injVars
+      Nothing  -> []
+      Just inj -> let -- get the list of type variables in which type
+                      -- family is injective
+                      injTys  = map fst . filter snd $ zip lhs inj
+                      injVars = varSetElems $ tyVarsOfTypes injTys
+                  in  -- and return all injective variables not mentioned
+                      -- in the RHS
+                      filter (isNothing . lookupVarSet rhsVars) injVars
      where rhsVars  = tyVarsOfType rhs
            (fam, _) = famInstSplitLHS fam_inst
 
-           getTyVars :: [Type] -> [TyVar]
-           getTyVars [] = []
-           getTyVars (TyVarTy var:tys) = var : getTyVars tys
-           getTyVars (_:tys) = getTyVars tys
+
+-- JSTOLAREK: this should refer to note that describes injectivity check.
+-- haddockify
+validateNoTyFamsInRHS :: FamInst -> [TyCon]
+validateNoTyFamsInRHS (FamInst {fi_rhs = rhs}) =
+  filter isSynTyCon (tyConsOfType rhs)
 
 \end{code}
 

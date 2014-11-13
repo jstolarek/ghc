@@ -22,7 +22,7 @@ type instance I Bool Int  Int  = Int
 type family Id a = result | result -> a
 type instance Id a = a
 
--- ...but despite that we disallow a call to it
+-- ...but despite that we disallow a call to Id
 type family IdProxy a = r | r -> a
 type instance IdProxy a = Id a
 
@@ -35,7 +35,11 @@ type family P (a :: N) (b :: N) = (r :: N) | r -> a b
 type instance P  Z    m = m
 type instance P (S n) m = S (P n m)
 
--- this is not injective - not all type variables mentioned on LHS are mentioned
--- on RHS
-type family J a b = r | r -> a b
-type instance J Int b = Char
+-- this is not injective - not all injective type variables mentioned
+-- on LHS are mentioned on RHS
+type family J a b c = r | r -> a b
+type instance J Int b c = Char
+
+-- same as above, but tyvar is now nested inside a tycon
+type family K (a :: N) (b :: N) = (r :: N) | r -> a b
+type instance K (S n) m = S m

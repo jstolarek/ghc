@@ -799,6 +799,15 @@ tryTc m
         -- in exception; see IOEnv.failM
    }
 
+-- JSTOLAREK: document this
+askTcMessages :: TcRn a -> TcRn (Messages, a)
+askTcMessages m
+ = do { errs_var <- newTcRef emptyMessages
+      ; res  <- setErrsVar errs_var m
+      ; msgs <- readTcRef errs_var
+      ; addMessages msgs
+      ; return (msgs, res) }
+
 -----------------------
 tryTcErrs :: TcRn a -> TcRn (Messages, Maybe a)
 -- Run the thing, returning

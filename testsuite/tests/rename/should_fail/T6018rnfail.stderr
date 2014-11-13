@@ -76,3 +76,9 @@ T6018rnfail.hs:54:30:
     Too many type variables on RHS of injectivity condition.
          You listed three : a, b, b
          But at most two are allowed : a, b
+
+T6018rnfail.hs:57:1: Not in scope: type variable ‘c’
+
+T6018rnfail.hs:58:1: Not in scope: type variable ‘c’
+
+T6018rnfail.hs:61:3: Not in scope: type variable ‘c’
