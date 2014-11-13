@@ -1263,7 +1263,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                  ++ "exactly the same order as they were bound."
                                 ], ly)
 
-        ((_,errs), (injFrom', injTo')) <- askTcMessages $ do
+        ((injFrom', injTo'), isError) <- askNoErrs $ do
           injFrom' <- rnLTyVar True injFrom
           injTo'   <- mapM (rnLTyVar True) injTo
           return (injFrom', injTo')
@@ -1272,7 +1272,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
         -- not-in-scope variables) don't check the validity of injectivity
         -- declaration. This gives better error messages and saves us from
         -- unnecessary computations if renaming of type variables fails.
-        unless (not (isEmptyBag errs) || lhsValid) $
+        unless (not isError || lhsValid) $
                setSrcSpan (getLoc injFrom) $
                addErr (vcat [ text $ "Incorrect type variable on the LHS of "
                                   ++ "injectivity condition"
@@ -1280,7 +1280,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                      ( vcat [ text "Expected :" <+> ppr resName
                             , text "Actual   :" <+> ppr injFrom ])])
 
-        unless (not (isEmptyBag errs) || isNothing rhsValid) $
+        unless (not isError || isNothing rhsValid) $
                setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
