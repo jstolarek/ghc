@@ -1262,6 +1262,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                  ++ "exactly the same order as they were bound."
                                 ], ly)
 
+        injFrom' <- rnLTyVar True injFrom
+        injTo'   <- mapM (rnLTyVar True) injTo
+
         -- JSTOLAREK: THIS IS NOT IMPLEMENTED YET
         -- if renaming of type variables ended with errors (there were
         -- not-in-scope variables) don't check the validity of injectivity
@@ -1277,8 +1280,6 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
         unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
-        injFrom' <- rnLTyVar True injFrom
-        injTo'   <- mapM (rnLTyVar True) injTo
         return $ InjectivityInfo injFrom' injTo'
 
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name

@@ -25,7 +25,7 @@ module FamInstEnv (
         lookupFamInstEnv, lookupFamInstEnvConflicts,
 
         -- Injectivity
-        lookupFamInjInstEnvConflicts, validateInjectivity,
+        lookupFamInjInstEnvConflicts, validateAllTyVarsInRHS,
 
         chooseBranch, isDominatedBy,
 
@@ -705,13 +705,18 @@ lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axio
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
 -- This currently doesn't check if the RHS does not call type families.
-validateInjectivity :: FamInjEnv -> FamInst -> Bool
-validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+-- haddockify
+validateAllTyVarsInRHS :: FamInjEnv -> FamInst -> [TyVar]
+validateAllTyVarsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
     case lookupUFM injEnv (tyConName fam) of
-      Nothing  -> True
-      Just inj -> let injTys = map fst . filter snd $ zip lhs inj
+      Nothing  -> []
+      Just inj -> let -- get the list of type variables in which type
+                      -- family is injective
+                      injTys  = map fst . filter snd $ zip lhs inj
                       injVars = getTyVars injTys
-                  in all (isJust . lookupVarSet rhsVars) injVars
+                  in  -- and return all injective variables not mentioned
+                      -- in the RHS
+                      filter (isNothing . lookupVarSet rhsVars) injVars
      where rhsVars  = tyVarsOfType rhs
            (fam, _) = famInstSplitLHS fam_inst
 
@@ -719,6 +724,13 @@ validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
            getTyVars [] = []
            getTyVars (TyVarTy var:tys) = var : getTyVars tys
            getTyVars (_:tys) = getTyVars tys
+
+{-
+  | TyConApp      -- See Note [AppTy invariant]
+        TyCon
+        [KindOrType]    -- ^ Application of a 'TyCon', including newtypes /and/ synonyms.
+isSynTyCon
+-}
 
 \end{code}
 

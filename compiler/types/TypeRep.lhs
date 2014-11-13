@@ -77,6 +77,7 @@ import PrelNames
 import Outputable
 import FastString
 import Util
+import UniqSet
 import DynFlags
 
 -- libraries
@@ -297,6 +298,7 @@ isTypeVar v = isTKVar v && not (isSuperKind (varType v))
 
 isKindVar :: Var -> Bool
 isKindVar v = isTKVar v && isSuperKind (varType v)
+
 \end{code}
 
 

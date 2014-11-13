@@ -32,6 +32,7 @@ import Maybes
 import TcMType
 import TcType
 import Name
+import Var ( TyVar )
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -395,7 +396,8 @@ checkForInjectivityConflicts :: FamInjEnv -> FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts inj_env inst_envs fam_inst
   = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
              no_conflicts = null conflicts
-             is_valid     = validateInjectivity inj_env fam_inst
+             unused_tvs   = validateAllTyVarsInRHS inj_env fam_inst
+             all_tvs_used = null unused_tvs
        ; traceTc "checkForInjectivityConflicts" $
          vcat [ ppr (map fim_instance conflicts)
               , ppr fam_inst
@@ -404,15 +406,15 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
          ]
        ; unless no_conflicts $
                     conflictInjInstErr fam_inst conflicts
-       ; unless is_valid $
-                    invalidInjInstErr fam_inst
+       ; unless all_tvs_used $
+                    unusedInjectiveVarstErr fam_inst unused_tvs
        ; return no_conflicts }
 
 
 conflictInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
 conflictInstErr fam_inst conflictingMatch
   | (FamInstMatch { fim_instance = confInst }) : _ <- conflictingMatch
-  = addFamInstsErr (ptext (sLit "Conflicting family instance declarations:"))
+  = addFamInstsErr (text "Conflicting family instance declarations:")
                    [fam_inst, confInst]
   | otherwise
   = panic "conflictInstErr"
@@ -421,15 +423,19 @@ conflictInstErr fam_inst conflictingMatch
 conflictInjInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
 conflictInjInstErr fam_inst conflictingMatch
   | (FamInstMatch { fim_instance = confInst }) : _ <- conflictingMatch
-  = addFamInstsErr (ptext (sLit "Family instance declarations violate injectivity declaration:"))
+  = addFamInstsErr (text ("Family instance declarations violate"
+                       ++ " injectivity declaration:"))
                    [fam_inst, confInst]
   | otherwise
   = panic "conflictInjInstErr"
 
 
-invalidInjInstErr :: FamInst -> TcRn ()
-invalidInjInstErr fam_inst
-  = addFamInstsErr (ptext (sLit "Family instance declaration violates injectivity declaration:"))
+unusedInjectiveVarstErr :: FamInst -> [TyVar]-> TcRn ()
+unusedInjectiveVarstErr fam_inst err
+  = addFamInstsErr (text ("Family instance declaration violates injectivity " ++
+                          "declaration. Injective type variables not used " ++
+                          "in the type family equation:")
+                    <+> pprQuotedList err)
                    [fam_inst]
 
 
