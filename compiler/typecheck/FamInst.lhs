@@ -395,9 +395,11 @@ checkForConflicts inst_envs fam_inst
 checkForInjectivityConflicts :: FamInjEnv -> FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts inj_env inst_envs fam_inst
   = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
-             no_conflicts = null conflicts
-             unused_tvs   = validateAllTyVarsInRHS inj_env fam_inst
-             all_tvs_used = null unused_tvs
+             no_conflicts  = null conflicts
+             unused_tvs    = validateAllTyVarsInRHS inj_env fam_inst
+             all_tvs_used  = null unused_tvs
+             tyfams_called = validateNoTyFamsInRHS fam_inst
+             no_tyfams     = null tyfams_called
        ; traceTc "checkForInjectivityConflicts" $
          vcat [ ppr (map fim_instance conflicts)
               , ppr fam_inst
@@ -407,8 +409,10 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
        ; unless no_conflicts $
                     conflictInjInstErr fam_inst conflicts
        ; unless all_tvs_used $
-                    unusedInjectiveVarstErr fam_inst unused_tvs
-       ; return no_conflicts }
+                    unusedInjectiveVarsErr fam_inst unused_tvs
+       ; unless no_tyfams $
+                    tyfamsUsedInjErr fam_inst tyfams_called
+       ; return (no_conflicts && all_tvs_used && no_tyfams) }
 
 
 conflictInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
@@ -430,12 +434,23 @@ conflictInjInstErr fam_inst conflictingMatch
   = panic "conflictInjInstErr"
 
 
-unusedInjectiveVarstErr :: FamInst -> [TyVar]-> TcRn ()
-unusedInjectiveVarstErr fam_inst err
+unusedInjectiveVarsErr :: FamInst -> [TyVar] -> TcRn ()
+unusedInjectiveVarsErr fam_inst unused_tyvars
   = addFamInstsErr (text ("Family instance declaration violates injectivity " ++
-                          "declaration. Injective type variables not used " ++
-                          "in the type family equation:")
-                    <+> pprQuotedList err)
+                          "declaration. Type variable") <>
+                    plural unused_tyvars <+>
+                    pprQuotedList unused_tyvars <+>
+                    text "should appear in the type family equation:")
+                   [fam_inst]
+
+
+tyfamsUsedInjErr :: FamInst -> [TyCon] -> TcRn ()
+tyfamsUsedInjErr fam_inst tyfams_called
+  = addFamInstsErr (text "Calling type" <+>
+                    irregularPlural tyfams_called (text "family")
+                                                  (text "families") <+>
+                    pprQuotedList tyfams_called <+>
+                    text "is not allowed in injective type family equation:")
                    [fam_inst]
 
 

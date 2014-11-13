@@ -33,7 +33,8 @@ module Outputable (
         sep, cat,
         fsep, fcat,
         hang, punctuate, ppWhen, ppUnless,
-        speakNth, speakNTimes, speakN, speakNOf, plural, isOrAre,
+        speakNth, speakNTimes, speakN, speakNOf, plural, irregularPlural,
+        isOrAre,
 
         coloured, PprColour, colType, colCoerc, colDataCon,
         colBinder, bold, keyword,
@@ -973,6 +974,11 @@ speakNTimes t | t == 1     = ptext (sLit "once")
 plural :: [a] -> SDoc
 plural [_] = empty  -- a bit frightening, but there you are
 plural _   = char 's'
+
+-- JSTOLAREK: haddock
+irregularPlural :: [a] -> SDoc -> SDoc -> SDoc
+irregularPlural [_] singular _      = singular
+irregularPlural  _  _        plural = plural
 
 -- | Determines the form of to be appropriate for the length of a list:
 --
