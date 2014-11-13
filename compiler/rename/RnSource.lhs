@@ -52,7 +52,7 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
-import Data.Maybe ( fromJust, isNothing )
+import Data.Maybe ( fromJust, isNothing, isJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1156,10 +1156,20 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              -- See Note [resTyVar/injectivity invariant]
-              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars)
-                                                         (fromJust resTyVar))
+              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars))
                                          injectivity
+
+              -- `resTyVar` is a `Just` only the result of a type family was
+              -- named by writing `= tyvar` or `= (tyvar :: kind)`. In such case
+              -- we must check that the supplied result name is not identical to
+              -- one of already declared type family arguments.
+              ; when (isJust resTyVar && resName `elem` tvNames) $
+                      setSrcSpan (getLoc (fromJust resTyVar)) $
+                      addErr (hsep [ text "Type variable"
+                                   , pprQuotedList [resName]
+                                   , text $ "naming a type family result also "
+                                         ++ "names one of the arguments."])
+
               ; return ( (tycon', tyvars', kindSig', injectivity')
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
@@ -1169,8 +1179,10 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
-     kvs = extractRdrKindSigVars kindSig
+     kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
+     tvNames  = map getLHsTyVarBndrName (hsQTvBndrs tyvars)
+     resName  = getLHsTyVarBndrName (fromJust resTyVar)
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
      maybeResultBndr (KindedTyVarSig bndr) = Just bndr
@@ -1195,13 +1207,10 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
-                    -> LHsTyVarBndr RdrName    -- result type variable
                     -> InjectivityInfo RdrName -- injectivity information
                     -> RnM (InjectivityInfo Name)
-     rn_injectivity tyvars resTyVar (InjectivityInfo injFrom injTo) = do
-        let resName    = getLHsTyVarBndrName resTyVar
-            tvNames    = map getLHsTyVarBndrName tyvars
-            -- the only type variable allowed on the LHS of injectivity
+     rn_injectivity tyvars (InjectivityInfo injFrom injTo) = do
+        let -- the only type variable allowed on the LHS of injectivity
             -- condition is the variable naming the result in type family head
             lhsValid   = resName == unLoc injFrom
             -- verifying RHS of injectivity condition is more involved. We
@@ -1247,12 +1256,17 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                            -- always report on the first
                                            -- offending variable.
                          [ text ("Unexpected type variable on the RHS "
-                               ++ "of injectivity condition:") <+> ppr y
+                              ++ "of injectivity condition:") <+> quotes (ppr y)
                          , text $ "All variables should be bound in type "
                                  ++ "family head and appear at most once in "
                                  ++ "exactly the same order as they were bound."
                                 ], ly)
 
+        -- JSTOLAREK: THIS IS NOT IMPLEMENTED YET
+        -- if renaming of type variables ended with errors (there were
+        -- not-in-scope variables) don't check the validity of injectivity
+        -- declaration. This gives better error messages and saves us from
+        -- unnecessary computations if renaming of type variables fails.
         unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
                (vcat [ text $ "Incorrect type variable on the LHS of "
                            ++ "injectivity condition"
@@ -1263,12 +1277,6 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
         unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
-        when (resName `elem` tvNames) $ setSrcSpan (getLoc resTyVar) $
-               addErr (hsep [ text "Type variable"
-                            , pprQuotedList [resName]
-                            , text $ "naming a type family result also "
-                                  ++ "names one of the arguments."])
-
         injFrom' <- rnLTyVar True injFrom
         injTo'   <- mapM (rnLTyVar True) injTo
         return $ InjectivityInfo injFrom' injTo'
@@ -1276,17 +1284,6 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
      getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
-
--- Note [resTyVar/injectivity invariant]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
---
--- The call to `fromJust resTyVar` during renaming of injectivity declaration
--- relies on a subtle invariant. `resTyVar` is `Just sth` only when the user
--- supplies the name for the result of a type family by writing `= tyvar` or `=
--- (tyvar :: kind)`. Moreover, injectivity declaration can be `Just sth` only
--- when the result of a type family is named. In other words, when `resTyVar` is
--- `Nothing` then `injectivity` also must be `Nothing`. In such situation
--- `fromJust resTyVar` will not be evaluated thanks to properties of `traverse`.
 
 \end{code}
 Note [Stupid theta]
