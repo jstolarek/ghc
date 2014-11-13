@@ -141,15 +141,9 @@ checkFamInstConsistency famInstMods directlyImpMods
                                . md_fam_insts . hm_details
              ; getModTyFams  = filter isSynTyCon . typeEnvTyCons
                                  . md_types . hm_details
--- JSTOLAREK: Currently I'm not using the names of type variables. They will
--- however be required for a full implementation of the algorithm, eg. to check
--- that all variables declared in an injectivity condition are actually usied in
--- the RHS.
              -- see Note [Structure of injectivity declarations]
              ; injDecs       = listToUFM
-                                [ ( tyConName tyfam
-                                  , zip (tyConTyVars tyfam) injInfo
-                                  )
+                                [ ( tyConName tyfam, injInfo )
                                   | hmi <- eltsUFM hpt
                                   , tyfam <- getModTyFams hmi
                                   , let (Just injInfo)
@@ -189,13 +183,18 @@ checkFamInstConsistency famInstMods directlyImpMods
 -- Note [Structure of injectivity declarations]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
--- To perform injectivity check we gather all in-scope declarations of type
--- families (not instances!) and put these into a map. Type familie names are
--- the keys. Values are lists of tuples, where each tuple stores a name of a
--- type variable and a Bool that says if a type family is injective in that
--- argument. Invariants: 1) each value contains all type variables declared as
--- arguments for the type family; 2) order of variables in the list is identical
--- to order of their declaration in the source file
+-- To perform injectivity check we gather all in-scope declarations of
+-- type families (not instances!) and put these into a map. Type
+-- family names are the keys. Values are lists of Bools that say in
+-- which arguments the type family is injective. It is assumed that
+-- the order of values in the list corresponds to order of type family
+-- argument declaration in the source file. Eg. if a user declared:
+--
+--   type family Foo a b c = r | r -> a b
+--
+-- then the map entry for Foo will store [True, True, False], because
+-- Foo was declared injective in its first two arguments but not the
+-- third one.
 
 getFamInsts :: ModuleEnv FamInstEnv -> Module -> TcM FamInstEnv
 getFamInsts hpt_fam_insts mod
@@ -311,17 +310,16 @@ tcExtendLocalFamInstEnv fam_insts thing_inside
                           filter isSynTyCon . concatMap typeEnvTyCons $ typeEnvs
             -- see Note [Structure of injectivity declarations]
             injctivityDecs = listToUFM
-                               [ ( tyConName tyfam
-                                 , zip (tyConTyVars tyfam) injInfo
-                                 )
+                               [ ( tyConName tyfam, injInfo )
                                  | tyfam <- tyFamTyCons
                                  , let (Just injInfo)
                                            = isInjectiveTypeFamilyTyCon tyfam
                                  , or injInfo  ] -- skip type families without
                                                  -- injectivity declarations
-      ; (inst_env', fam_insts') <- foldlM (addLocalFamInst injctivityDecs)
-                                          (tcg_fam_inst_env env, tcg_fam_insts env)
-                                          fam_insts
+      ; (inst_env', fam_insts') <-
+                     foldlM (addLocalFamInst injctivityDecs)
+                            (tcg_fam_inst_env env, tcg_fam_insts env)
+                            fam_insts
       ; let env' = env { tcg_fam_insts    = fam_insts'
                        , tcg_fam_inst_env = inst_env' }
       ; setGblEnv env' thing_inside

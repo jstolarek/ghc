@@ -322,7 +322,7 @@ type FamInstEnvs = (FamInstEnv, FamInstEnv)
 newtype FamilyInstEnv
   = FamIE [FamInst]     -- The instances for a particular family, in any order
 
-type FamInjEnv = UniqFM [(TyVar,Bool)] -- maps type family to its injctivity
+type FamInjEnv = UniqFM [Bool] -- maps type family to its injctivity
                                        -- information
 
 instance Outputable FamilyInstEnv where
@@ -682,7 +682,7 @@ lookupFamInjInstEnvConflicts :: FamInjEnv
 lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
   = case injInfo of
       Nothing  -> []
-      Just inj -> lookup_fam_inst_env True (my_unify (map snd inj)) envs fam tys
+      Just inj -> lookup_fam_inst_env True (my_unify inj) envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
       -- In example above,   fam tys' = F [b]
@@ -709,8 +709,7 @@ validateInjectivity :: FamInjEnv -> FamInst -> Bool
 validateInjectivity injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
     case lookupUFM injEnv (tyConName fam) of
       Nothing  -> True
-      Just inj -> let injTys = map fst . filter snd $
-                               zipWith (\l (_,i) -> (l,i)) lhs inj
+      Just inj -> let injTys = map fst . filter snd $ zip lhs inj
                       injVars = getTyVars injTys
                   in all (isJust . lookupVarSet rhsVars) injVars
      where rhsVars  = tyVarsOfType rhs
