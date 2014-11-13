@@ -725,13 +725,6 @@ validateAllTyVarsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
            getTyVars (TyVarTy var:tys) = var : getTyVars tys
            getTyVars (_:tys) = getTyVars tys
 
-{-
-  | TyConApp      -- See Note [AppTy invariant]
-        TyCon
-        [KindOrType]    -- ^ Application of a 'TyCon', including newtypes /and/ synonyms.
-isSynTyCon
--}
-
 \end{code}
 
 Note [Family instance overlap conflicts]

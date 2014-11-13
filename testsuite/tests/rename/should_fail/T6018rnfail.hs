@@ -52,3 +52,10 @@ type family Kc a b = r | r -> a b b where
   Kc a b = a
 class Kcl a b where
   type Kt a b = r | r -> a b b
+
+-- not in-scope tyvar in LHS of ID
+type family L a b = r | c -> a
+type family Lc a b = r | c -> a where
+  Lc a b = a
+class Lcl a b where
+  type Lt a b = r | c -> a

@@ -530,6 +530,7 @@ data AlgTyConRhs
                              -- Watch out!  If any newtypes become transparent
                              -- again check Trac #1072.
     }
+
 \end{code}
 
 Note [AbstractTyCon and type equality]

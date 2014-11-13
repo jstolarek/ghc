@@ -1262,22 +1262,23 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                  ++ "exactly the same order as they were bound."
                                 ], ly)
 
-        injFrom' <- rnLTyVar True injFrom
-        injTo'   <- mapM (rnLTyVar True) injTo
+        ((_,errs), (injFrom', injTo')) <- askTcMessages $ do
+          injFrom' <- rnLTyVar True injFrom
+          injTo'   <- mapM (rnLTyVar True) injTo
+          return (injFrom', injTo')
 
-        -- JSTOLAREK: THIS IS NOT IMPLEMENTED YET
         -- if renaming of type variables ended with errors (there were
         -- not-in-scope variables) don't check the validity of injectivity
         -- declaration. This gives better error messages and saves us from
         -- unnecessary computations if renaming of type variables fails.
-        unless lhsValid $ setSrcSpan (getLoc injFrom) $ addErr
+        unless (not (isEmptyBag errs) || lhsValid) $ setSrcSpan (getLoc injFrom) $ addErr
                (vcat [ text $ "Incorrect type variable on the LHS of "
                            ++ "injectivity condition"
                      , nest 5
                      ( vcat [ text "Expected :" <+> ppr resName
                             , text "Actual   :" <+> ppr injFrom ])])
 
-        unless (isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
+        unless (not (isEmptyBag errs) || isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
         return $ InjectivityInfo injFrom' injTo'
