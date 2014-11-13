@@ -681,8 +681,9 @@ lookupFamInjInstEnvConflicts :: FamInjEnv
                              -> FamInstEnvs
                              -> FamInst
                              -> [FamInstMatch]
-                             -- Conflicting matches (don't look at the fim_tys field)
-lookupFamInjInstEnvConflicts injEnv envs fam_inst@(FamInst { fi_axiom = new_axiom })
+                        -- Conflicting matches (don't look at the fim_tys field)
+lookupFamInjInstEnvConflicts injEnv envs
+                             fam_inst@(FamInst { fi_axiom = new_axiom })
   = case injInfo of
       Nothing  -> []
       Just inj -> lookup_fam_inst_env True (my_unify inj) envs fam tys

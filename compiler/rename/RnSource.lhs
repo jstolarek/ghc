@@ -966,7 +966,8 @@ rnTyClDecl (DataDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdDataDefn = defn 
        ; let kvs = extractDataDefnKindVars defn
              doc = TyDataCtx tycon
        ; traceRn (text "rntycl-data" <+> ppr tycon <+> ppr kvs)
-       ; ((tyvars', defn'), fvs) <- bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
+       ; ((tyvars', defn'), fvs) <-
+                      bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
                                     do { (defn', fvs) <- rnDataDefn doc defn
                                        ; return ((tyvars', defn'), fvs) }
        ; return (DataDecl { tcdLName = tycon', tcdTyVars = tyvars'
@@ -1271,14 +1272,16 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
         -- not-in-scope variables) don't check the validity of injectivity
         -- declaration. This gives better error messages and saves us from
         -- unnecessary computations if renaming of type variables fails.
-        unless (not (isEmptyBag errs) || lhsValid) $ setSrcSpan (getLoc injFrom) $ addErr
-               (vcat [ text $ "Incorrect type variable on the LHS of "
-                           ++ "injectivity condition"
+        unless (not (isEmptyBag errs) || lhsValid) $
+               setSrcSpan (getLoc injFrom) $
+               addErr (vcat [ text $ "Incorrect type variable on the LHS of "
+                                  ++ "injectivity condition"
                      , nest 5
                      ( vcat [ text "Expected :" <+> ppr resName
                             , text "Actual   :" <+> ppr injFrom ])])
 
-        unless (not (isEmptyBag errs) || isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
+        unless (not (isEmptyBag errs) || isNothing rhsValid) $
+               setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
         return $ InjectivityInfo injFrom' injTo'

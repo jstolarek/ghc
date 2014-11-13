@@ -406,13 +406,13 @@ data TyCon
         tyConTyVars  :: [TyVar],        -- Bound tyvars
         tc_roles     :: [Role],
 
-        synTcRhs     :: SynTyConRhs,       -- ^ Contains information about the
-                                           -- expansion of the synonym
+        synTcRhs     :: SynTyConRhs,-- ^ Contains information about the
+                                    -- expansion of the synonym
 
-        synTcParent  :: TyConParent,    -- ^ Gives the family declaration 'TyCon'
-                                        -- of 'TyCon's representing family instances
-        synInjective :: [Bool]          -- ^ is this an type family injective in
-                                        -- its type variables?
+        synTcParent  :: TyConParent,-- ^ Gives the family declaration 'TyCon'
+                                    -- of 'TyCon's representing family instances
+        synInjective :: [Bool]      -- ^ is this a type family injective in
+                                    -- its type variables?
         -- invariant: length tyConTyVars = length synInjective
     }
 
