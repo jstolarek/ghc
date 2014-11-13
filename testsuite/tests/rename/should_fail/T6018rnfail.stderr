@@ -15,51 +15,51 @@ T6018rnfail.hs:12:19:
          Actual   : a
 
 T6018rnfail.hs:15:19:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:16:20:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:19:15:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:22:20:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:23:21:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:26:16:
-    Type variable ‘a’ naming a type family result also names one of the arguments.
+    Type variable `a' naming a type family result also names one of the arguments.
 
 T6018rnfail.hs:29:30:
-    Unexpected type variable on the RHS of injectivity condition: ‘b’
+    Unexpected type variable on the RHS of injectivity condition: `b'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
 T6018rnfail.hs:30:31:
-    Unexpected type variable on the RHS of injectivity condition: ‘b’
+    Unexpected type variable on the RHS of injectivity condition: `b'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
 T6018rnfail.hs:33:26:
-    Unexpected type variable on the RHS of injectivity condition: ‘b’
+    Unexpected type variable on the RHS of injectivity condition: `b'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
-T6018rnfail.hs:36:1: Not in scope: type variable ‘c’
+T6018rnfail.hs:36:1: Not in scope: type variable `c'
 
-T6018rnfail.hs:37:1: Not in scope: type variable ‘c’
+T6018rnfail.hs:37:1: Not in scope: type variable `c'
 
-T6018rnfail.hs:40:3: Not in scope: type variable ‘c’
+T6018rnfail.hs:40:3: Not in scope: type variable `c'
 
 T6018rnfail.hs:43:32:
-    Unexpected type variable on the RHS of injectivity condition: ‘a’
+    Unexpected type variable on the RHS of injectivity condition: `a'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
 T6018rnfail.hs:44:33:
-    Unexpected type variable on the RHS of injectivity condition: ‘a’
+    Unexpected type variable on the RHS of injectivity condition: `a'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
 T6018rnfail.hs:47:28:
-    Unexpected type variable on the RHS of injectivity condition: ‘a’
+    Unexpected type variable on the RHS of injectivity condition: `a'
     All variables should be bound in type family head and appear at most once in exactly the same order as they were bound.
 
 T6018rnfail.hs:50:34:
@@ -77,8 +77,8 @@ T6018rnfail.hs:54:30:
          You listed three : a, b, b
          But at most two are allowed : a, b
 
-T6018rnfail.hs:57:1: Not in scope: type variable ‘c’
+T6018rnfail.hs:57:1: Not in scope: type variable `c'
 
-T6018rnfail.hs:58:1: Not in scope: type variable ‘c’
+T6018rnfail.hs:58:1: Not in scope: type variable `c'
 
-T6018rnfail.hs:61:3: Not in scope: type variable ‘c’
+T6018rnfail.hs:61:3: Not in scope: type variable `c'
