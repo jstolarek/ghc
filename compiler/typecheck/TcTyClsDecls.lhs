@@ -686,7 +686,7 @@ tcFamDecl1 parent
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; tycon <- buildFamilyTyCon tc_name tvs' OpenSynFamilyTyCon kind parent
-                              (extractInjectivityInformation famDecl)
+                              (getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
@@ -733,7 +733,7 @@ tcFamDecl1 parent
                        then AbstractClosedSynFamilyTyCon
                        else ClosedSynFamilyTyCon co_ax
        ; tycon <- buildFamilyTyCon tc_name tvs' syn_rhs kind parent (isJust inj)
-                                   (extractInjectivityInformation famDecl)
+                                   (getInjectivityInformation famDecl)
 
        ; let result = if null eqns
                       then [ATyCon tycon]

@@ -72,7 +72,7 @@ module HsDecls (
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
   FamilyResultSig(..), InjectivityDecl(..), LInjectivityDecl,
-  extractInjectivityInformation,
+  getInjectivityInformation,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -753,38 +753,27 @@ hasReturnKindSignature NoSig = False
 hasReturnKindSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
 hasReturnKindSignature _     = True
 
--- JSTOLAREK: haddockify
-extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
-extractInjectivityInformation (FamilyDecl { fdInjective = Nothing
-                                          , fdTyVars = tvbndrs } ) =
+-- | Return a list of Bools that says whether a type family was declared
+-- injective in the corresponding type arguments. Length of the list is equal to
+-- the number of arguments. True on position N means that a function is
+-- injective in its Nth argument. False means it is not.
+getInjectivityInformation :: FamilyDecl Name -> [Bool]
+getInjectivityInformation (FamilyDecl { fdInjective = Nothing
+                                      , fdTyVars = tvbndrs } ) =
   -- No injectivity information => type family is not injective in any
   -- of its arguments. Return a list of Falses.
   map (const False) (hsq_tvs tvbndrs)
-extractInjectivityInformation (FamilyDecl
+getInjectivityInformation (FamilyDecl
                 { fdInjective = Just (L _ (InjectivityDecl _ lInjNames))
                 , fdTyVars = tvbndrs } ) =
-  merge tvNames injNames
-    where
-      tvNames  = hsLTyVarNames tvbndrs
-      injNames = map unLoc lInjNames
-      -- Assumptions for merge:
-      --  1. all type variables appearing in injNames appear in tvNames.
-      --  2. order of type variables in injNames is identical to their order
-      --     in tvNames
-      --  3. some variables mentioned in tvNames may be skipped in injNames
-      -- If the above assumptions hold merge returns a list of Bools with
-      -- length equal to (length tvNames), where True means that corresponding
-      -- type variable was mentioned in injNames (type family is injective in
-      -- that argument) and False means that it was not mentioned in injNames
-      -- (type family is not injective in that type variable).
-      merge :: Eq name => [name] -> [name] -> [Bool]
-      merge []     [] = []
-      merge (_:xs) [] = False : merge xs []
-      merge (x:xs) inj@(y:ys)
-          | x == y    = True  : merge xs ys
-          | otherwise = False : merge xs inj
-      -- if we pass validation in rnFamDecl this panic should never happen
-      merge [] (_:_)  = panic "Can't extract injectivity information"
+  -- User provided an injectivity declaration => for each argument we check
+  -- whether a type family was declared injective in that argument. We return a
+  -- list of Bools, where True means that corresponding type variable was
+  -- mentioned in lInjNames (type family is injective in that argument) and
+  -- False means that it was not mentioned in lInjNames (type family is not
+  -- injective in that type variable).
+  map (`elemNameSet` inj_tvs) (hsLTyVarNames tvbndrs)
+      where inj_tvs = mkNameSet (map unLoc lInjNames)
 \end{code}
 
 Note [Complete user-supplied kind signatures]
