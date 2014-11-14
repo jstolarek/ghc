@@ -830,9 +830,9 @@ opt_datafam_kind_sig :: { Located (FamilyResultSig RdrName) }
         | '::' kind                     { LL (KindOnlySig $2)  }
 
 opt_tyfam_kind_sig :: { Located (FamilyResultSig RdrName) }
-        :                               { noLoc NoSig                   }
-        | '::' kind                     { sLL $1 $> (KindOnlySig    $2) }
-        | '='  tv_bndr                  { sLL $1 $> (KindedTyVarSig $2) }
+        :                               { noLoc NoSig                }
+        | '::' kind                     { sLL $1 $> (KindOnlySig $2) }
+        | '='  tv_bndr                  { sLL $1 $> (TyVarSig    $2) }
 
 -- tycl_hdr parses the header of a class or data type decl,
 -- which takes the form
