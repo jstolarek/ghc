@@ -725,13 +725,13 @@ overlap_pragma :: { Maybe OverlapMode }
 
 -- Injective type families
 
-opt_injective_info :: { Maybe (LInjectivityInfo RdrName) }
+opt_injective_info :: { Maybe (LInjectivityDecl RdrName) }
         :                              { Nothing }
         | '|' injectivity_cond         { Just $2 }
 
-injectivity_cond :: { LInjectivityInfo RdrName }
+injectivity_cond :: { LInjectivityDecl RdrName }
         : tyvarid '->' inj_varids
-          { sLL $1 $> (InjectivityInfo $1 (reverse (unLoc $3))) }
+          { sLL $1 $> (InjectivityDecl $1 (reverse (unLoc $3))) }
 
 inj_varids :: { Located [Located RdrName] }
         : inj_varids tyvarid  { sLL $1 $> ($2 : unLoc $1) }

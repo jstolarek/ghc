@@ -69,7 +69,7 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  FamilyResultSig(..), InjectivityInfo(..), LInjectivityInfo,
+  FamilyResultSig(..), InjectivityDecl(..), LInjectivityDecl,
   extractInjectivityInformation,
 
   -- * Grouping
@@ -533,8 +533,39 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --    injectivity declaration for a type family:
 --       type family Id a = r | r -> a where ...
 --
+-- See also: Note [Injectivity declaration]
 -- JSTOLAREK: this note should probably refer to other notes once they are made:
 -- one about injectivity
+
+-- Note [Injectivity declaration]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- A user can declare a type family to be injective:
+--
+--    type family Id a = r | r -> a where ...
+--
+--  * The part after the "|" is called "injectivity declaration".
+--  * "r -> a" part is called "injectivity condition"; at the moment terms
+--    "injectivity declaration" and "injectivity condition" are synonymous
+--    because we only allow a single injectivity condition.
+--  * "r" is the "LHS of injectivity condition". LHS contains only the variable
+--    naming the result of a type family.
+
+--  * "a" is the "RHS of injectivity condition". RHS contains space-separated
+--    type variables naming the arguments of a type family. The variables must
+--    appear in the order in which they were declared. Some variables can be
+--    omitted if a type family is not injective in these arguments. Example:
+--        type family Foo a b c = d |  d -> a c where ...
+--
+-- It is possible that in the future this syntax will be extended to support
+-- more complicated injectivity declarations. For example we ciuld declare that
+-- if we know the result of Plus and one of its arguments we can determine the
+-- other argument:
+--
+--    type family Plus a b = (r :: Nat) | r a -> b, r b -> a where ...
+--
+-- Here injectivity declaration consists of two comma-separated injectivity
+-- conditions.
 
 data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindOnlySig (LHsKind name)
@@ -545,17 +576,24 @@ deriving instance (DataId name) => Data (FamilyResultSig name)
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
   { fdInfo      :: FamilyInfo name               -- type or data, closed or open
-  , fdInjective :: Maybe (LInjectivityInfo name)
-                                                 -- injectivity information
+  , fdInjective :: Maybe (LInjectivityDecl name) -- optional injectivity decl.
   , fdLName     :: Located name                  -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name            -- type variables
-  , fdKindSig   :: FamilyResultSig name }        -- result kind
+  , fdKindSig   :: FamilyResultSig name }        -- result signature
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
-type LInjectivityInfo name = Located (InjectivityInfo name)
-data InjectivityInfo name
-  = InjectivityInfo (Located name) [Located name]
+-- If the user supplied an injectivity declaration it is represented using
+-- InjectivityDecl. At the moment this is a single injectivity condition - see
+-- Note [Injectivity declaration]. `Located name` stores the LHS of injectivity
+-- condition. [Located name] stores the RHS of injectivity condition. Example:
+--
+--   type family Foo a b c = r | r -> a c where ...
+--
+-- This will be represented as "InjectivityDecl `r` [`a`, `c`]"
+type LInjectivityDecl name = Located (InjectivityDecl name)
+data InjectivityDecl name
+  = InjectivityDecl (Located name) [Located name]
   deriving( Data, Typeable )
 
 data FamilyInfo name
@@ -696,7 +734,7 @@ extractInjectivityInformation (FamilyDecl { fdInjective = Nothing
   -- of its arguments. Return a list of Falses.
   replicate (length (hsq_tvs tvbndrs)) False
 extractInjectivityInformation (FamilyDecl
-                { fdInjective = Just (L _ (InjectivityInfo _ lInjNames))
+                { fdInjective = Just (L _ (InjectivityDecl _ lInjNames))
                 , fdTyVars = tvbndrs } ) =
   merge tvNames injNames
     where

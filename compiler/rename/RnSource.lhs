@@ -1208,9 +1208,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
-                    -> LInjectivityInfo RdrName -- injectivity information
-                    -> RnM (LInjectivityInfo Name)
-     rn_injectivity tyvars (L srcSpan (InjectivityInfo injFrom injTo)) = do
+                    -> LInjectivityDecl RdrName -- injectivity information
+                    -> RnM (LInjectivityDecl Name)
+     rn_injectivity tyvars (L srcSpan (InjectivityDecl injFrom injTo)) = do
         let -- the only type variable allowed on the LHS of injectivity
             -- condition is the variable naming the result in type family head
             lhsValid   = resName == unLoc injFrom
@@ -1284,7 +1284,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
-        return $ (L srcSpan (InjectivityInfo injFrom' injTo'))
+        return $ (L srcSpan (InjectivityDecl injFrom' injTo'))
 
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name

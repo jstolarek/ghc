@@ -227,7 +227,7 @@ mkFamDecl :: SrcSpan
           -> FamilyInfo RdrName
           -> LHsType RdrName   -- LHS
           -> FamilyResultSig RdrName  -- Optional kind signature
-          -> Maybe (LInjectivityInfo RdrName) -- injectivity declaration
+          -> Maybe (LInjectivityDecl RdrName) -- injectivity declaration
           -> P (LTyClDecl RdrName)
 mkFamDecl loc info lhs ksig inj_cond
   = do { (tc, tparams) <- checkTyClHdr lhs
