@@ -521,7 +521,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --  * NoSig - the user supplied no return signature:
 --       type family Id a where ...
 --
---  * KindOnlySig - the user supplied the return kind:
+--  * KindSig - the user supplied the return kind:
 --       type family Id a :: * where ...
 --
 --  * TyVarSig - user named the result with a type variable and possibly
@@ -569,7 +569,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 -- conditions.
 
 data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
-                          | KindOnlySig (LHsKind name)
+                          | KindSig  (LHsKind name)
                           | TyVarSig (LHsTyVarBndr name)
                             deriving( Typeable )
 deriving instance (DataId name) => Data (FamilyResultSig name)
@@ -816,7 +816,7 @@ instance (OutputableBndr name) => Outputable (FamilyDecl name) where
         where
           pp_kind = case mb_kind of
                       NoSig            -> empty
-                      KindOnlySig kind -> dcolon <+> ppr kind
+                      KindSig kind -> dcolon <+> ppr kind
                       TyVarSig tv_bndr -> ptext (sLit "=") <+> ppr tv_bndr
           (pp_where, pp_eqns) = case info of
             ClosedTypeFamily eqns -> ( ptext (sLit "where")

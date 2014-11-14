@@ -970,7 +970,7 @@ extractHsTysRdrTyVars ty
 -- JSTOLAREK: here the intention is to return the KIND
 extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
 extractRdrKindSigVars NoSig = []
-extractRdrKindSigVars (KindOnlySig k) = nub (fst (extract_lkind k ([],[])))
+extractRdrKindSigVars (KindSig k) = nub (fst (extract_lkind k ([],[])))
 extractRdrKindSigVars (TyVarSig k) =
     -- JSTOLAREK: SPJ says there must be a better way of doing this
     -- Is setting hsq_kvs to [] correct?. I'm not sure if passing in k

@@ -1066,9 +1066,9 @@ cvtFamilyResultSig :: FamilyResultSig TH.Kind -> CvtM (FamilyResultSig RdrName)
 cvtFamilyResultSig NoSig = return NoSig
 -- JSTOLAREK: I'll fix that later together with the rest of TH. For now I'll
 -- just panic.
-cvtFamilyResultSig (KindOnlySig _) = --do { ki' <- cvtKind ki
-                                     --          ; return (KindOnlySig ki') }
-    panic "cvtFamilyResultSig KindOnlySig"
+cvtFamilyResultSig (KindSig _) = --do { ki' <- cvtKind ki
+                                 --   ; return (KindSig ki') }
+    panic "cvtFamilyResultSig KindSig"
 cvtFamilyResultSig (TyVarSig _) =
     panic "cvtFamilyResultSig TyVarSig"
 
