@@ -561,8 +561,9 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --       type family Id a = r | r -> a where ...
 --
 -- See also: Note [Injectivity declaration]
+
 -- JSTOLAREK: this note should probably refer to other notes once they are made:
--- one about injectivity
+-- one about injectivity (mention poly-kinded injectivity - see wiki)
 
 -- Note [Injectivity declaration]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

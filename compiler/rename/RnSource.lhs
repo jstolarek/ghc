@@ -52,7 +52,7 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
-import Data.Maybe ( fromJust, isNothing, isJust )
+import Data.Maybe ( fromJust, isJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1162,7 +1162,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindedTyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
                    first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              ; injectivity' <- traverse (rn_injectivity (hsQTvBndrs tyvars))
+              ; injectivity' <- traverse (rnInjectivityDecl tvBndrs resName)
                                          injectivity
 
               -- `resTyVar` is a `Just` only the result of a type family was
@@ -1187,8 +1187,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      fmly_doc = TyFamilyCtx tycon
      kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
-     tvNames  = map getLHsTyVarBndrName (hsQTvBndrs tyvars)
-     resName  = getLHsTyVarBndrName (fromJust resTyVar)
+     tvBndrs  = hsQTvBndrs tyvars
+     tvNames  = map hsLTyVarName tvBndrs
+     resName  = hsLTyVarName (fromJust resTyVar)
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
      maybeResultBndr (KindedTyVarSig bndr) = Just bndr
@@ -1201,99 +1202,96 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
-     -- RAE: Does this work OK with poly-kinded type families? This
-     -- only works over *type* variables, ignoring *kind* variables. I
-     -- think this is OK, but it would be good to have some tests.
-     --
-     -- Why is this OK? Because all kind variables have to have type
-     -- variables dependent on them, and if a type family is injective
-     -- in its type variables, it then must be injective in its kind
-     -- variables. But, if/when we allow partial injectivity
-     -- annotations, this might require some more thought.
-     -- JSTOLAREK: I don't understand Richard's remark
-     rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
-                                               -- type family head
-                    -> LInjectivityDecl RdrName -- injectivity information
-                    -> RnM (LInjectivityDecl Name)
-     rn_injectivity tyvars (L srcSpan (InjectivityDecl injFrom injTo)) = do
-        let -- the only type variable allowed on the LHS of injectivity
-            -- condition is the variable naming the result in type family head
-            lhsValid   = resName == unLoc injFrom
-            -- verifying RHS of injectivity condition is more involved. We
-            -- require that:
-            --  1. only variables defined in type family head appear on the RHS
-            --     and each variable appears at most once
-            --  2. variables are listed in the order in which they were bound in
-            --     type family head
-            -- Breaking any of these assumptions results in an error.
-            rhsValid   = merge tvNames injTo
-            merge :: [RdrName] -> [Located RdrName] -> Maybe (SDoc, SrcSpan)
-            merge _     [] = Nothing
-            merge [] (L lx _:_) = -- we've run out of type variables in type
-                                  -- family head but there are still some
-                                  -- variables left in the injectivity condition
-                Just ( vcat [ text $ "Too many type variables on RHS of "
-                                  ++ "injectivity condition."
-                            , nest 5
-                            ( vcat [ hsep [ text "You listed"
-                                          , speakN (length injTo)
-                                          , text ":"
-                                          , interpp'SP injTo
-                                          ]
-                                   , hsep [ text "But at most"
-                                          , speakN (length tyvars)
-                                          , text "are allowed :"
-                                          , interpp'SP tvNames
-                                          ]
-                                   ] )
-                            ], lx)
-            merge (x:xs) ys'@(L ly y:ys)
-                | x == y    = merge xs ys
-                | otherwise = -- type variables in head and injectivity
-                              -- condition are not equal
-                    case merge xs ys' of
-                      Nothing -> Nothing   -- this may be perfectly fine if a
-                                           -- variable was simply skipped
-                      Just _ -> Just (vcat -- but it may also be wrong if
-                                           -- variables were listed in incorrect
-                                           -- order. In that case discard
-                                           -- previous error and construct error
-                                           -- here. This ensures that we will
-                                           -- always report on the first
-                                           -- offending variable.
-                         [ text ("Unexpected type variable on the RHS "
-                              ++ "of injectivity condition:") <+> quotes (ppr y)
-                         , text $ "All variables should be bound in type "
-                                 ++ "family head and appear at most once in "
-                                 ++ "exactly the same order as they were bound."
-                                ], ly)
+-- | Rename injectivity declaration
+rnInjectivityDecl :: [LHsTyVarBndr RdrName]    -- ^ type variables declared in
+                                               --   type family head
+                   -> RdrName                  -- ^ result name
+                   -> LInjectivityDecl RdrName -- ^ injectivity information
+                   -> RnM (LInjectivityDecl Name)
+rnInjectivityDecl tvBndrs resName (L srcSpan (InjectivityDecl injFrom injTo))
+ = do
+   let tvNames    = map hsLTyVarName tvBndrs
+       -- the only type variable allowed on the LHS of injectivity
+       -- condition is the variable naming the result in type family head.
+       -- Example of disallowed declaration:
+       --     type family Foo a b = r | b -> a
+       lhsValid   = resName == unLoc injFrom
+       -- verifying RHS of injectivity condition is more involved. We
+       -- require that:
+       --  1. only variables defined in type family head appear on the RHS.
+       --     Example of disallowed declaration:
+       --        type family Foo a = r | r -> b
+       --
+       --  2. each variable appears at most once. Example of disallowed
+       --     declaration:
+       --        type family Foo a = r | r -> a a
+       --
+       --  3. variables are listed in the order in which they were bound in
+       --     type family head. Example of disallowed declaration:
+       --        type family Foo a b = r | r -> b a
+       --
+       -- Breaking any of these assumptions results in an error. Note that there
+       -- is no one-to-one correspondence between these conditions and error
+       -- messages generated below. The reason is that when we see an unexpected
+       -- variable we don't try to find out whether that happened because
+       -- variable was repeated or because the order of variables was incorrect.
+       rhsValid   = merge tvNames injTo
+       merge :: [RdrName] -> [Located RdrName] -> Maybe (SDoc, SrcSpan)
+       merge _     [] = Nothing
+       merge [] (L lx _:_) = Just ( vcat
+          -- we've run out of type variables in type family head but there are
+          -- still some variables left in the injectivity condition
+          [ text $ "Too many type variables on RHS of injectivity condition."
+          , nest 5
+          ( vcat [ hsep [ text "You listed"   , speakN (length injTo)
+                        , text ":"            , interpp'SP injTo        ]
+                 , hsep [ text "But at most"  , speakN (length tvBndrs)
+                        , text "are allowed :", interpp'SP tvNames      ]
+                 ]
+          )], lx)
+       merge (x:xs) ys'@(L ly y:ys)
+           | x == y    = merge xs ys
+           | otherwise = -- type variables in head and injectivity
+                         -- condition are not equal
+               case merge xs ys' of
+                 Nothing -> Nothing   -- this may be perfectly fine if a
+                                      -- variable was simply skipped
+                 Just _ -> Just (vcat -- but it may also be wrong if
+                                      -- variables were listed in incorrect
+                                      -- order. In that case discard
+                                      -- previous error and construct error
+                                      -- here. This ensures that we will
+                                      -- always report on the first
+                                      -- offending variable.
+                    [ text ("Unexpected type variable on the RHS "
+                         ++ "of injectivity condition:") <+> quotes (ppr y)
+                    , text ("All variables should appear at most once and in "
+                         ++ "exactly the same order as they were declared "
+                         ++ "in type family head.")], ly)
 
-        ((injFrom', injTo'), isError) <- askNoErrs $ do
-          injFrom' <- rnLTyVar True injFrom
-          injTo'   <- mapM (rnLTyVar True) injTo
-          return (injFrom', injTo')
+   (injDecl', noRnErrors) <- askNoErrs $ do
+     injFrom' <- rnLTyVar True injFrom
+     injTo'   <- mapM (rnLTyVar True) injTo
+     return $ L srcSpan (InjectivityDecl injFrom' injTo')
 
-        -- if renaming of type variables ended with errors (there were
-        -- not-in-scope variables) don't check the validity of injectivity
-        -- declaration. This gives better error messages and saves us from
-        -- unnecessary computations if renaming of type variables fails.
-        unless (not isError || lhsValid) $
-               setSrcSpan (getLoc injFrom) $
-               addErr (vcat [ text $ "Incorrect type variable on the LHS of "
-                                  ++ "injectivity condition"
-                     , nest 5
-                     ( vcat [ text "Expected :" <+> ppr resName
-                            , text "Actual   :" <+> ppr injFrom ])])
+   -- if renaming of type variables ended with errors (there were
+   -- not-in-scope variables) don't check the validity of injectivity
+   -- declaration. This gives better error messages and saves us from
+   -- unnecessary computations if renaming of type variables fails.
+   when (noRnErrors && not lhsValid) $
+        setSrcSpan (getLoc injFrom) $
+        addErr (vcat [ text $ "Incorrect type variable on the LHS of "
+                           ++ "injectivity condition"
+              , nest 5
+              ( vcat [ text "Expected :" <+> ppr resName
+                     , text "Actual   :" <+> ppr injFrom ])])
 
-        unless (not isError || isNothing rhsValid) $
-               setSrcSpan (snd . fromJust $ rhsValid) $
-               addErr (fst (fromJust rhsValid))
+   case (noRnErrors, rhsValid) of
+     (True, Just err) -> setSrcSpan (snd err) $
+                         addErr (fst (fromJust rhsValid))
+     _ -> return ()
 
-        return $ (L srcSpan (InjectivityDecl injFrom' injTo'))
-
-     getLHsTyVarBndrName :: LHsTyVarBndr name -> name
-     getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name
-     getLHsTyVarBndrName (L _ (KindedTyVar name _)) = name
+   return $ injDecl'
 
 \end{code}
 Note [Stupid theta]
