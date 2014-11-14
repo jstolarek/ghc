@@ -140,17 +140,10 @@ checkFamInstConsistency famInstMods directlyImpMods
              ; hmiModule     = mi_module . hm_iface
              ; hmiFamInstEnv = extendFamInstEnvList emptyFamInstEnv
                                . md_fam_insts . hm_details
-             ; getModTyFams  = filter isSynTyCon . typeEnvTyCons
-                                 . md_types . hm_details
-             -- see Note [Structure of injectivity declarations]
-             ; injDecs       = listToUFM
-                                [ ( tyConName tyfam, injInfo )
-                                  | hmi <- eltsUFM hpt
-                                  , tyfam <- getModTyFams hmi
-                                  , let (Just injInfo)
-                                            = isInjectiveTypeFamilyTyCon tyfam
-                                  , or injInfo ] -- skip type families without
-                                                 -- injectivity declarations
+             ; getModTyCons  = typeEnvTyCons . md_types . hm_details
+             -- see Note [Environment of injectivity declarations]
+             ; injEnv        = buildTyFamInjEnv [ tycon | hmi <- eltsUFM hpt
+                                                , tycon <- getModTyCons hmi ]
              ; hpt_fam_insts = mkModuleEnv [ (hmiModule hmi, hmiFamInstEnv hmi)
                                            | hmi <- eltsUFM hpt]
              ; groups        = map (dep_finsts . mi_deps . modIface)
@@ -163,27 +156,26 @@ checkFamInstConsistency famInstMods directlyImpMods
                  -- the difference gives us the pairs we need to check now
              }
 
-       ; mapM_ (check injDecs hpt_fam_insts) toCheckPairs
+       ; mapM_ (check injEnv hpt_fam_insts) toCheckPairs
        }
   where
     allPairs []     = []
     allPairs (m:ms) = map (ModulePair m) ms ++ allPairs ms
 
-    check injDecs hpt_fam_insts (ModulePair m1 m2)
+    check injEnv hpt_fam_insts (ModulePair m1 m2)
       = do { env1 <- getFamInsts hpt_fam_insts m1
            ; env2 <- getFamInsts hpt_fam_insts m2
            ; mapM_ (checkForConflicts (emptyFamInstEnv, env2))
                    (famInstEnvElts env1)
            -- if there are no type families with injectivity declarations skip
            -- the check
-           ; when (not . isNullUFM $ injDecs) $
-             mapM_ (checkForInjectivityConflicts injDecs (emptyFamInstEnv,env2))
+           ; when (not . isNullUFM $ injEnv) $
+             mapM_ (checkForInjectivityConflicts injEnv (emptyFamInstEnv,env2))
                    (famInstEnvElts env1)
  }
 
--- JSTOLAREK: DIFFERENT NOTE NAME!
--- Note [Structure of injectivity declarations]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Note [Environment of injectivity declarations]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
 -- To perform injectivity check we gather all in-scope declarations of
 -- type families (not instances!) and put these into a map. Type
@@ -197,6 +189,18 @@ checkFamInstConsistency famInstMods directlyImpMods
 -- then the map entry for Foo will store [True, True, False], because
 -- Foo was declared injective in its first two arguments but not the
 -- third one.
+
+-- see Note [Environment of injectivity declarations]
+buildTyFamInjEnv :: [TyCon] -> FamInjEnv
+buildTyFamInjEnv inScopetyCons =
+    listToUFM [ ( tyConName tyfam, injInfo )
+              | tyfam <- inScopetyCons
+              , (isOpenSynFamilyTyCon tyfam || isClosedSynFamilyTyCon tyfam)
+              -- we call the unsafe function here because we filter TyCons using
+              -- isSynTyCon
+              , let injInfo = unsafeSynTyConInjectivityInfo tyfam
+              , or injInfo ] -- skip type families without
+                             -- injectivity declarations
 
 getFamInsts :: ModuleEnv FamInstEnv -> Module -> TcM FamInstEnv
 getFamInsts hpt_fam_insts mod
@@ -305,21 +309,15 @@ tcExtendLocalFamInstEnv :: [FamInst] -> TcM a -> TcM a
 tcExtendLocalFamInstEnv fam_insts thing_inside
  = do { env <- getGblEnv
       ; (_, hpt) <- getEpsAndHpt
-      ; let typeEnvs    = tcg_type_env env : --type families from current module
-                                 -- type families imported from other modules
+      ; let typeEnvs = tcg_type_env env : --type environment from current module
+                                 -- type environment imported from other modules
                                  map (md_types . hm_details) (eltsUFM hpt)
-            tyFamTyCons = -- all type family declarations in scope
-                          filter isSynTyCon . concatMap typeEnvTyCons $ typeEnvs
-            -- see Note [Structure of injectivity declarations]
-            injctivityDecs = listToUFM
-                               [ ( tyConName tyfam, injInfo )
-                                 | tyfam <- tyFamTyCons
-                                 , let (Just injInfo)
-                                           = isInjectiveTypeFamilyTyCon tyfam
-                                 , or injInfo  ] -- skip type families without
-                                                 -- injectivity declarations
+            tyCons   = -- all in scope type declarations
+                       concatMap typeEnvTyCons typeEnvs
+            injEnv   = -- see Note [Environment of injectivity declarations]
+                       buildTyFamInjEnv tyCons
       ; (inst_env', fam_insts') <-
-                     foldlM (addLocalFamInst injctivityDecs)
+                     foldlM (addLocalFamInst injEnv)
                             (tcg_fam_inst_env env, tcg_fam_insts env)
                             fam_insts
       ; let env' = env { tcg_fam_insts    = fam_insts'
@@ -335,7 +333,7 @@ addLocalFamInst :: FamInjEnv
                 -> (FamInstEnv,[FamInst])
                 -> FamInst
                 -> TcM (FamInstEnv, [FamInst])
-addLocalFamInst tyFams (home_fie, my_fis) fam_inst
+addLocalFamInst inj_env (home_fie, my_fis) fam_inst
         -- home_fie includes home package and this module
         -- my_fies is just the ones from this module
   = do { traceTc "addLocalFamInst" (ppr fam_inst)
@@ -362,7 +360,7 @@ addLocalFamInst tyFams (home_fie, my_fis) fam_inst
        ; no_conflict
            <- checkForConflicts inst_envs fam_inst
        ; injectivity_ok
-           <- checkForInjectivityConflicts tyFams inst_envs fam_inst
+           <- checkForInjectivityConflicts inj_env inst_envs fam_inst
 
        ; if no_conflict && injectivity_ok then
             return (home_fie'', fam_inst : my_fis')
@@ -396,11 +394,11 @@ checkForConflicts inst_envs fam_inst
 checkForInjectivityConflicts :: FamInjEnv -> FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts inj_env inst_envs fam_inst
   = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
-             no_conflicts  = null conflicts
-             unused_tvs    = validateAllTyVarsInRHS inj_env fam_inst
-             all_tvs_used  = null unused_tvs
-             tyfams_called = validateNoTyFamsInRHS fam_inst
-             no_tyfams     = null tyfams_called
+             no_conflicts = null conflicts
+             unused_tvs   = unusedInjTvsInRHS inj_env fam_inst
+             all_tvs_used = null unused_tvs
+             tyfams_used  = tyFamsUsedInRHS fam_inst
+             no_tyfams    = null tyfams_used
        ; traceTc "checkForInjectivityConflicts" $
          vcat [ ppr (map fim_instance conflicts)
               , ppr fam_inst
@@ -412,7 +410,7 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
        ; unless all_tvs_used $
                     unusedInjectiveVarsErr fam_inst unused_tvs
        ; unless no_tyfams $
-                    tyfamsUsedInjErr fam_inst tyfams_called
+                    tyfamsUsedInjErr fam_inst tyfams_used
        ; return (no_conflicts && all_tvs_used && no_tyfams) }
 
 
@@ -441,7 +439,7 @@ unusedInjectiveVarsErr fam_inst unused_tyvars
                           "declaration. Type variable") <>
                     plural unused_tyvars <+>
                     pprQuotedList unused_tyvars <+>
-                    text "should appear in the type family equation:")
+                    text "should appear in the RHS of type family equation:")
                    [fam_inst]
 
 
