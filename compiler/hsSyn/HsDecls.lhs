@@ -744,14 +744,14 @@ famDeclHasCusk :: FamilyDecl name -> Bool
 famDeclHasCusk (FamilyDecl { fdInfo      = ClosedTypeFamily _
                            , fdTyVars    = tyvars
                            , fdResultSig = m_sig })
-  = hsTvbAllKinded tyvars && existsSignature m_sig
+  = hsTvbAllKinded tyvars && hasReturnKindSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
 
--- JSTOLAREK: haddockify
-existsSignature :: FamilyResultSig a -> Bool
-existsSignature NoSig = False
-existsSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
-existsSignature _     = True
+-- | Does this family declaration have user-supplied return kind signature?
+hasReturnKindSignature :: FamilyResultSig a -> Bool
+hasReturnKindSignature NoSig = False
+hasReturnKindSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
+hasReturnKindSignature _     = True
 
 -- JSTOLAREK: haddockify
 extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
@@ -759,7 +759,7 @@ extractInjectivityInformation (FamilyDecl { fdInjective = Nothing
                                           , fdTyVars = tvbndrs } ) =
   -- No injectivity information => type family is not injective in any
   -- of its arguments. Return a list of Falses.
-  replicate (length (hsq_tvs tvbndrs)) False
+  map (const False) (hsq_tvs tvbndrs)
 extractInjectivityInformation (FamilyDecl
                 { fdInjective = Just (L _ (InjectivityDecl _ lInjNames))
                 , fdTyVars = tvbndrs } ) =
