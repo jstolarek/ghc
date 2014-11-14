@@ -331,7 +331,6 @@ rnTyVar is_type rdr_name
   | is_type   = lookupTypeOccRn rdr_name
   | otherwise = lookupKindOccRn rdr_name
 
--- JSTOLAREK: Remove this if it turns out to be unnecessary
 rnLTyVar :: Bool -> Located RdrName -> RnM (Located Name)
 rnLTyVar is_type (L loc rdr_name) = do
   tyvar' <- rnTyVar is_type rdr_name

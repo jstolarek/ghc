@@ -414,9 +414,6 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
            do { res_k <- case ksig of
                            KindSig ki -> tcLHsKind ki
-                           -- JSTOLAREK: double-check that this is correct
-                           -- Nope, not correct - non-exhaustive patterns.
-                           -- Needs careful thought.
                            TyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
                            -- RAE: newMetaKindVar should happen only for closed

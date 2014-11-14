@@ -975,7 +975,11 @@ plural :: [a] -> SDoc
 plural [_] = empty  -- a bit frightening, but there you are
 plural _   = char 's'
 
--- JSTOLAREK: haddock
+-- | Returns either a singular or a plural form appropriate for the length of a
+-- list:
+--
+-- irregularPlural ["foo"]       "family" "families" = "family"
+-- irregularPlural ["foo","bar"] "family" "families" = "families"
 irregularPlural :: [a] -> SDoc -> SDoc -> SDoc
 irregularPlural [_] singular _      = singular
 irregularPlural  _  _        plural = plural
