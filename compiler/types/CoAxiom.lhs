@@ -60,7 +60,7 @@ from the axiom.
 
 For example, consider the axiom derived from the following declaration:
 
-type instance F a where
+type family F a where
   F [Int] = Bool
   F [a]   = Double
   F (a b) = Char

@@ -419,12 +419,11 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
                            -- Needs careful thought.
                            TyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
+                           -- RAE: newMetaKindVar should happen only for closed
+                           -- type families, not open ones, whose result kind
+                           -- defaults to *.
                              | otherwise                -> newMetaKindVar
                            NoSig
-                           -- JSTOLAREK: Something is wrong here. I believe the
-                           -- first branch will never be taken, because
-                           -- famDeclHasCusk will return false if fdResultSig is
-                           -- NoSig.
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }
@@ -684,8 +683,6 @@ tcFamDecl1 parent
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; let roles = map (const Nominal) tvs'
-  -- JSTOLAREK: it looks that here we are just constructing an open type family
-  -- declaration without checking the equations
   ; tycon <- buildSynTyCon tc_name tvs' roles OpenSynFamilyTyCon kind parent
                            (getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }

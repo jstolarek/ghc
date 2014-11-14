@@ -495,11 +495,14 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
 
 -- JSTOLAREK: comment this. I should make a note that describes the whole
 -- algorithm for checking injectivity.
+
+-- | Check whether two type family equations don't violate injectivity
+-- declaration
 injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectivityCompatibleBranches injectivity
                               (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                               (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
-  = let get_inj  = map snd . filter fst . zip injectivity
+  = let get_inj  = filterByList injectivity
     in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
       -- JSTOLAREK: Voodoo programming here. Does that make sense?
       -- The reasoning here is reversed compared to the original
@@ -708,27 +711,26 @@ lookupFamInjInstEnvConflicts injEnv envs
       new_branch = coAxiomSingleBranch new_axiom
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
--- haddockify
+-- | Returns a list of type variables that the function is injective in and that
+-- are not used in the RHS of family instance declaration.
 unusedInjTvsInRHS :: FamInjEnv -> FamInst -> [TyVar]
 unusedInjTvsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
     case lookupUFM injEnv (tyConName fam) of
       Nothing  -> []
       Just inj -> let -- get the list of type variables in which type
                       -- family is injective
-                      injTys  = map fst . filter snd $ zip lhs inj
+                      injTys  = filterByList inj lhs
                       injVars = varSetElems $ tyVarsOfTypes injTys
                   in  -- and return all injective variables not mentioned
                       -- in the RHS
-                      filter (isNothing . lookupVarSet rhsVars) injVars
+                      filterOut (`elemVarSet` rhsVars) injVars
      where rhsVars  = tyVarsOfType rhs
            (fam, _) = famInstSplitLHS fam_inst
 
-
--- JSTOLAREK: this should refer to note that describes injectivity check.
--- haddockify
+-- | Returns a list of type families used in the RHS of family instance
+-- declaration.
 tyFamsUsedInRHS :: FamInst -> [TyCon]
-tyFamsUsedInRHS (FamInst {fi_rhs = rhs}) =
-  filter isSynTyCon (tyConsOfType rhs)
+tyFamsUsedInRHS (FamInst {fi_rhs = rhs}) = filter isSynTyCon (tyConsOfType rhs)
 
 \end{code}
 
