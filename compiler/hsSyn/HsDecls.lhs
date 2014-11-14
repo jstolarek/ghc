@@ -512,18 +512,29 @@ tyClGroupConcat = concatMap group_tyclds
 mkTyClGroup :: [LTyClDecl name] -> TyClGroup name
 mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
--- JSTOLAREK: Improve this comment
--- Signature of the return kind of a type family. This can be:
+-- Note [FamilyResultSig]
+-- ~~~~~~~~~~~~~~~~~~~~~~
 --
---  * ommited (NoSig):
---       type family Plus a b where ...
---  * a kind (KindOnlySig):
---       type family Plus a b :: Nat where ...
---  * a named type, possibly with a kind signature (KindedTyVarSig):
---       type family Plus a b = r where ...
---       type family Plus a b = (r :: Nat) where ...
+-- This data type represent the return type/kind signature of a type
+-- family. Possible values:
 --
-data FamilyResultSig name = NoSig
+--  * NoSig - the user supplied no return signature:
+--       type family Id a where ...
+--
+--  * KindOnlySig - the user supplied the return kind:
+--       type family Id a :: * where ...
+--
+--  * KindedTyVarSig - user named the result with a type variable and possibly
+--    provided a kind signature for that variable:
+--       type family Id a = r where ...
+--       type family Id a = (r :: *) where ...
+--
+--    Naming result of a type family is required if we want to provide
+--    injectivity declaration for a type family:
+--       type family Id a = r | r -> a where ...
+-- JSTOLAREK: this note should probably refer to other notes once they are made
+
+data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindOnlySig (LHsKind name)
                           | KindedTyVarSig (LHsTyVarBndr name)
                             deriving( Typeable )
@@ -536,6 +547,9 @@ data FamilyDecl name = FamilyDecl
   -- well. But perhaps I don't have to? I'm not introducing any bindings on the
   -- one hand, but then again I'll be reporting errors later...
   -- Located should go inside Maybe
+  -- RAE: I would think the Maybe belongs outside the
+  -- Located. After all, if there isn't any info, there also isn't any
+  -- location. And then you can use LInjectivityInfo.
   , fdInjective :: Located (Maybe (InjectivityInfo name))
                                                  -- injectivity information
   , fdLName     :: Located name                  -- type constructor
