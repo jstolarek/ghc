@@ -421,12 +421,11 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
                            -- Needs careful thought.
                            TyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
+                           -- RAE: newMetaKindVar should happen only for closed
+                           -- type families, not open ones, whose result kind
+                           -- defaults to *.
                              | otherwise                -> newMetaKindVar
                            NoSig
-                           -- JSTOLAREK: Something is wrong here. I believe the
-                           -- first branch will never be taken, because
-                           -- famDeclHasCusk will return false if fdResultSig is
-                           -- NoSig.
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }

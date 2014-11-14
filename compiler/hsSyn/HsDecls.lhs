@@ -750,9 +750,9 @@ famDeclHasCusk _ = True  -- all open families have CUSKs!
 
 -- | Does this family declaration have user-supplied return kind signature?
 hasReturnKindSignature :: FamilyResultSig a -> Bool
-hasReturnKindSignature NoSig = False
+hasReturnKindSignature NoSig                          = False
 hasReturnKindSignature (TyVarSig (L _ (UserTyVar _))) = False
-hasReturnKindSignature _     = True
+hasReturnKindSignature _                              = True
 
 -- | Return a list of Bools that says whether a type family was declared
 -- injective in the corresponding type arguments. Length of the list is equal to
