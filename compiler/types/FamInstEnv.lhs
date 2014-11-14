@@ -61,6 +61,7 @@ import Var
 import Pair
 import SrcLoc
 import NameSet
+import NameEnv
 import FastString
 \end{code}
 
@@ -711,26 +712,33 @@ lookupFamInjInstEnvConflicts injEnv envs
       new_branch = coAxiomSingleBranch new_axiom
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
+-- JSTOLAREK: return NameEnv TyVar
 -- | Returns a list of type variables that the function is injective in and that
 -- are not used in the RHS of family instance declaration.
-unusedInjTvsInRHS :: FamInjEnv -> FamInst -> [TyVar]
-unusedInjTvsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
-    case lookupUFM injEnv (tyConName fam) of
-      Nothing  -> []
+unusedInjTvsInRHS :: FamInjEnv -> FamInst -> TyVarSet
+unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+    let (fam, _) = famInstSplitLHS famInst
+    in case lookupUFM injEnv (tyConName fam) of
+      Nothing  -> emptyVarSet
       Just inj -> let -- get the list of type variables in which type
                       -- family is injective
-                      injTys  = filterByList inj lhs
-                      injVars = varSetElems $ tyVarsOfTypes injTys
+                      injVars = tyVarsOfTypes (filterByList inj lhs)
+                      rhsVars  = tyVarsOfType rhs
                   in  -- and return all injective variables not mentioned
                       -- in the RHS
-                      filterOut (`elemVarSet` rhsVars) injVars
-     where rhsVars  = tyVarsOfType rhs
-           (fam, _) = famInstSplitLHS fam_inst
+                      injVars `minusVarSet` rhsVars
 
 -- | Returns a list of type families used in the RHS of family instance
 -- declaration.
-tyFamsUsedInRHS :: FamInst -> [TyCon]
-tyFamsUsedInRHS (FamInst {fi_rhs = rhs}) = filter isSynTyCon (tyConsOfType rhs)
+tyFamsUsedInRHS :: FamInjEnv -> FamInst -> NameEnv TyCon
+tyFamsUsedInRHS injEnv famInst@(FamInst {fi_rhs = rhs}) =
+    let (fam, _) = famInstSplitLHS famInst
+    in case lookupUFM injEnv (tyConName fam) of
+      Nothing -> emptyNameEnv
+      Just _  -> filterNameEnv isSynTyCon (tyConsOfType rhs)
+      -- invariant assumed: type family declaration is in the injectivity
+      -- environment iff it was declared injective in at least one of its type
+      -- variables
 
 \end{code}
 

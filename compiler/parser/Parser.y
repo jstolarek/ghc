@@ -933,7 +933,7 @@ opt_kind_sig :: { Located (Maybe (LHsKind RdrName)) }
 
 opt_datafam_kind_sig :: { Located (FamilyResultSig RdrName) }
         :                               { noLoc NoSig     }
-        | '::' kind                     { LL (KindSig $2) }
+        | '::' kind                     { sLL $1 $> (KindSig $2) }
 
 opt_tyfam_kind_sig :: { Located (FamilyResultSig RdrName) }
         :                               { noLoc NoSig             }
