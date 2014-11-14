@@ -1605,7 +1605,7 @@ tyConToIfaceDecl env tycon
 
   -- invariant: if the first pattern guard succeeds the second one also should
   | Just syn_rhs <- synTyConRhs_maybe tycon
-  , Just injectivity <- isInjectiveTypeFamilyTyCon tycon
+  , Just injectivity <- tyConInjectivityInfo_maybe tycon
   = ( tc_env1
     , IfaceSyn {  ifName    = getOccName tycon,
                   ifTyVars  = if_tc_tyvars,

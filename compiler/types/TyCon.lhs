@@ -45,8 +45,9 @@ module TyCon(
         isNewTyCon, isAbstractTyCon,
         isFamilyTyCon, isOpenFamilyTyCon,
         isSynFamilyTyCon, isDataFamilyTyCon,
-        isOpenSynFamilyTyCon, isClosedSynFamilyTyCon_maybe,
-        isInjectiveTypeFamilyTyCon,
+        isOpenSynFamilyTyCon, isClosedSynFamilyTyCon,
+        isClosedSynFamilyTyCon_maybe,
+        tyConInjectivityInfo_maybe, unsafeSynTyConInjectivityInfo,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -1250,16 +1251,27 @@ isOpenSynFamilyTyCon :: TyCon -> Bool
 isOpenSynFamilyTyCon (SynTyCon {synTcRhs = OpenSynFamilyTyCon }) = True
 isOpenSynFamilyTyCon _ = False
 
+isClosedSynFamilyTyCon :: TyCon -> Bool
+isClosedSynFamilyTyCon (SynTyCon {synTcRhs = ClosedSynFamilyTyCon _ }) = True
+isClosedSynFamilyTyCon _ = False
+
 -- leave out abstract closed families here
 isClosedSynFamilyTyCon_maybe :: TyCon -> Maybe (CoAxiom Branched)
 isClosedSynFamilyTyCon_maybe
   (SynTyCon {synTcRhs = ClosedSynFamilyTyCon ax}) = Just ax
 isClosedSynFamilyTyCon_maybe _ = Nothing
 
--- JSTOLAREK: better name: maybeInjectiveTyCon
-isInjectiveTypeFamilyTyCon :: TyCon -> Maybe [Bool]
-isInjectiveTypeFamilyTyCon (SynTyCon { synInjective = inj }) = Just inj
-isInjectiveTypeFamilyTyCon _                                 = Nothing
+-- | Try to read the injectivity information from a TyCon. Only SynTyCons can be
+-- injective so for every other TyCon this function returns Nothing
+tyConInjectivityInfo_maybe :: TyCon -> Maybe [Bool]
+tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = Just inj
+tyConInjectivityInfo_maybe _                                 = Nothing
+
+-- | Try to read the injectivity information from a SynTyCon. Only SynTyCons can
+-- be injective so for every other TyCon this function panics (hence unsafe).
+unsafeSynTyConInjectivityInfo :: TyCon -> [Bool]
+unsafeSynTyConInjectivityInfo (SynTyCon { synInjective = inj }) = inj
+unsafeSynTyConInjectivityInfo _ = panic "unsafeSynTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
 isBuiltInSynFamTyCon_maybe

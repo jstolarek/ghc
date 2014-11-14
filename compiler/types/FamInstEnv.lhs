@@ -25,8 +25,8 @@ module FamInstEnv (
         lookupFamInstEnv, lookupFamInstEnvConflicts,
 
         -- Injectivity
-        lookupFamInjInstEnvConflicts, validateAllTyVarsInRHS,
-        validateNoTyFamsInRHS,
+        lookupFamInjInstEnvConflicts, unusedInjTvsInRHS,
+        tyFamsUsedInRHS,
 
         chooseBranch, isDominatedBy,
 
@@ -709,8 +709,8 @@ lookupFamInjInstEnvConflicts injEnv envs
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
 -- haddockify
-validateAllTyVarsInRHS :: FamInjEnv -> FamInst -> [TyVar]
-validateAllTyVarsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+unusedInjTvsInRHS :: FamInjEnv -> FamInst -> [TyVar]
+unusedInjTvsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
     case lookupUFM injEnv (tyConName fam) of
       Nothing  -> []
       Just inj -> let -- get the list of type variables in which type
@@ -726,8 +726,8 @@ validateAllTyVarsInRHS injEnv fam_inst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
 -- haddockify
-validateNoTyFamsInRHS :: FamInst -> [TyCon]
-validateNoTyFamsInRHS (FamInst {fi_rhs = rhs}) =
+tyFamsUsedInRHS :: FamInst -> [TyCon]
+tyFamsUsedInRHS (FamInst {fi_rhs = rhs}) =
   filter isSynTyCon (tyConsOfType rhs)
 
 \end{code}
