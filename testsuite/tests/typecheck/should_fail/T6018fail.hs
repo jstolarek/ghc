@@ -43,3 +43,7 @@ type instance J Int b c = Char
 -- same as above, but tyvar is now nested inside a tycon
 type family K (a :: N) (b :: N) = (r :: N) | r -> a b
 type instance K (S n) m = S m
+
+type MaybeSyn a = Id a
+type family L a = r | r -> a
+type instance L a = MaybeSyn a

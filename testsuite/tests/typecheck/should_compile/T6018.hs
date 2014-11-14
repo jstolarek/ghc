@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, DataKinds #-}
+{-# LANGUAGE TypeFamilies, DataKinds, UndecidableInstances #-}
 
 module T6018 where
 
@@ -21,3 +21,7 @@ type instance I Bool Int  Int  = Int
 -- but we don't claim injectivity in that argument.
 type family J a b = r | r -> a
 type instance J Int b = Char
+
+type MaybeSyn a = Maybe a
+type family K a = r | r -> a
+type instance K a = MaybeSyn a
