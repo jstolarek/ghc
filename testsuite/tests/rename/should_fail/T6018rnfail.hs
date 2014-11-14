@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, PolyKinds #-}
 
 module T6018rnfail where
 
@@ -59,3 +59,7 @@ type family Lc a b = r | c -> a where
   Lc a b = a
 class Lcl a b where
   type Lt a b = r | c -> a
+
+-- kind variable in RHS of ID. Note that this might be allowed in the future if
+-- we have injectivity in kinds.
+type family Baz (a :: k) = r | r -> k
