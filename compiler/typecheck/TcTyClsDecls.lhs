@@ -687,7 +687,7 @@ tcFamDecl1 parent
   -- JSTOLAREK: it looks that here we are just constructing an open type family
   -- declaration without checking the equations
   ; tycon <- buildSynTyCon tc_name tvs' roles OpenSynFamilyTyCon kind parent
-                           (extractInjectivityInformation famDecl)
+                           (getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
@@ -735,7 +735,7 @@ tcFamDecl1 parent
                        else ClosedSynFamilyTyCon co_ax
              roles   = map (const Nominal) tvs'
        ; tycon <- buildSynTyCon tc_name tvs' roles syn_rhs kind parent
-                                (extractInjectivityInformation famDecl)
+                                (getInjectivityInformation famDecl)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
