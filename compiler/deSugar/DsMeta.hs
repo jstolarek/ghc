@@ -328,7 +328,7 @@ repFamilyDecl (L loc (FamilyDecl { fdInfo      = info,
                     do { eqns1 <- mapM repTyFamEqn eqns
                        ; eqns2 <- coreList tySynEqnQTyConName eqns1
                        ; repClosedFamilyNoKind tc1 bndrs eqns2 }
-                  (KindOnlySig ki, ClosedTypeFamily eqns) ->
+                  (KindSig ki, ClosedTypeFamily eqns) ->
                     do { eqns1 <- mapM repTyFamEqn eqns
                        ; eqns2 <- coreList tySynEqnQTyConName eqns1
                        ; ki1 <- repLKind ki
@@ -336,7 +336,7 @@ repFamilyDecl (L loc (FamilyDecl { fdInfo      = info,
                   (NoSig, _) ->
                     do { info' <- repFamilyInfo info
                        ; repFamilyNoKind info' tc1 bndrs }
-                  (KindOnlySig ki, _) ->
+                  (KindSig ki, _) ->
                     do { info' <- repFamilyInfo info
                        ; ki1 <- repLKind ki
                        ; repFamilyKind info' tc1 bndrs ki1 }

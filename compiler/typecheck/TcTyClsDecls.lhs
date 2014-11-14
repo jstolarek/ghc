@@ -415,7 +415,7 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
   = do { (fam_kind, _) <-
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
            do { res_k <- case ksig of
-                           KindOnlySig ki  -> tcLHsKind ki
+                           KindSig ki -> tcLHsKind ki
                            -- JSTOLAREK: double-check that this is correct
                            -- Nope, not correct - non-exhaustive patterns.
                            -- Needs careful thought.

@@ -1156,9 +1156,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
            do { tycon' <- lookupLocatedTopBndrRn tycon
               ; (kindSig', fv_kind) <- case kindSig of
                   NoSig -> return (NoSig, emptyFVs)
-                  KindOnlySig kind ->
-                   -- (Functor f) => f (a, b) -> f (KindOnlySig a, b)
-                   first KindOnlySig `fmap` (rnLHsKind fmly_doc kind)
+                  KindSig kind ->
+                   -- (Functor f) => f (a, b) -> f (KindSig a, b)
+                   first KindSig `fmap` (rnLHsKind fmly_doc kind)
                   TyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (TyVarSig a, b)
                    first TyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
