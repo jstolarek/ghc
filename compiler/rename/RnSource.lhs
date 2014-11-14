@@ -1142,7 +1142,7 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdKindSig = kindSig
+                             , fdInfo = info, fdResultSig = kindSig
                              , fdInjective = injectivity })
 -- RAE: Is there anywhere that checks that the result tyvar is fresh?
 -- Can it be the same as a tyvar of an enclosing class?
@@ -1175,7 +1175,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdKindSig = kindSig'
+                            , fdInfo = info', fdResultSig = kindSig'
                             , fdInjective = injectivity' }
                 , fv1 `plusFV` fv2) }
   where

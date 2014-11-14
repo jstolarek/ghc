@@ -308,10 +308,10 @@ repSynDecl tc bndrs ty
 -- update this to take injectivity into account once Template Haskell is
 -- updated.
 repFamilyDecl :: LFamilyDecl Name -> DsM (SrcSpan, Core TH.DecQ)
-repFamilyDecl (L loc (FamilyDecl { fdInfo    = info,
-                                   fdLName   = tc,
-                                   fdTyVars  = tvs,
-                                   fdKindSig = opt_kind }))
+repFamilyDecl (L loc (FamilyDecl { fdInfo      = info,
+                                   fdLName     = tc,
+                                   fdTyVars    = tvs,
+                                   fdResultSig = opt_kind }))
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
        ; dec <- addTyClTyVarBinds tvs $ \bndrs ->
            case (opt_kind, info) of

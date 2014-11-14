@@ -232,8 +232,9 @@ mkFamDecl :: SrcSpan
 mkFamDecl loc info lhs ksig inj_cond
   = do { (tc, tparams) <- checkTyClHdr lhs
        ; tyvars <- checkTyVarsP (ppr info) equals_or_where tc tparams
-       ; return (L loc (FamDecl (FamilyDecl{ fdInfo = info, fdLName = tc
-                                           , fdTyVars = tyvars, fdKindSig = ksig
+       ; return (L loc (FamDecl (FamilyDecl{ fdInfo      = info, fdLName = tc
+                                           , fdTyVars    = tyvars
+                                           , fdResultSig = ksig
                                            , fdInjective = inj_cond }))) }
   where
     equals_or_where = case info of

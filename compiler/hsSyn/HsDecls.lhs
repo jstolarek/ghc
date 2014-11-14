@@ -579,7 +579,7 @@ data FamilyDecl name = FamilyDecl
   , fdInjective :: Maybe (LInjectivityDecl name) -- optional injectivity decl.
   , fdLName     :: Located name                  -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name            -- type variables
-  , fdKindSig   :: FamilyResultSig name }        -- result signature
+  , fdResultSig :: FamilyResultSig name }        -- result signature
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
@@ -714,9 +714,9 @@ hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 
 -- | Does this family declaration have a complete, user-supplied kind signature?
 famDeclHasCusk :: FamilyDecl name -> Bool
-famDeclHasCusk (FamilyDecl { fdInfo = ClosedTypeFamily _
-                           , fdTyVars = tyvars
-                           , fdKindSig = m_sig })
+famDeclHasCusk (FamilyDecl { fdInfo      = ClosedTypeFamily _
+                           , fdTyVars    = tyvars
+                           , fdResultSig = m_sig })
   = hsTvbAllKinded tyvars && existsSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
 
@@ -820,7 +820,7 @@ instance OutputableBndr name => Outputable (TyClGroup name) where
 
 instance (OutputableBndr name) => Outputable (FamilyDecl name) where
   ppr (FamilyDecl { fdInfo = info, fdLName = ltycon,
-                    fdTyVars = tyvars, fdKindSig = mb_kind})
+                    fdTyVars = tyvars, fdResultSig = mb_kind})
       = vcat [ pprFlavour info <+> pp_vanilla_decl_head ltycon tyvars [] <+> pp_kind <+> pp_where
              , nest 2 $ pp_eqns ]
         where
