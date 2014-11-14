@@ -419,7 +419,7 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
                            -- JSTOLAREK: double-check that this is correct
                            -- Nope, not correct - non-exhaustive patterns.
                            -- Needs careful thought.
-                           KindedTyVarSig (L _ bndr)
+                           TyVarSig (L _ bndr)
                              | KindedTyVar _ ki <- bndr -> tcLHsKind ki
                              | otherwise                -> newMetaKindVar
                            NoSig

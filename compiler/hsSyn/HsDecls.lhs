@@ -551,7 +551,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --  * KindOnlySig - the user supplied the return kind:
 --       type family Id a :: * where ...
 --
---  * KindedTyVarSig - user named the result with a type variable and possibly
+--  * TyVarSig - user named the result with a type variable and possibly
 --    provided a kind signature for that variable:
 --       type family Id a = r where ...
 --       type family Id a = (r :: *) where ...
@@ -597,7 +597,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
 data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindOnlySig (LHsKind name)
-                          | KindedTyVarSig (LHsTyVarBndr name)
+                          | TyVarSig (LHsTyVarBndr name)
                             deriving( Typeable )
 deriving instance (DataId name) => Data (FamilyResultSig name)
 
@@ -751,7 +751,7 @@ famDeclHasCusk _ = True  -- all open families have CUSKs!
 -- | Does this family declaration have user-supplied return kind signature?
 hasReturnKindSignature :: FamilyResultSig a -> Bool
 hasReturnKindSignature NoSig = False
-hasReturnKindSignature (KindedTyVarSig (L _ (UserTyVar _))) = False
+hasReturnKindSignature (TyVarSig (L _ (UserTyVar _))) = False
 hasReturnKindSignature _     = True
 
 -- | Return a list of Bools that says whether a type family was declared
@@ -842,9 +842,9 @@ instance (OutputableBndr name) => Outputable (FamilyDecl name) where
              , nest 2 $ pp_eqns ]
         where
           pp_kind = case mb_kind of
-                      NoSig                  -> empty
-                      KindOnlySig kind       -> dcolon <+> ppr kind
-                      KindedTyVarSig tv_bndr -> ptext (sLit "=") <+> ppr tv_bndr
+                      NoSig            -> empty
+                      KindOnlySig kind -> dcolon <+> ppr kind
+                      TyVarSig tv_bndr -> ptext (sLit "=") <+> ppr tv_bndr
           (pp_where, pp_eqns) = case info of
             ClosedTypeFamily eqns -> ( ptext (sLit "where")
                                      , if null eqns

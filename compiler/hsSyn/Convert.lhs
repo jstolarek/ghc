@@ -1086,8 +1086,8 @@ cvtFamilyResultSig NoSig = return NoSig
 cvtFamilyResultSig (KindOnlySig _) = --do { ki' <- cvtKind ki
                                      --          ; return (KindOnlySig ki') }
     panic "cvtFamilyResultSig KindOnlySig"
-cvtFamilyResultSig (KindedTyVarSig _) =
-    panic "cvtFamilyResultSig KindedTyVarSig"
+cvtFamilyResultSig (TyVarSig _) =
+    panic "cvtFamilyResultSig TyVarSig"
 
 -----------------------------------------------------------
 cvtFixity :: TH.Fixity -> Hs.Fixity

@@ -1159,9 +1159,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   KindOnlySig kind ->
                    -- (Functor f) => f (a, b) -> f (KindOnlySig a, b)
                    first KindOnlySig `fmap` (rnLHsKind fmly_doc kind)
-                  KindedTyVarSig tvbndr ->
-                   -- (Functor f) => f (a, b) -> f (KindedTyVarSig a, b)
-                   first KindedTyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
+                  TyVarSig tvbndr ->
+                   -- (Functor f) => f (a, b) -> f (TyVarSig a, b)
+                   first TyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
               ; injectivity' <- traverse (rnInjectivityDecl tvBndrs resName)
                                          injectivity
 
@@ -1192,8 +1192,8 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      resName  = hsLTyVarName (fromJust resTyVar)
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
-     maybeResultBndr (KindedTyVarSig bndr) = Just bndr
-     maybeResultBndr _                     = Nothing
+     maybeResultBndr (TyVarSig bndr) = Just bndr
+     maybeResultBndr _               = Nothing
 
      rn_info (ClosedTypeFamily eqns)
        = do { (eqns', fvs) <- rnList (rnTyFamInstEqn Nothing) eqns
