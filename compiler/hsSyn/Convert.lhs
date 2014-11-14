@@ -258,7 +258,7 @@ cvtDec (FamilyD flav tc tvs kind)
        ; returnJustL $ TyClD $ FamDecl $
        -- RAE: You could always interpret the TH to have a plain kind
        -- signature with no result name...
-         FamilyDecl (cvtFamFlavour flav) (L noSrcSpan Nothing) tc' tvs'
+         FamilyDecl (cvtFamFlavour flav) Nothing tc' tvs'
                     undefined {-kind here-} }
   where
     cvtFamFlavour TypeFam = OpenTypeFamily
@@ -306,7 +306,7 @@ cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
        ; eqns' <- mapM (cvtTySynEqn tc') eqns
        -- JSTOLAREK: this needs fixing
        ; returnJustL $ TyClD $ FamDecl $
-         FamilyDecl (ClosedTypeFamily eqns') (L noSrcSpan Nothing) tc' tvs'
+         FamilyDecl (ClosedTypeFamily eqns') Nothing tc' tvs'
                     mkind' }
   | otherwise
   = failWith (ptext (sLit "Illegal empty closed type family"))

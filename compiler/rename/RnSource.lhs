@@ -1143,7 +1143,7 @@ rnFamDecl :: Maybe Name
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInfo = info, fdKindSig = kindSig
-                             , fdInjective = L injSpan injectivity })
+                             , fdInjective = injectivity })
 -- RAE: Is there anywhere that checks that the result tyvar is fresh?
 -- Can it be the same as a tyvar of an enclosing class?
   = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
@@ -1176,7 +1176,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
                             , fdInfo = info', fdKindSig = kindSig'
-                            , fdInjective = L injSpan injectivity' }
+                            , fdInjective = injectivity' }
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
@@ -1208,9 +1208,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
-                    -> InjectivityInfo RdrName -- injectivity information
-                    -> RnM (InjectivityInfo Name)
-     rn_injectivity tyvars (InjectivityInfo injFrom injTo) = do
+                    -> LInjectivityInfo RdrName -- injectivity information
+                    -> RnM (LInjectivityInfo Name)
+     rn_injectivity tyvars (L srcSpan (InjectivityInfo injFrom injTo)) = do
         let -- the only type variable allowed on the LHS of injectivity
             -- condition is the variable naming the result in type family head
             lhsValid   = resName == unLoc injFrom
@@ -1284,7 +1284,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
-        return $ InjectivityInfo injFrom' injTo'
+        return $ (L srcSpan (InjectivityInfo injFrom' injTo'))
 
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name

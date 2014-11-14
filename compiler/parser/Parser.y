@@ -667,7 +667,7 @@ ty_decl :: { LTyClDecl RdrName }
                           where_type_family
                 -- Note the use of type for the head; this allows
                 -- infix type constructors to be declared
-                {% mkFamDecl (comb4 $1 $3 $4 $6) (unLoc $6) $3 (unLoc $4) $5 }
+                {% mkFamDecl (comb3 $1 $3 $4) (unLoc $6) $3 (unLoc $4) $5 }
 
           -- ordinary data type or newtype declaration
         | data_or_newtype capi_ctype tycl_hdr constrs deriving
@@ -688,7 +688,7 @@ ty_decl :: { LTyClDecl RdrName }
           -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig
                 {% mkFamDecl (comb3 $1 $2 $4) DataFamily $3
-                             (unLoc $4) (noLoc Nothing) }
+                             (unLoc $4) Nothing }
 
 inst_decl :: { LInstDecl RdrName }
         : 'instance' overlap_pragma inst_type where_inst
@@ -725,11 +725,11 @@ overlap_pragma :: { Maybe OverlapMode }
 
 -- Injective type families
 
-opt_injective_info :: { Located (Maybe (InjectivityInfo RdrName)) }
-        :                              { noLoc Nothing        }
-        | '|' injectivity_cond         { sLL $1 $> (Just (unLoc $2)) }
+opt_injective_info :: { Maybe (LInjectivityInfo RdrName) }
+        :                              { Nothing }
+        | '|' injectivity_cond         { Just $2 }
 
-injectivity_cond :: { Located (InjectivityInfo RdrName) }
+injectivity_cond :: { LInjectivityInfo RdrName }
         : tyvarid '->' inj_varids
           { sLL $1 $> (InjectivityInfo $1 (reverse (unLoc $3))) }
 
@@ -775,15 +775,15 @@ at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_datafam_kind_sig
                 {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                            (unLoc $4) (noLoc Nothing)) }
+                                            (unLoc $4) Nothing) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
         | 'type' type opt_tyfam_kind_sig opt_injective_info
-                {% liftM mkTyClD (mkFamDecl (comb4 $1 $2 $3 $4) OpenTypeFamily
+                {% liftM mkTyClD (mkFamDecl (comb3 $1 $2 $3) OpenTypeFamily
                                             $2 (unLoc $3) $4) }
         | 'type' 'family' type opt_tyfam_kind_sig opt_injective_info
-                {% liftM mkTyClD (mkFamDecl (comb4 $1 $3 $4 $5) OpenTypeFamily
+                {% liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) OpenTypeFamily
                                             $3 (unLoc $4) $5) }
 
            -- default type instances, with optional 'instance' keyword

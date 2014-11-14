@@ -69,7 +69,8 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  FamilyResultSig(..), InjectivityInfo(..), extractInjectivityInformation,
+  FamilyResultSig(..), InjectivityInfo(..), LInjectivityInfo,
+  extractInjectivityInformation,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -106,7 +107,6 @@ import Data.Data        hiding (TyCon,Fixity)
 import Data.Foldable ( Foldable )
 import Data.Traversable ( Traversable )
 #endif
-import Data.Maybe
 \end{code}
 
 %************************************************************************
@@ -532,7 +532,9 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --    Naming result of a type family is required if we want to provide
 --    injectivity declaration for a type family:
 --       type family Id a = r | r -> a where ...
--- JSTOLAREK: this note should probably refer to other notes once they are made
+--
+-- JSTOLAREK: this note should probably refer to other notes once they are made:
+-- one about injectivity
 
 data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindOnlySig (LHsKind name)
@@ -543,14 +545,7 @@ deriving instance (DataId name) => Data (FamilyResultSig name)
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
   { fdInfo      :: FamilyInfo name               -- type or data, closed or open
-  -- JSTOLAREK: everything else here is Located, so I've made this located as
-  -- well. But perhaps I don't have to? I'm not introducing any bindings on the
-  -- one hand, but then again I'll be reporting errors later...
-  -- Located should go inside Maybe
-  -- RAE: I would think the Maybe belongs outside the
-  -- Located. After all, if there isn't any info, there also isn't any
-  -- location. And then you can use LInjectivityInfo.
-  , fdInjective :: Located (Maybe (InjectivityInfo name))
+  , fdInjective :: Maybe (LInjectivityInfo name)
                                                  -- injectivity information
   , fdLName     :: Located name                  -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name            -- type variables
@@ -558,7 +553,7 @@ data FamilyDecl name = FamilyDecl
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
--- JSTOLAREK: provide a comment about this data type
+type LInjectivityInfo name = Located (InjectivityInfo name)
 data InjectivityInfo name
   = InjectivityInfo (Located name) [Located name]
   deriving( Data, Typeable )
@@ -695,13 +690,13 @@ existsSignature _     = True
 
 -- JSTOLAREK: haddockify
 extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
-extractInjectivityInformation (FamilyDecl { fdInjective = L _ Nothing
+extractInjectivityInformation (FamilyDecl { fdInjective = Nothing
                                           , fdTyVars = tvbndrs } ) =
   -- No injectivity information => type family is not injective in any
   -- of its arguments. Return a list of Falses.
   replicate (length (hsq_tvs tvbndrs)) False
 extractInjectivityInformation (FamilyDecl
-                { fdInjective = L _ (Just (InjectivityInfo _ lInjNames))
+                { fdInjective = Just (L _ (InjectivityInfo _ lInjNames))
                 , fdTyVars = tvbndrs } ) =
   merge tvNames injNames
     where
