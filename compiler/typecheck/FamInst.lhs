@@ -34,6 +34,7 @@ import TcType
 import Name
 import NameEnv
 import Var ( TyVar )
+import VarSet
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -397,7 +398,7 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
   = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
              no_conflicts = null conflicts
              unused_tvs   = unusedInjTvsInRHS inj_env fam_inst
-             all_tvs_used = null unused_tvs
+             all_tvs_used = isEmptyVarSet unused_tvs
              tyfams_used  = tyFamsUsedInRHS inj_env fam_inst
              no_tyfams    = isNullNameEnv tyfams_used
        ; traceTc "checkForInjectivityConflicts" $
@@ -434,12 +435,12 @@ conflictInjInstErr fam_inst conflictingMatch
   = panic "conflictInjInstErr"
 
 
-unusedInjectiveVarsErr :: FamInst -> [TyVar] -> TcRn ()
+unusedInjectiveVarsErr :: FamInst -> TyVarSet -> TcRn ()
 unusedInjectiveVarsErr fam_inst unused_tyvars
   = addFamInstsErr (text ("Family instance declaration violates injectivity " ++
                           "declaration. Type variable") <>
-                    plural unused_tyvars <+>
-                    pprQuotedList unused_tyvars <+>
+                    plural (varSetElems unused_tyvars) <+>
+                    pprQuotedList (varSetElems unused_tyvars) <+>
                     text "should appear in the RHS of type family equation:")
                    [fam_inst]
 

@@ -715,19 +715,18 @@ lookupFamInjInstEnvConflicts injEnv envs
 -- JSTOLAREK: return NameEnv TyVar
 -- | Returns a list of type variables that the function is injective in and that
 -- are not used in the RHS of family instance declaration.
-unusedInjTvsInRHS :: FamInjEnv -> FamInst -> [TyVar]
+unusedInjTvsInRHS :: FamInjEnv -> FamInst -> TyVarSet
 unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
-    let rhsVars  = tyVarsOfType rhs
-        (fam, _) = famInstSplitLHS famInst
+    let (fam, _) = famInstSplitLHS famInst
     in case lookupUFM injEnv (tyConName fam) of
-      Nothing  -> []
+      Nothing  -> emptyVarSet
       Just inj -> let -- get the list of type variables in which type
                       -- family is injective
-                      injTys  = filterByList inj lhs
-                      injVars = varSetElems $ tyVarsOfTypes injTys
+                      injVars = tyVarsOfTypes (filterByList inj lhs)
+                      rhsVars  = tyVarsOfType rhs
                   in  -- and return all injective variables not mentioned
                       -- in the RHS
-                      filterOut (`elemVarSet` rhsVars) injVars
+                      injVars `minusVarSet` rhsVars
 
 -- | Returns a list of type families used in the RHS of family instance
 -- declaration.
