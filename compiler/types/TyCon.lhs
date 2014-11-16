@@ -48,7 +48,8 @@ module TyCon(
         isTypeFamilyTyCon, isDataFamilyTyCon,
         isOpenTypeFamilyTyCon, isClosedSynFamilyTyCon_maybe,
         isInjectiveTypeFamilyTyCon,
-        unsafeSynTyConInjectivityInfo,
+        -- JSTOLAREK: change this name!
+        synTyConInjectivityInfo,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -1358,10 +1359,10 @@ tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = Just inj
 tyConInjectivityInfo_maybe _                                 = Nothing
 
 -- | Try to read the injectivity information from a SynTyCon. Only SynTyCons can
--- be injective so for every other TyCon this function panics (hence unsafe).
-unsafeSynTyConInjectivityInfo :: TyCon -> [Bool]
-unsafeSynTyConInjectivityInfo (SynTyCon { synInjective = inj }) = inj
-unsafeSynTyConInjectivityInfo _ = panic "unsafeSynTyConInjectivityInfo"
+-- be injective so for every other TyCon this function panics.
+synTyConInjectivityInfo :: TyCon -> [Bool]
+synTyConInjectivityInfo (SynTyCon { synInjective = inj }) = inj
+synTyConInjectivityInfo _ = panic "synTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
 isBuiltInSynFamTyCon_maybe
