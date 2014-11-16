@@ -12,7 +12,8 @@ module NameEnv (
 
         -- ** Manipulating these environments
         mkNameEnv,
-        emptyNameEnv, unitNameEnv, nameEnvElts, nameEnvUniqueElts,
+        emptyNameEnv, isNullNameEnv,
+        unitNameEnv, nameEnvElts, nameEnvUniqueElts,
         extendNameEnv_C, extendNameEnv_Acc, extendNameEnv,
         extendNameEnvList, extendNameEnvList_C,
         foldNameEnv, filterNameEnv, anyNameEnv,
@@ -69,6 +70,7 @@ depAnal get_defs get_uses nodes
 type NameEnv a = UniqFM a       -- Domain is Name
 
 emptyNameEnv       :: NameEnv a
+isNullNameEnv      :: NameEnv a -> Bool
 mkNameEnv          :: [(Name,a)] -> NameEnv a
 nameEnvElts        :: NameEnv a -> [a]
 nameEnvUniqueElts  :: NameEnv a -> [(Unique, a)]
@@ -94,6 +96,7 @@ disjointNameEnv    :: NameEnv a -> NameEnv a -> Bool
 
 nameEnvElts x         = eltsUFM x
 emptyNameEnv          = emptyUFM
+isNullNameEnv         = isNullUFM
 unitNameEnv x y       = unitUFM x y
 extendNameEnv x y z   = addToUFM x y z
 extendNameEnvList x l = addListToUFM x l

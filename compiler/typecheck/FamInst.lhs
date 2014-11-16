@@ -32,6 +32,7 @@ import Maybes
 import TcMType
 import TcType
 import Name
+import NameEnv
 import Var ( TyVar )
 import Control.Monad
 import Data.Map (Map)
@@ -397,8 +398,8 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
              no_conflicts = null conflicts
              unused_tvs   = unusedInjTvsInRHS inj_env fam_inst
              all_tvs_used = null unused_tvs
-             tyfams_used  = tyFamsUsedInRHS fam_inst
-             no_tyfams    = null tyfams_used
+             tyfams_used  = tyFamsUsedInRHS inj_env fam_inst
+             no_tyfams    = isNullNameEnv tyfams_used
        ; traceTc "checkForInjectivityConflicts" $
          vcat [ ppr (map fim_instance conflicts)
               , ppr fam_inst
@@ -443,12 +444,12 @@ unusedInjectiveVarsErr fam_inst unused_tyvars
                    [fam_inst]
 
 
-tyfamsUsedInjErr :: FamInst -> [TyCon] -> TcRn ()
+tyfamsUsedInjErr :: FamInst -> NameEnv TyCon -> TcRn ()
 tyfamsUsedInjErr fam_inst tyfams_called
   = addFamInstsErr (text "Calling type" <+>
-                    irregularPlural tyfams_called (text "family")
-                                                  (text "families") <+>
-                    pprQuotedList tyfams_called <+>
+                    irregularPlural (nameEnvElts tyfams_called)
+                                    (text "family") (text "families") <+>
+                    pprQuotedList (nameEnvElts tyfams_called) <+>
                     text "is not allowed in injective type family equation:")
                    [fam_inst]
 
