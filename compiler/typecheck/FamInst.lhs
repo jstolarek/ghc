@@ -171,6 +171,10 @@ checkFamInstConsistency famInstMods directlyImpMods
                    (famInstEnvElts env1)
            -- if there are no type families with injectivity declarations skip
            -- the check
+           --
+           -- JSTOLAREK: I think that this check might actually not work - I got
+           -- some erros from checkForInjectivityConflicts from type families in
+           -- Data.Equality even though they don't define injectivity
            ; when (not . isNullUFM $ injEnv) $
              mapM_ (checkForInjectivityConflicts injEnv (emptyFamInstEnv,env2))
                    (famInstEnvElts env1)
@@ -198,9 +202,10 @@ buildTyFamInjEnv inScopetyCons =
     listToUFM [ ( tyConName tyfam, injInfo )
               | tyfam <- inScopetyCons
               , (isOpenSynFamilyTyCon tyfam || isClosedSynFamilyTyCon tyfam)
-              -- we call the unsafe function here because we filter TyCons using
-              -- isSynTyCon
-              , let injInfo = unsafeSynTyConInjectivityInfo tyfam
+              -- synTyConInjectivityInfo will panic for anything different than
+              -- a SynTyCon. The above check makes sure that we only have open
+              -- and close type families, which are SynTyCons
+              , let injInfo = synTyConInjectivityInfo tyfam
               , or injInfo ] -- skip type families without
                              -- injectivity declarations
 
