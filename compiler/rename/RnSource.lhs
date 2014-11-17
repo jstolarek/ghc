@@ -1261,7 +1261,8 @@ rnInjectivityDecl tvBndrs (Just resTv)
           ( vcat [ hsep [ text "You listed"   , speakN (length injTo)
                         , text ":"            , interpp'SP injTo        ]
                  , hsep [ text "But at most"  , speakN (length tvBndrs)
-                        , text "are allowed :", interpp'SP tvNames      ]
+                        , isOrAre tvNames     , text "allowed :"
+                        , interpp'SP tvNames  ]
                  ]
           )], lx)
        merge (x:xs) ys'@(L ly y:ys)

@@ -93,4 +93,4 @@ T6018rnfail.hs:69:15:
 T6018rnfail.hs:73:26:
     Too many type variables on RHS of injectivity condition.
          You listed two : a, b
-         But at most one are allowed : a
+         But at most one is allowed : a
