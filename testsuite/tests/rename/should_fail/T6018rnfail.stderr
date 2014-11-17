@@ -87,5 +87,10 @@ T6018rnfail.hs:65:37:
     Unexpected type variable on the RHS of injectivity condition: ‘k’
     All variables should appear at most once and in exactly the same order as they were declared in type family head.
 
-T6018rnfail.hs:69:16:
+T6018rnfail.hs:69:15:
     Type variable ‘a’ naming a type family result shadows an already bound type variable.
+
+T6018rnfail.hs:73:26:
+    Too many type variables on RHS of injectivity condition.
+         You listed two : a, b
+         But at most one are allowed : a

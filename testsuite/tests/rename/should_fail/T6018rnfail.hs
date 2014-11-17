@@ -65,5 +65,9 @@ class Lcl a b where
 type family Baz (a :: k) = r | r -> k
 
 -- result variable shadows variable in class head
-class C a b where
-  type Foo b = a
+class M a b where
+  type Mt b = a
+
+-- here b is out-of-scope
+class N a b where
+  type Nt a = r | r -> a b
