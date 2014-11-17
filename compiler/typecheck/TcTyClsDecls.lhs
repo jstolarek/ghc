@@ -419,6 +419,9 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
                            -- RAE: newMetaKindVar should happen only for closed
                            -- type families, not open ones, whose result kind
                            -- defaults to *.
+                           -- Open type families that are not given a
+                           -- result kind by the user have a result
+                           -- kind of liftedTypeKind.
                              | otherwise                -> newMetaKindVar
                            NoSig
                              | famDeclHasCusk decl -> return liftedTypeKind
