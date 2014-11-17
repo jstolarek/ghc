@@ -52,7 +52,6 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
-import Data.Maybe ( fromJust, isJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -1146,9 +1145,39 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInjective = injectivity })
 -- RAE: Is there anywhere that checks that the result tyvar is fresh?
 -- Can it be the same as a tyvar of an enclosing class?
-  = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
+  = do { rdr_env <- getLocalRdrEnv
+       ; ((tycon', tyvars', kindSig', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
+
+              -- `resTyVar` is a `Just` only the result of a type family was
+              -- named by writing `= tyvar` or `= (tyvar :: kind)`. In such case
+              -- we must check that the supplied result name is not identical
+              -- to:
+              --
+              --  a) one of already declared type family arguments. Example of
+              --     disallowed declaration:
+              --        type family F a = a
+              --
+              --  b) already in-scope type variable. This second case might
+              --     happen for associated types, where type class head bounds
+              --     some type variables. Example of disallowed declaration:
+              --         class C a b where
+              --            type F b = a
+              ; case resTyVar of
+                 Nothing -> return ()
+                 Just resTv -> do
+                      let tvNames = map hsLTyVarName tvBndrs
+                          resName = hsLTyVarName resTv
+                      when (resName `elem` tvNames ||            -- case a)
+                            resName `elemLocalRdrEnv` rdr_env) $ -- case b)
+                           setSrcSpan (getLoc resTv) $
+                           addErr (hsep [ text "Type variable"
+                                        , pprQuotedList [resName]
+                                        , text $ "naming a type family result "
+                                              ++ "shadows an already bound type"
+                                              ++ " variable."])
+
               ; (kindSig', fv_kind) <- case kindSig of
                   NoSig -> return (NoSig, emptyFVs)
                   KindSig kind ->
@@ -1157,19 +1186,8 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                   TyVarSig tvbndr ->
                    -- (Functor f) => f (a, b) -> f (TyVarSig a, b)
                    first TyVarSig `fmap` (rnTvBndr fmly_doc mb_cls tvbndr)
-              ; injectivity' <- traverse (rnInjectivityDecl tvBndrs resName)
-                                         injectivity
-
-              -- `resTyVar` is a `Just` only the result of a type family was
-              -- named by writing `= tyvar` or `= (tyvar :: kind)`. In such case
-              -- we must check that the supplied result name is not identical to
-              -- one of already declared type family arguments.
-              ; when (isJust resTyVar && resName `elem` tvNames) $
-                      setSrcSpan (getLoc (fromJust resTyVar)) $
-                      addErr (hsep [ text "Type variable"
-                                   , pprQuotedList [resName]
-                                   , text $ "naming a type family result also "
-                                         ++ "names one of the arguments."])
+              ; injectivity' <- traverse (rnInjectivityDecl tvBndrs resTyVar)
+                                          injectivity
 
               ; return ( (tycon', tyvars', kindSig', injectivity')
                        , fv_kind )  }
@@ -1183,8 +1201,6 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
      tvBndrs  = hsQTvBndrs tyvars
-     tvNames  = map hsLTyVarName tvBndrs
-     resName  = hsLTyVarName (fromJust resTyVar)
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
      maybeResultBndr (TyVarSig bndr) = Just bndr
@@ -1197,15 +1213,19 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
--- | Rename injectivity declaration
-rnInjectivityDecl :: [LHsTyVarBndr RdrName]    -- ^ type variables declared in
-                                               --   type family head
-                   -> RdrName                  -- ^ result name
-                   -> LInjectivityDecl RdrName -- ^ injectivity information
+-- | Rename injectivity declaration. Note that injectivity declaration
+-- is just the part after the "|". Everything that appears before it
+-- is renamed in rnFamDecl.
+rnInjectivityDecl :: [LHsTyVarBndr RdrName]        -- ^ type variables declared
+                                                   --   in type family head
+                   -> Maybe (LHsTyVarBndr RdrName) -- ^ result name
+                   -> LInjectivityDecl RdrName     -- ^ injectivity information
                    -> RnM (LInjectivityDecl Name)
-rnInjectivityDecl tvBndrs resName (L srcSpan (InjectivityDecl injFrom injTo))
+rnInjectivityDecl tvBndrs (Just resTv)
+                  (L srcSpan (InjectivityDecl injFrom injTo))
  = do
-   let tvNames    = map hsLTyVarName tvBndrs
+   let tvNames = map hsLTyVarName tvBndrs
+       resName = hsLTyVarName resTv
        -- the only type variable allowed on the LHS of injectivity
        -- condition is the variable naming the result in type family head.
        -- Example of disallowed declaration:
@@ -1282,11 +1302,19 @@ rnInjectivityDecl tvBndrs resName (L srcSpan (InjectivityDecl injFrom injTo))
                      , text "Actual   :" <+> ppr injFrom ])])
 
    case (noRnErrors, rhsValid) of
-     (True, Just err) -> setSrcSpan (snd err) $
-                         addErr (fst (fromJust rhsValid))
-     _ -> return ()
+     (True, Just (err, span)) -> setSrcSpan span (addErr err)
+     _                        -> return ()
 
    return $ injDecl'
+
+-- This panic can only happen when the result type variable binder is
+-- Nothing. However, the way we call rnInjectivityDecl from rnFamDecl ensures
+-- that this won't happen. If the result name is Nothing then the injectivity
+-- declaration must also be a Nothing because we can't write injectivity
+-- declaration if we have no name for the result. So, if we don't have
+-- injectivity declaration the call to traverse is a no-op and rnInjectivityDecl
+-- is not called.
+rnInjectivityDecl _ _ _ = panic "rnInjectivityDecl"
 
 \end{code}
 Note [Stupid theta]

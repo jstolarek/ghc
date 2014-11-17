@@ -391,6 +391,7 @@ bindHsTyVars :: HsDocContext
              -> Maybe (LHsTyVarBndr RdrName) -- result type variable
              -> (LHsTyVarBndrs Name -> RnM (b, FreeVars))
              -> RnM (b, FreeVars)
+-- JSTOLAREK: SPJ and RAE insist that the Maybe argument should be removed
 -- (a) Bring kind variables into scope
 --     both (i)  passed in (kv_bndrs)
 --     and  (ii) mentioned in the kinds of tv_bndrs
@@ -445,6 +446,7 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs resTyVar thing_inside
 -- JSTOLAREK: I decided to retreive RdrEnv inside rnTvBdr so that the function
 -- takes less arguments. But I'm not sure if that's correct. Perhaps it should
 -- take RdrENv from the caller?
+-- haddockify
 rnTvBndr :: HsDocContext
          -> Maybe a                 -- Just _  => an associated type decl
          -> LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
