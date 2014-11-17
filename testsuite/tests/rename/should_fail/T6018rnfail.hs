@@ -63,3 +63,11 @@ class Lcl a b where
 -- kind variable in RHS of ID. Note that this might be allowed in the future if
 -- we have injectivity in kinds.
 type family Baz (a :: k) = r | r -> k
+
+-- result variable shadows variable in class head
+class M a b where
+  type Mt b = a
+
+-- here b is out-of-scope
+class N a b where
+  type Nt a = r | r -> a b
