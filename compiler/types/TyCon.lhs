@@ -412,8 +412,9 @@ data TyCon
 
         synTcParent  :: TyConParent,-- ^ Gives the family declaration 'TyCon'
                                     -- of 'TyCon's representing family instances
-        synInjective :: [Bool]      -- ^ is this a type family injective in
-                                    -- its type variables?
+        synInjective :: Maybe [Bool]-- ^ is this a type family injective in
+                                    --   its type variables? Nothing for type
+                                    --   synonyms
         -- invariant: length tyConTyVars = length synInjective
     }
 
@@ -1013,10 +1014,9 @@ mkPrimTyCon' name kind roles rep is_unlifted
 
 -- | Create a type synonym 'TyCon'
 mkSynTyCon :: Name -> Kind -> [TyVar] -> [Role] -> SynTyConRhs -> TyConParent ->
-              [Bool] -> TyCon
+              Maybe [Bool] -> TyCon
 mkSynTyCon name kind tyvars roles rhs parent injectivity
--- JSTOLAREK: Assert here to verify the invariant that
--- length tyvars = length injectivity ?
+-- JSTOLAREK: assert here that for type synonyms injectivity is Nothing?
   = SynTyCon {
         tyConName = name,
         tyConUnique = nameUnique name,
@@ -1264,13 +1264,14 @@ isClosedSynFamilyTyCon_maybe _ = Nothing
 -- | Try to read the injectivity information from a TyCon. Only SynTyCons can be
 -- injective so for every other TyCon this function returns Nothing
 tyConInjectivityInfo_maybe :: TyCon -> Maybe [Bool]
-tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = Just inj
+tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = inj
 tyConInjectivityInfo_maybe _                                 = Nothing
 
--- | Try to read the injectivity information from a SynTyCon. Only SynTyCons can
--- be injective so for every other TyCon this function panics.
+-- | Try to read the injectivity information from a SynTyCon (other
+-- than a type synonym). Only SynTyCons can be injective so for every
+-- other TyCon (or type synonym TyCon) this function panics.
 synTyConInjectivityInfo :: TyCon -> [Bool]
-synTyConInjectivityInfo (SynTyCon { synInjective = inj }) = inj
+synTyConInjectivityInfo (SynTyCon { synInjective = Just inj }) = inj
 synTyConInjectivityInfo _ = panic "synTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily

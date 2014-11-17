@@ -33,7 +33,6 @@ import TcMType
 import TcType
 import Name
 import NameEnv
-import Var ( TyVar )
 import VarSet
 import Control.Monad
 import Data.Map (Map)

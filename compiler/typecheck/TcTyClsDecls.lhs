@@ -684,7 +684,7 @@ tcFamDecl1 parent
   ; checkFamFlag tc_name
   ; let roles = map (const Nominal) tvs'
   ; tycon <- buildSynTyCon tc_name tvs' roles OpenSynFamilyTyCon kind parent
-                           (getInjectivityInformation famDecl)
+                           (Just $ getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
@@ -732,7 +732,7 @@ tcFamDecl1 parent
                        else ClosedSynFamilyTyCon co_ax
              roles   = map (const Nominal) tvs'
        ; tycon <- buildSynTyCon tc_name tvs' roles syn_rhs kind parent
-                                (getInjectivityInformation famDecl)
+                                (Just $ getInjectivityInformation famDecl)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
@@ -760,8 +760,6 @@ tcTySynRhs :: RecTyInfo
            -> Name
            -> [TyVar] -> Kind
            -> LHsType Name -> TcM [TyThing]
--- JSTOLAREK: this probably needs to receive injectivity info. Revisit
--- once I start tests on type classes and associated type synonyms.
 tcTySynRhs rec_info tc_name tvs kind hs_ty
   = do { env <- getLclEnv
        ; traceTc "tc-syn" (ppr tc_name $$ ppr (tcl_env env))
@@ -770,7 +768,7 @@ tcTySynRhs rec_info tc_name tvs kind hs_ty
        ; let roles = rti_roles rec_info tc_name
        ; tycon <- buildSynTyCon tc_name tvs roles (SynonymTyCon rhs_ty)
                                 kind NoParentTyCon
-                                (replicate (length tvs) False)
+                                Nothing -- no injectivity info for type synonyms
        ; return [ATyCon tycon] }
 
 tcDataDefn :: RecTyInfo -> Name

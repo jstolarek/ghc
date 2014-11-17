@@ -357,7 +357,7 @@ vectTypeEnv tycons vectTypeDecls vectClassDecls
         vectName  = tyConName vectTyCon
 
         mkSyn canonName ty = mkSynTyCon canonName (typeKind ty) [] []
-                                        (SynonymTyCon ty) NoParentTyCon []
+                                        (SynonymTyCon ty) NoParentTyCon Nothing
 
         defDataCons
           | isAbstract = return ()
