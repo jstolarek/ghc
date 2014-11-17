@@ -499,11 +499,15 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
 
 -- | Check whether two type family equations don't violate injectivity
 -- declaration
-injectivityCompatibleBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
-injectivityCompatibleBranches injectivity
-                              (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
-                              (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
+injectiveBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
+injectiveBranches injectivity
+                  (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
+                  (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
   = let get_inj  = filterByList injectivity
+    -- RAE: The FG variant of tcUnifyTys should only matter where type
+    -- families are involved. There are no type families on the left,
+    -- so you should be able to use tcUnifyTys, which is easier to
+    -- understand.
     in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
       -- JSTOLAREK: Voodoo programming here. Does that make sense?
       -- The reasoning here is reversed compared to the original
@@ -702,8 +706,8 @@ lookupFamInjInstEnvConflicts injEnv envs
                        (ppr tpl_tvs <+> ppr tpl_tys) )
       -- Unification will break badly if the variables overlap
       -- They shouldn't because we allocate separate uniques for them
-            if injectivityCompatibleBranches inj (coAxiomSingleBranch old_axiom)
-                                                  new_branch
+            if injectiveBranches inj (coAxiomSingleBranch old_axiom)
+                                      new_branch
             then Nothing
             else Just noSubst
       -- JSTOLAREK: this probably deserves a note
@@ -712,7 +716,6 @@ lookupFamInjInstEnvConflicts injEnv envs
       new_branch = coAxiomSingleBranch new_axiom
 
 -- JSTOLAREK: this should refer to note that describes injectivity check.
--- JSTOLAREK: return NameEnv TyVar
 -- | Returns a list of type variables that the function is injective in and that
 -- are not used in the RHS of family instance declaration.
 unusedInjTvsInRHS :: FamInjEnv -> FamInst -> TyVarSet
@@ -723,7 +726,7 @@ unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
       Just inj -> let -- get the list of type variables in which type
                       -- family is injective
                       injVars = tyVarsOfTypes (filterByList inj lhs)
-                      rhsVars  = tyVarsOfType rhs
+                      rhsVars = tyVarsOfType   rhs
                   in  -- and return all injective variables not mentioned
                       -- in the RHS
                       injVars `minusVarSet` rhsVars
