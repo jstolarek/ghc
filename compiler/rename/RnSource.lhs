@@ -1148,8 +1148,6 @@ rnFamDecl :: Maybe Name
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInfo = info, fdResultSig = kindSig
                              , fdInjective = injectivity })
--- RAE: Is there anywhere that checks that the result tyvar is fresh?
--- Can it be the same as a tyvar of an enclosing class?
   = do { rdr_env <- getLocalRdrEnv
        ; ((tycon', tyvars', kindSig', injectivity'), fv1) <-
            bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->

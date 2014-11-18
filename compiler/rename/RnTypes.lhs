@@ -443,10 +443,7 @@ bindHsTyVars doc mb_assoc kv_bndrs tv_bndrs resTyVar thing_inside
                            ; thing_inside (HsQTvs { hsq_tvs = tv_bndrs', hsq_kvs = kv_names }) }
        ; return (res, fvs1 `plusFV` fvs2) } }
 
--- JSTOLAREK: I decided to retreive RdrEnv inside rnTvBdr so that the function
--- takes less arguments. But I'm not sure if that's correct. Perhaps it should
--- take RdrENv from the caller?
--- haddockify
+-- | Rename type variable binder
 rnTvBndr :: HsDocContext
          -> Maybe a                 -- Just _  => an associated type decl
          -> LHsTyVarBndr RdrName -> RnM (LHsTyVarBndr Name, FreeVars)
