@@ -28,7 +28,7 @@ import SimplMonad
 import CoreMonad
 import qualified ErrUtils as Err
 import FloatIn          ( floatInwards )
-import FloatOut         ( floatOutwards )
+import FloatOut         ( floatOutwards, fullerLaziness )
 import FamInstEnv
 import Id
 import BasicTypes       ( CompilerPhase(..), isDefaultInlinePragma )
@@ -105,22 +105,23 @@ getCoreToDo :: DynFlags -> [CoreToDo]
 getCoreToDo dflags
   = core_todo
   where
-    opt_level     = optLevel           dflags
-    phases        = simplPhases        dflags
-    max_iter      = maxSimplIterations dflags
-    rule_check    = ruleCheck          dflags
-    call_arity    = gopt Opt_CallArity                    dflags
-    strictness    = gopt Opt_Strictness                   dflags
-    full_laziness = gopt Opt_FullLaziness                 dflags
-    do_specialise = gopt Opt_Specialise                   dflags
-    do_float_in   = gopt Opt_FloatIn                      dflags
-    cse           = gopt Opt_CSE                          dflags
-    spec_constr   = gopt Opt_SpecConstr                   dflags
-    liberate_case = gopt Opt_LiberateCase                 dflags
-    late_dmd_anal = gopt Opt_LateDmdAnal                  dflags
-    static_args   = gopt Opt_StaticArgumentTransformation dflags
-    rules_on      = gopt Opt_EnableRewriteRules           dflags
-    eta_expand_on = gopt Opt_DoLambdaEtaExpansion         dflags
+    opt_level       = optLevel           dflags
+    phases          = simplPhases        dflags
+    max_iter        = maxSimplIterations dflags
+    rule_check      = ruleCheck          dflags
+    call_arity      = gopt Opt_CallArity                    dflags
+    strictness      = gopt Opt_Strictness                   dflags
+    full_laziness   = gopt Opt_FullLaziness                 dflags
+    fuller_laziness = gopt Opt_FullerLaziness dflags
+    do_specialise   = gopt Opt_Specialise                   dflags
+    do_float_in     = gopt Opt_FloatIn                      dflags
+    cse             = gopt Opt_CSE                          dflags
+    spec_constr     = gopt Opt_SpecConstr                   dflags
+    liberate_case   = gopt Opt_LiberateCase                 dflags
+    late_dmd_anal   = gopt Opt_LateDmdAnal                  dflags
+    static_args     = gopt Opt_StaticArgumentTransformation dflags
+    rules_on        = gopt Opt_EnableRewriteRules           dflags
+    eta_expand_on   = gopt Opt_DoLambdaEtaExpansion         dflags
 
     maybe_rule_check phase = runMaybe rule_check (CoreDoRuleCheck phase)
 
@@ -285,6 +286,8 @@ getCoreToDo dflags
 
         runWhen do_float_in CoreDoFloatInwards,
 
+        runWhen fuller_laziness CoreDoFullerLaziness,
+
         maybe_rule_check (Phase 0),
 
                 -- Case-liberation for -O2.  This should be after
@@ -363,6 +366,9 @@ doCorePass CoreDoFloatInwards        = {-# SCC "FloatInwards" #-}
 
 doCorePass (CoreDoFloatOutwards f)   = {-# SCC "FloatOutwards" #-}
                                        doPassDUM (floatOutwards f)
+
+doCorePass CoreDoFullerLaziness      = {-# SCC "FullerLaziness" #-}
+                                       doPassDM fullerLaziness
 
 doCorePass CoreDoStaticArgs          = {-# SCC "StaticArgs" #-}
                                        doPassU doStaticArgs

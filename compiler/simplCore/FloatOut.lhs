@@ -9,7 +9,7 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module FloatOut ( floatOutwards ) where
+module FloatOut ( floatOutwards, fullerLaziness ) where
 
 import CoreSyn
 import CoreUtils
@@ -29,6 +29,7 @@ import Maybes
 import Outputable
 import FastString
 import qualified Data.IntMap as M
+import VarSet
 
 #include "HsVersions.h"
 \end{code}
@@ -563,4 +564,56 @@ wrapTick t (FB tops defns)
       -- Conversely, inlining of HNFs inside an SCC is allowed, and
       -- indeed the HNF we're floating here might well be inlined back
       -- again, and we don't want to end up with duplicate ticks.
+\end{code}
+
+\begin{code}
+-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+--
+--                               FULLER LAZINESS
+--
+-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-- JSTOLAREK: I'm putting fuller laziness in the same module as
+-- full-laziness. In due time it will have its own module but for now I want to
+-- avoid doing a full rebuild every time I switch barnches.
+
+fullerLaziness :: DynFlags -> CoreProgram -> IO CoreProgram
+fullerLaziness dflags program = do
+  let vars = findSimpleFreeArgs program
+
+  dumpIfSet_dyn dflags Opt_D_verbose_core2core "Simple free function arguments:"
+                (text "FOO") --(ppr (varSetElems vars))
+
+  return program
+
+findSimpleFreeArgs :: CoreProgram -> IdSet
+findSimpleFreeArgs bndrs = foldl (\idSet bndr ->
+                                     idSet `unionVarSet` findSFArgsInBndr bndr)
+                                 emptyVarSet bndrs
+
+findSFArgsInBndr :: CoreBind -> IdSet
+findSFArgsInBndr (NonRec _ expr) =  emptyVarSet
+findSFArgsInBndr (Rec bndrs)     =  emptyVarSet
+
+{-
+findSFArgsInExpr :: Expr a -> IdSet
+findSFArgsInExpr (Var a) =
+findSFArgsInExpr (Lit _) = emptyVarSet -- ?
+findSFArgsInExpr (App expr arg) =
+findSFArgsInExpr (Lam b expr) =
+findSFArgsInExpr 
+
+data Expr b
+  = Var   Id
+  | Lit   Literal
+  | App   (Expr b) (Arg b)
+  | Lam   b (Expr b)
+  | Let   (Bind b) (Expr b)
+  | Case  (Expr b) b Type [Alt b]       -- See #case_invariant#
+  | Cast  (Expr b) Coercion
+  | Tick  (Tickish Id) (Expr b)
+  | Type  Type
+  | Coercion Coercion
+-}
+
 \end{code}

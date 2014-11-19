@@ -327,6 +327,7 @@ data GeneralFlag
    | Opt_KillAbsence
    | Opt_KillOneShot
    | Opt_FullLaziness
+   | Opt_FullerLaziness
    | Opt_FloatIn
    | Opt_Specialise
    | Opt_SpecialiseAggressively
@@ -2788,6 +2789,7 @@ fFlags = [
   flagSpec ( "float-in",                         Opt_FloatIn, nop ),
   flagSpec ( "force-recomp",                     Opt_ForceRecomp, nop ),
   flagSpec ( "full-laziness",                    Opt_FullLaziness, nop ),
+  flagSpec ( "fuller-laziness",                  Opt_FullerLaziness, nop ),
   flagSpec ( "fun-to-thunk",                     Opt_FunToThunk, nop ),
   flagSpec ( "gen-manifest",                     Opt_GenManifest, nop ),
   flagSpec ( "ghci-history",                     Opt_GhciHistory, nop ),

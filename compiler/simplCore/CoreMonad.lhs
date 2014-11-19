@@ -308,6 +308,7 @@ data CoreToDo           -- These are diff core-to-core passes,
   | CoreDoPluginPass String PluginPass
   | CoreDoFloatInwards
   | CoreDoFloatOutwards FloatOutSwitches
+  | CoreDoFullerLaziness
   | CoreLiberateCase
   | CoreDoPrintCore
   | CoreDoStaticArgs
@@ -338,6 +339,7 @@ coreDumpFlag (CoreDoSimplify {})      = Just Opt_D_verbose_core2core
 coreDumpFlag (CoreDoPluginPass {})    = Just Opt_D_verbose_core2core
 coreDumpFlag CoreDoFloatInwards       = Just Opt_D_verbose_core2core
 coreDumpFlag (CoreDoFloatOutwards {}) = Just Opt_D_verbose_core2core
+coreDumpFlag CoreDoFullerLaziness     = Just Opt_D_verbose_core2core
 coreDumpFlag CoreLiberateCase         = Just Opt_D_verbose_core2core
 coreDumpFlag CoreDoStaticArgs         = Just Opt_D_verbose_core2core
 coreDumpFlag CoreDoCallArity          = Just Opt_D_dump_call_arity
@@ -362,6 +364,7 @@ instance Outputable CoreToDo where
   ppr (CoreDoPluginPass s _)   = ptext (sLit "Core plugin: ") <+> text s
   ppr CoreDoFloatInwards       = ptext (sLit "Float inwards")
   ppr (CoreDoFloatOutwards f)  = ptext (sLit "Float out") <> parens (ppr f)
+  ppr CoreDoFullerLaziness     = ptext (sLit "Fuller laziness")
   ppr CoreLiberateCase         = ptext (sLit "Liberate case")
   ppr CoreDoStaticArgs         = ptext (sLit "Static argument")
   ppr CoreDoCallArity          = ptext (sLit "Called arity analysis")
