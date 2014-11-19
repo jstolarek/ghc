@@ -72,7 +72,7 @@ module HsDecls (
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
   FamilyResultSig(..), InjectivityDecl(..), LInjectivityDecl,
-  getInjectivityInformation, resultVariableName,
+  getInjectivityList, resultVariableName,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -88,6 +88,7 @@ import HsPat
 import HsTypes
 import HsDoc
 import TyCon
+import Var
 import Name
 import BasicTypes
 import Coercion
@@ -763,22 +764,19 @@ resultVariableName _              = Nothing
 -- injective in the corresponding type arguments. Length of the list is equal to
 -- the number of arguments. True on position N means that a function is
 -- injective in its Nth argument. False means it is not.
-getInjectivityInformation :: FamilyDecl Name -> [Bool]
-getInjectivityInformation (FamilyDecl { fdInjective = Nothing
-                                      , fdTyVars = tvbndrs } ) =
+getInjectivityList :: [TyVar] -> Maybe (LInjectivityDecl Name) -> [Bool]
+getInjectivityList tvs Nothing =
   -- No injectivity information => type family is not injective in any
   -- of its arguments. Return a list of Falses.
-  map (const False) (hsq_tvs tvbndrs)
-getInjectivityInformation (FamilyDecl
-                { fdInjective = Just (L _ (InjectivityDecl _ lInjNames))
-                , fdTyVars = tvbndrs } ) =
+  map (const False) tvs
+getInjectivityList tvs (Just (L _ (InjectivityDecl _ lInjNames))) =
   -- User provided an injectivity declaration => for each argument we check
   -- whether a type family was declared injective in that argument. We return a
   -- list of Bools, where True means that corresponding type variable was
   -- mentioned in lInjNames (type family is injective in that argument) and
   -- False means that it was not mentioned in lInjNames (type family is not
   -- injective in that type variable).
-  map (`elemNameSet` inj_tvs) (hsLTyVarNames tvbndrs)
+  map (`elemNameSet` inj_tvs) (map tyVarName tvs)
       where inj_tvs = mkNameSet (map unLoc lInjNames)
 \end{code}
 

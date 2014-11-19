@@ -491,6 +491,7 @@ data TyCon
                                  -- Note that it does /not/ scope over the data
                                  -- constructors.
 
+        -- JSTOLAREK: ask Simon
         tyConResVar  :: Maybe Name, -- ^ Result type variable, used
                                     --   only for --show-face
 

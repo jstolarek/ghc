@@ -424,8 +424,12 @@ getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
                            -- Open type families that are not given a
                            -- result kind by the user have a result
                            -- kind of liftedTypeKind.
+                           -- Testing: write open tyfam without result kind,
+                           -- write equation that does not result in a * and it
+                           -- might get accepted
                              | otherwise                -> newMetaKindVar
                            NoSig
+                           -- JSTOLAREK: change or comment
                              | famDeclHasCusk decl -> return liftedTypeKind
                              | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }
@@ -680,19 +684,20 @@ tcTyClDecl1 _parent rec_info
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent
             famDecl@(FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
-                                , fdTyVars = tvs, fdResultSig = sig })
+                                , fdTyVars = tvs, fdResultSig = sig
+                                , fdInjective = inj })
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                               OpenSynFamilyTyCon kind parent
-                              (Just $ getInjectivityInformation famDecl)
+                              (Just $ getInjectivityList tvs' inj)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
             famDecl@(FamilyDecl { fdInfo = ClosedTypeFamily eqns
                                 , fdLName = lname@(L _ tc_name), fdTyVars = tvs
-                                , fdResultSig = sig
+                                , fdResultSig = sig, fdInjective = inj
                                 })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
@@ -736,7 +741,7 @@ tcFamDecl1 parent
        ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                                    -- JSTOLAREK: change syn_ths to fam_flav
                                    syn_rhs kind parent
-                                   (Just $ getInjectivityInformation famDecl)
+                                   (Just $ getInjectivityList tvs' inj)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
