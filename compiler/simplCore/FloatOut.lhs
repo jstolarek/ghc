@@ -602,11 +602,15 @@ findSFArgsInBndr (Rec bndrs) = foldl findSFArgsInRecBndr emptyVarSet bndrs
           let annExpr@(fvs,_) = freeVars expr
           in vars `unionVarSet` findSFArgsInExpr fvs annExpr
 
+dropLamBinds :: CoreExprWithFVs -> CoreExprWithFVs
+dropLamBinds (_, AnnLam _ expr) = dropLamBinds expr
+dropLamBinds expr = expr
+
 findSFArgsInExpr :: VarSet -> CoreExprWithFVs -> IdSet
 findSFArgsInExpr _ (_  , AnnVar _) = emptyVarSet
 findSFArgsInExpr _ (_  , AnnLit _) = emptyVarSet
-findSFArgsInExpr _ (fvs, AnnLam _ expr) =
-    findSFArgsInExpr fvs expr
+findSFArgsInExpr _ (fvs, AnnLam b expr) =
+    findSFArgsInExpr fvs (dropLamBinds expr)
 findSFArgsInExpr fvs (_, AnnApp e1 (_, AnnVar v)) =
     if v `elemVarSet` fvs
     then unitVarSet v `unionVarSet` findSFArgsInExpr fvs e1
