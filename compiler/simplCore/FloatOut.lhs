@@ -16,6 +16,7 @@ import CoreUtils
 import MkCore
 import CoreArity        ( etaExpand )
 import CoreMonad        ( FloatOutSwitches(..) )
+import CoreFVs
 
 import DynFlags
 import ErrUtils         ( dumpIfSet_dyn )
@@ -582,7 +583,7 @@ fullerLaziness dflags program = do
   let vars = findSimpleFreeArgs program
 
   dumpIfSet_dyn dflags Opt_D_verbose_core2core "Simple free function arguments:"
-                (text "FOO") --(ppr (varSetElems vars))
+                (ppr (varSetElems vars))
 
   return program
 
@@ -592,28 +593,45 @@ findSimpleFreeArgs bndrs = foldl (\idSet bndr ->
                                  emptyVarSet bndrs
 
 findSFArgsInBndr :: CoreBind -> IdSet
-findSFArgsInBndr (NonRec _ expr) =  emptyVarSet
-findSFArgsInBndr (Rec bndrs)     =  emptyVarSet
+findSFArgsInBndr (NonRec _ expr) =
+    let annExpr@(fvs,_) = freeVars expr
+    in findSFArgsInExpr fvs annExpr
+findSFArgsInBndr (Rec bndrs) = foldl findSFArgsInRecBndr emptyVarSet bndrs
+    where
+      findSFArgsInRecBndr vars (_, expr) =
+          let annExpr@(fvs,_) = freeVars expr
+          in vars `unionVarSet` findSFArgsInExpr fvs annExpr
 
-{-
-findSFArgsInExpr :: Expr a -> IdSet
-findSFArgsInExpr (Var a) =
-findSFArgsInExpr (Lit _) = emptyVarSet -- ?
-findSFArgsInExpr (App expr arg) =
-findSFArgsInExpr (Lam b expr) =
-findSFArgsInExpr 
+findSFArgsInExpr :: VarSet -> CoreExprWithFVs -> IdSet
+findSFArgsInExpr _ (_  , AnnVar _) = emptyVarSet
+findSFArgsInExpr _ (_  , AnnLit _) = emptyVarSet
+findSFArgsInExpr _ (fvs, AnnLam _ expr) =
+    findSFArgsInExpr fvs expr
+findSFArgsInExpr fvs (_, AnnApp e1 (_, AnnVar v)) =
+    if v `elemVarSet` fvs
+    then unitVarSet v `unionVarSet` findSFArgsInExpr fvs e1
+    else                            findSFArgsInExpr fvs e1
+findSFArgsInExpr fvs (_, AnnApp e1 e2) =
+    findSFArgsInExpr fvs e1 `unionVarSet` findSFArgsInExpr fvs e2
+findSFArgsInExpr fvs (_, AnnCase scrut _ _ alts) =
+    findSFArgsInExpr fvs scrut `unionVarSet`
+    foldl (\vs alt-> findSFArgsInAlts fvs alt `unionVarSet` vs) emptyVarSet alts
+findSFArgsInExpr fvs (_, AnnLet bndr expr)  =
+    findSFArgsInAnnBndr fvs bndr `unionVarSet` findSFArgsInExpr fvs expr
+findSFArgsInExpr fvs (_, AnnCast expr _) = findSFArgsInExpr fvs expr
+findSFArgsInExpr fvs (_, AnnTick _ expr) = findSFArgsInExpr fvs expr
+findSFArgsInExpr _   (_, AnnType     _)  = emptyVarSet
+findSFArgsInExpr _   (_, AnnCoercion _)  = emptyVarSet
 
-data Expr b
-  = Var   Id
-  | Lit   Literal
-  | App   (Expr b) (Arg b)
-  | Lam   b (Expr b)
-  | Let   (Bind b) (Expr b)
-  | Case  (Expr b) b Type [Alt b]       -- See #case_invariant#
-  | Cast  (Expr b) Coercion
-  | Tick  (Tickish Id) (Expr b)
-  | Type  Type
-  | Coercion Coercion
--}
+findSFArgsInAlts :: VarSet -> AnnAlt Id VarSet -> IdSet
+findSFArgsInAlts fvs (_, _, expr) = findSFArgsInExpr fvs expr
+
+findSFArgsInAnnBndr :: VarSet -> AnnBind Id VarSet -> IdSet
+findSFArgsInAnnBndr fvs (AnnNonRec _ expr) =
+    findSFArgsInExpr fvs expr
+findSFArgsInAnnBndr fvs (AnnRec bndrs) = foldl findSFArgsInRecAnnBndr emptyVarSet bndrs
+    where
+      findSFArgsInRecAnnBndr vars (_, expr) =
+          vars `unionVarSet` findSFArgsInExpr fvs expr
 
 \end{code}
