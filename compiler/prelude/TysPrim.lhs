@@ -772,7 +772,7 @@ anyTy :: Type
 anyTy = mkTyConTy anyTyCon
 
 anyTyCon :: TyCon
-anyTyCon = mkFamilyTyCon anyTyConName kind [kKiVar]
+anyTyCon = mkFamilyTyCon anyTyConName kind [kKiVar] Nothing
                          AbstractClosedSynFamilyTyCon
                          NoParentTyCon
                          [False]

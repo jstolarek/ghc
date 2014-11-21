@@ -494,6 +494,7 @@ tc_iface_decl _ _ (IfaceSynonym {ifName = occ_name, ifTyVars = tv_bndrs,
      ; rhs      <- forkM (mk_doc tc_name) $
                    tcIfaceType rhs_ty
      ; tycon    <- buildSynonymTyCon tc_name tyvars roles rhs rhs_kind
+                   tc_syn_rhs mb_rhs_ty
      ; return (ATyCon tycon) }
    where
      mk_doc n = ptext (sLit "Type synonym") <+> ppr n
@@ -507,7 +508,10 @@ tc_iface_decl parent _ (IfaceFamily {ifName = occ_name, ifTyVars = tv_bndrs,
      ; rhs_kind <- tcIfaceKind kind     -- Note [Synonym kind loop]
      ; rhs      <- forkM (mk_doc tc_name) $
                    tc_fam_flav fam_flav
-     ; tycon    <- buildFamilyTyCon tc_name tyvars rhs rhs_kind parent inj
+     -- JSTOLAREK: that Nothing is here because I don't know how to
+     -- recover a TyVar from IfLclName. But perhaps I don't have too -
+     -- this is used only for --show-iface
+     ; tycon    <- buildFamilyTyCon tc_name tyvars Nothing rhs rhs_kind parent inj
      ; return (ATyCon tycon) }
    where
      mk_doc n = ptext (sLit "Type synonym") <+> ppr n

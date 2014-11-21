@@ -680,17 +680,19 @@ tcTyClDecl1 _parent rec_info
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent
             famDecl@(FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
-                                , fdTyVars = tvs })
+                                , fdTyVars = tvs, fdResultSig = sig })
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
-  ; tycon <- buildFamilyTyCon tc_name tvs' OpenSynFamilyTyCon kind parent
+  ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
+                              OpenSynFamilyTyCon kind parent
                               (getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
             famDecl@(FamilyDecl { fdInfo = ClosedTypeFamily eqns
                                 , fdLName = lname@(L _ tc_name), fdTyVars = tvs
+                                , fdResultSig = sig
                                 })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
@@ -731,7 +733,9 @@ tcFamDecl1 parent
        ; let syn_rhs = if null eqns
                        then AbstractClosedSynFamilyTyCon
                        else ClosedSynFamilyTyCon co_ax
-       ; tycon <- buildFamilyTyCon tc_name tvs' syn_rhs kind parent (isJust inj)
+       ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
+                                   -- JSTOLAREK: change syn_ths to fam_flav
+                                   syn_rhs kind parent
                                    (getInjectivityInformation famDecl)
 
        ; let result = if null eqns
@@ -760,8 +764,6 @@ tcTySynRhs :: RecTyInfo
            -> Name
            -> [TyVar] -> Kind
            -> LHsType Name -> TcM [TyThing]
--- JSTOLAREK: this probably needs to receive injectivity info. Revisit
--- once I start tests on type classes and associated type synonyms.
 tcTySynRhs rec_info tc_name tvs kind hs_ty
   = do { env <- getLclEnv
        ; traceTc "tc-syn" (ppr tc_name $$ ppr (tcl_env env))

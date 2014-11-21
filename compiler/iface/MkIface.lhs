@@ -1625,6 +1625,7 @@ tyConToIfaceDecl env tycon
   = ( tc_env1
     , IfaceFamily { ifName    = getOccName tycon,
                     ifTyVars  = if_tc_tyvars,
+                    ifResVar  = if_res_var,
                     ifFamFlav = to_if_fam_flav fam_flav,
                     ifFamKind = tidyToIfaceType tc_env1 (synTyConResKind tycon),
                     ifFamInj  = injectivity
@@ -1660,6 +1661,7 @@ tyConToIfaceDecl env tycon
     (tc_env1, tc_tyvars) = tidyTyClTyVarBndrs env (tyConTyVars tycon)
     if_tc_tyvars = toIfaceTvBndrs tc_tyvars
     if_syn_type ty = tidyToIfaceType tc_env1 ty
+    if_res_var     = getFS `fmap` tyConFamDeclResVar_maybe tycon
 
     funAndPrimTyVars = toIfaceTvBndrs $ take (tyConArity tycon) alphaTyVars
 

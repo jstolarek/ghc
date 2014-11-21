@@ -55,15 +55,15 @@ buildSynonymTyCon tc_name tvs roles rhs rhs_kind
   where kind = mkPiKinds tvs rhs_kind
 
 
-buildFamilyTyCon :: Name -> [TyVar]
+buildFamilyTyCon :: Name -> [TyVar] -> Maybe Name
                  -> FamTyConFlav
                  -> Kind                   -- ^ Kind of the RHS
                  -> TyConParent
 -- JSTOLAREK: refer to a note once it is made
                  -> [Bool]                 -- injectivity information
                  -> TcRnIf m n TyCon
-buildFamilyTyCon tc_name tvs rhs rhs_kind parent injectivity
-  = return (mkFamilyTyCon tc_name kind tvs rhs parent injectivity)
+buildFamilyTyCon tc_name tvs res_tv rhs rhs_kind parent injectivity
+  = return (mkFamilyTyCon tc_name kind tvs res_tv rhs parent injectivity)
   where kind = mkPiKinds tvs rhs_kind
 
 

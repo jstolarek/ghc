@@ -72,7 +72,7 @@ module HsDecls (
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
   FamilyResultSig(..), InjectivityDecl(..), LInjectivityDecl,
-  getInjectivityInformation,
+  getInjectivityInformation, resultVariableName,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -753,6 +753,11 @@ hasReturnKindSignature :: FamilyResultSig a -> Bool
 hasReturnKindSignature NoSig                          = False
 hasReturnKindSignature (TyVarSig (L _ (UserTyVar _))) = False
 hasReturnKindSignature _                              = True
+
+-- | Maybe return name of the result type variable
+resultVariableName :: FamilyResultSig a -> Maybe a
+resultVariableName (TyVarSig sig) = Just $ hsLTyVarName sig
+resultVariableName _              = Nothing
 
 -- | Return a list of Bools that says whether a type family was declared
 -- injective in the corresponding type arguments. Length of the list is equal to

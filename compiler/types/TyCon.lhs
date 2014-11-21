@@ -72,6 +72,7 @@ module TyCon(
         tyConParent,
         tyConTuple_maybe, tyConClass_maybe,
         tyConFamInst_maybe, tyConFamInstSig_maybe, tyConFamilyCoercion_maybe,
+        tyConFamDeclResVar_maybe,
         synTyConDefn_maybe, synTyConRhs_maybe, famTyConFlav_maybe,
         algTyConRhs,
         newTyConRhs, newTyConEtadArity, newTyConEtadRhs,
@@ -489,6 +490,9 @@ data TyCon
                                  --
                                  -- Note that it does /not/ scope over the data
                                  -- constructors.
+
+        tyConResVar  :: Maybe Name, -- ^ Result type variable, used
+                                    --   only for --show-face
 
         famTcFlav    :: FamTyConFlav, -- ^ Type family flavour: open, closed,
                                       -- abstract, built-in. See comments for
@@ -1115,15 +1119,16 @@ mkSynonymTyCon name kind tyvars roles rhs
     }
 
 -- | Create a type family 'TyCon'
-mkFamilyTyCon:: Name -> Kind -> [TyVar] -> FamTyConFlav -> TyConParent -> [Bool]
+mkFamilyTyCon:: Name -> Kind -> [TyVar] -> Maybe Name -> FamTyConFlav -> TyConParent -> [Bool]
              -> TyCon
-mkFamilyTyCon name kind tyvars flav parent inj
+mkFamilyTyCon name kind tyvars resVar flav parent inj
   = FamilyTyCon
       { tyConUnique = nameUnique name
       , tyConName   = name
       , tyConKind   = kind
       , tyConArity  = length tyvars
       , tyConTyVars = tyvars
+      , tyConResVar = resVar
       , famTcFlav   = flav
       , famTcParent = parent
       , synInjective = inj
@@ -1561,6 +1566,11 @@ algTyConRhs (AlgTyCon {algTcRhs = rhs}) = rhs
 algTyConRhs (TupleTyCon {dataCon = con, tyConArity = arity})
     = DataTyCon { data_cons = [con], is_enum = arity == 0 }
 algTyConRhs other = pprPanic "algTyConRhs" (ppr other)
+
+-- | Extract type variable naming the result of injective type family
+tyConFamDeclResVar_maybe :: TyCon -> Maybe Name
+tyConFamDeclResVar_maybe (SynTyCon {tyConResVar = res}) = res
+tyConFamDeclResVar_maybe _                              = Nothing
 
 -- | Get the list of roles for the type parameters of a TyCon
 tyConRoles :: TyCon -> [Role]

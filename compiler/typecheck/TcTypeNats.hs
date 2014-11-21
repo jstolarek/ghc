@@ -107,6 +107,7 @@ typeNatLeqTyCon =
   mkFamilyTyCon name
     (mkArrowKinds [ typeNatKind, typeNatKind ] boolKind)
     (take 2 $ tyVarList typeNatKind)
+    Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
     [False, False] -- because we have 2 type variables
@@ -125,6 +126,7 @@ typeNatCmpTyCon =
   mkFamilyTyCon name
     (mkArrowKinds [ typeNatKind, typeNatKind ] orderingKind)
     (take 2 $ tyVarList typeNatKind)
+    Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
     [False, False] -- because we have 2 type variables
@@ -143,6 +145,7 @@ typeSymbolCmpTyCon =
   mkFamilyTyCon name
     (mkArrowKinds [ typeSymbolKind, typeSymbolKind ] orderingKind)
     (take 2 $ tyVarList typeSymbolKind)
+    Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
     [False, False] -- because we have 2 type variables
@@ -166,6 +169,7 @@ mkTypeNatFunTyCon2 op tcb =
   mkFamilyTyCon op
     (mkArrowKinds [ typeNatKind, typeNatKind ] typeNatKind)
     (take 2 $ tyVarList typeNatKind)
+    Nothing
     (BuiltInSynFamTyCon tcb)
     NoParentTyCon
     [False, False] -- because we have 2 type variables

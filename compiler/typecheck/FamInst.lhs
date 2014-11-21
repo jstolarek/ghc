@@ -33,7 +33,6 @@ import TcMType
 import TcType
 import Name
 import NameEnv
-import Var ( TyVar )
 import VarSet
 import Control.Monad
 import Data.Map (Map)
@@ -201,7 +200,8 @@ buildTyFamInjEnv :: [TyCon] -> FamInjEnv
 buildTyFamInjEnv inScopetyCons =
     listToUFM [ ( tyConName tyfam, injInfo )
               | tyfam <- inScopetyCons
-              , (isOpenSynFamilyTyCon tyfam || isClosedSynFamilyTyCon tyfam)
+              , isSynTyCon tyfam
+              , not (isTypeSynonymTyCon tyfam)
               -- synTyConInjectivityInfo will panic for anything different than
               -- a SynTyCon. The above check makes sure that we only have open
               -- and close type families, which are SynTyCons
