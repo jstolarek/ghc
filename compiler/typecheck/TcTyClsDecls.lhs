@@ -409,29 +409,28 @@ getFamDeclInitialKinds decls
 
 getFamDeclInitialKind :: FamilyDecl Name
                       -> TcM [(Name, TcTyThing)]
-getFamDeclInitialKind decl@(FamilyDecl { fdLName     = L _ name
+getFamDeclInitialKind decl@(FamilyDecl { fdInfo      = info
+                                       , fdLName     = L _ name
                                        , fdTyVars    = ktvs
                                        , fdResultSig = ksig })
   = do { (fam_kind, _) <-
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
-           do { res_k <- case ksig of
-                           KindSig ki -> tcLHsKind ki
-                           TyVarSig (L _ bndr)
-                             | KindedTyVar _ ki <- bndr -> tcLHsKind ki
-                           -- RAE: newMetaKindVar should happen only for closed
-                           -- type families, not open ones, whose result kind
-                           -- defaults to *.
-                           -- Open type families that are not given a
-                           -- result kind by the user have a result
-                           -- kind of liftedTypeKind.
-                           -- Testing: write open tyfam without result kind,
-                           -- write equation that does not result in a * and it
-                           -- might get accepted
-                             | otherwise                -> newMetaKindVar
-                           NoSig
-                           -- JSTOLAREK: change or comment
-                             | famDeclHasCusk decl -> return liftedTypeKind
-                             | otherwise           -> newMetaKindVar
+           do { res_k <-
+                    case ksig of
+                      KindSig ki -> tcLHsKind ki
+                      TyVarSig (L _ bndr)
+                        | KindedTyVar _ ki <- bndr    -> tcLHsKind ki
+                        -- closed type families have polymorphic return kind by
+                        -- default
+                        | isClosedTypeFamilyInfo info -> newMetaKindVar
+                        -- open type families have * return kind by default
+                        | otherwise                   -> return liftedTypeKind
+                      NoSig
+                      -- First guard is for open type families, second guards is
+                      -- for closed type families. See implementation of
+                      -- famDeclHasCusk.
+                        | famDeclHasCusk decl -> return liftedTypeKind
+                        | otherwise           -> newMetaKindVar
               ; return (res_k, ()) }
        ; return [ (name, AThing fam_kind) ] }
 
