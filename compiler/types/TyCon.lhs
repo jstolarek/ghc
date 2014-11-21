@@ -46,9 +46,9 @@ module TyCon(
         isNewTyCon, isAbstractTyCon,
         isFamilyTyCon, isOpenFamilyTyCon,
         isTypeFamilyTyCon, isDataFamilyTyCon,
-        isOpenTypeFamilyTyCon, isClosedSynFamilyTyCon_maybe,
-        isInjectiveTypeFamilyTyCon,
-        familyTyConInjectivityInfo,
+        isOpenTypeFamilyTyCon, isClosedTypeFamilyTyCon,
+        isClosedSynFamilyTyCon_maybe,
+        tyConInjectivityInfo_maybe, familyTyConInjectivityInfo,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -484,21 +484,22 @@ data TyCon
                                  -- Precisely, this list scopes over:
                                  --
                                  -- 1. The 'algTcStupidTheta'
-                                 -- 2. The cached types in 'algTyConRhs.NewTyCon'
+                                 -- 2. The cached types in algTyConRhs.NewTyCon
                                  -- 3. The family instance types if present
                                  --
                                  -- Note that it does /not/ scope over the data
                                  -- constructors.
 
-        famTcResVar  :: Maybe FastString,
-                                      -- ^ Result type variable, used only for
-                                      -- --show-face
+        famTcResVar  :: Maybe Name,
+                                      -- ^ Name of result type variable, used
+                                      -- only for pretty-printing with
+                                      -- --show-iface.
 
         famTcFlav    :: FamTyConFlav, -- ^ Type family flavour: open, closed,
                                       -- abstract, built-in. See comments for
                                       -- FamTyConFlav
 
-        famTcParent  :: TyConParent   -- ^ TyCon of enclosing class for
+        famTcParent  :: TyConParent,  -- ^ TyCon of enclosing class for
                                       -- associated type families
 
         famTcInj     :: [Bool]        -- ^ is this a type family injective in
@@ -1119,8 +1120,8 @@ mkSynonymTyCon name kind tyvars roles rhs
     }
 
 -- | Create a type family 'TyCon'
-mkFamilyTyCon:: Name -> Kind -> [TyVar] -> Maybe Name -> FamTyConFlav -> TyConParent -> [Bool]
-             -> TyCon
+mkFamilyTyCon:: Name -> Kind -> [TyVar] -> Maybe Name -> FamTyConFlav
+             -> TyConParent -> [Bool] -> TyCon
 mkFamilyTyCon name kind tyvars resVar flav parent inj
   = FamilyTyCon
       { tyConUnique = nameUnique name
@@ -1128,10 +1129,10 @@ mkFamilyTyCon name kind tyvars resVar flav parent inj
       , tyConKind   = kind
       , tyConArity  = length tyvars
       , tyConTyVars = tyvars
-      , tyConResVar = resVar
+      , famTcResVar = resVar
       , famTcFlav   = flav
       , famTcParent = parent
-      , synInjective = inj
+      , famTcInj    = inj
       }
 
 
@@ -1343,13 +1344,15 @@ isTypeFamilyTyCon :: TyCon -> Bool
 isTypeFamilyTyCon (FamilyTyCon {}) = True
 isTypeFamilyTyCon _                = False
 
+-- | Is this an open type family TyCon?
 isOpenTypeFamilyTyCon :: TyCon -> Bool
 isOpenTypeFamilyTyCon (FamilyTyCon {famTcFlav = OpenSynFamilyTyCon }) = True
 isOpenTypeFamilyTyCon _                                               = False
 
-isClosedSynFamilyTyCon :: TyCon -> Bool
-isClosedSynFamilyTyCon (SynTyCon {synTcRhs = ClosedSynFamilyTyCon _ }) = True
-isClosedSynFamilyTyCon _ = False
+-- | Is this a closed type family TyCon?
+isClosedTypeFamilyTyCon :: TyCon -> Bool
+isClosedTypeFamilyTyCon (FamilyTyCon {famTcFlav = ClosedSynFamilyTyCon _}) = True
+isClosedTypeFamilyTyCon _ = False
 
 -- leave out abstract closed families here
 isClosedSynFamilyTyCon_maybe :: TyCon -> Maybe (CoAxiom Branched)
@@ -1360,13 +1363,13 @@ isClosedSynFamilyTyCon_maybe _                        = Nothing
 -- | Try to read the injectivity information from a TyCon. Only FamilyTyCons can
 -- be injective so for every other TyCon this function returns Nothing
 tyConInjectivityInfo_maybe :: TyCon -> Maybe [Bool]
-tyConInjectivityInfo_maybe (FamilyTyCon { tcFamInj = inj }) = Just inj
+tyConInjectivityInfo_maybe (FamilyTyCon { famTcInj = inj }) = Just inj
 tyConInjectivityInfo_maybe _                                = Nothing
 
 -- | Try to read the injectivity information from a FamilyTyCon. Only
 -- FamilyTyCons can be injective so for every other TyCon this function panics.
 familyTyConInjectivityInfo :: TyCon -> [Bool]
-familyTyConInjectivityInfo (FamilyTyCon { tcFamInj = inj }) = inj
+familyTyConInjectivityInfo (FamilyTyCon { famTcInj = inj }) = inj
 familyTyConInjectivityInfo _ = panic "familyTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
@@ -1569,8 +1572,8 @@ algTyConRhs other = pprPanic "algTyConRhs" (ppr other)
 
 -- | Extract type variable naming the result of injective type family
 tyConFamDeclResVar_maybe :: TyCon -> Maybe Name
-tyConFamDeclResVar_maybe (SynTyCon {tyConResVar = res}) = res
-tyConFamDeclResVar_maybe _                              = Nothing
+tyConFamDeclResVar_maybe (FamilyTyCon {famTcResVar = res}) = res
+tyConFamDeclResVar_maybe _                                 = Nothing
 
 -- | Get the list of roles for the type parameters of a TyCon
 tyConRoles :: TyCon -> [Role]

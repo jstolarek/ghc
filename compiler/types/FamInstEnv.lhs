@@ -736,12 +736,14 @@ unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
 tyFamsUsedInRHS :: FamInjEnv -> FamInst -> NameEnv TyCon
 tyFamsUsedInRHS injEnv famInst@(FamInst {fi_rhs = rhs}) =
     let (fam, _) = famInstSplitLHS famInst
+    -- invariant assumed: type family declaration is in the injectivity
+    -- environment iff it was declared injective in at least one of its type
+    -- variables. This means that for type families not declared as injective we
+    -- will hit the `Nothing` alternative and report no type families being used
+    -- in the RHS, thus successfully passing injectivity check.
     in case lookupUFM injEnv (tyConName fam) of
       Nothing -> emptyNameEnv
-      Just _  -> filterNameEnv isSynTyCon (tyConsOfType rhs)
-      -- invariant assumed: type family declaration is in the injectivity
-      -- environment iff it was declared injective in at least one of its type
-      -- variables
+      Just _  -> filterNameEnv isTypeFamilyTyCon (tyConsOfType rhs)
 
 \end{code}
 

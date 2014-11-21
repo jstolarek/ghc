@@ -1619,7 +1619,6 @@ tyConToIfaceDecl env tycon
                    })
 
   | Just fam_flav <- famTyConFlav_maybe tycon
-  -- JSTOLAREK: check this!
   -- invariant: if the first pattern guard succeeds the second one also should
   , Just injectivity <- tyConInjectivityInfo_maybe tycon
   = ( tc_env1
@@ -1659,7 +1658,7 @@ tyConToIfaceDecl env tycon
                   ifParent     = IfNoParent })
   where
     (tc_env1, tc_tyvars) = tidyTyClTyVarBndrs env (tyConTyVars tycon)
-    if_tc_tyvars = toIfaceTvBndrs tc_tyvars
+    if_tc_tyvars   = toIfaceTvBndrs tc_tyvars
     if_syn_type ty = tidyToIfaceType tc_env1 ty
     if_res_var     = getFS `fmap` tyConFamDeclResVar_maybe tycon
 

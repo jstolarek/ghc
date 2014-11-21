@@ -682,23 +682,21 @@ tcTyClDecl1 _parent rec_info
 
 \begin{code}
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
-tcFamDecl1 parent
-            famDecl@(FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
-                                , fdTyVars = tvs, fdResultSig = sig
-                                , fdInjective = inj })
+tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
+                              , fdTyVars = tvs, fdResultSig = sig
+                              , fdInjective = inj })
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                               OpenSynFamilyTyCon kind parent
-                              (Just $ getInjectivityList tvs' inj)
+                              (getInjectivityList tvs' inj)
   ; return [ATyCon tycon] }
 
-tcFamDecl1 parent
-            famDecl@(FamilyDecl { fdInfo = ClosedTypeFamily eqns
-                                , fdLName = lname@(L _ tc_name), fdTyVars = tvs
-                                , fdResultSig = sig, fdInjective = inj
-                                })
+tcFamDecl1 parent (FamilyDecl { fdInfo = ClosedTypeFamily eqns
+                              , fdLName = lname@(L _ tc_name), fdTyVars = tvs
+                              , fdResultSig = sig, fdInjective = inj
+                              })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
 -- Note: eqns might be empty, in a hs-boot file!
@@ -735,13 +733,12 @@ tcFamDecl1 parent
        ; let co_ax = mkBranchedCoAxiom co_ax_name fam_tc branches
 
          -- now, finally, build the TyCon
-       ; let syn_rhs = if null eqns
-                       then AbstractClosedSynFamilyTyCon
-                       else ClosedSynFamilyTyCon co_ax
+       ; let fam_flav = if null eqns
+                        then AbstractClosedSynFamilyTyCon
+                        else ClosedSynFamilyTyCon co_ax
        ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
-                                   -- JSTOLAREK: change syn_ths to fam_flav
-                                   syn_rhs kind parent
-                                   (Just $ getInjectivityList tvs' inj)
+                                   fam_flav kind parent
+                                   (getInjectivityList tvs' inj)
 
        ; let result = if null eqns
                       then [ATyCon tycon]

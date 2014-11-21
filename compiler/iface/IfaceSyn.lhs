@@ -110,7 +110,9 @@ data IfaceDecl
 
   | IfaceFamily  { ifName    :: IfaceTopBndr,      -- Type constructor
                    ifTyVars  :: [IfaceTvBndr],     -- Type variables
-                   ifResVar  :: Maybe IfLclName,   -- Result name
+                   ifResVar  :: Maybe IfLclName,   -- Result variable name, used
+                                                   -- only for pretty-printing
+                                                   -- with --show-iface
                    ifFamKind :: IfaceKind,         -- Kind of the *rhs* (not of
                                                    -- the tycon)
                    ifFamFlav :: IfaceFamTyConFlav,
@@ -753,15 +755,16 @@ pprIfaceDecl ss (IfaceSynonym { ifName   = tc
 
 pprIfaceDecl ss (IfaceFamily { ifName = tycon, ifTyVars = tyvars
                              , ifFamFlav = rhs, ifFamKind = kind
-                             , ifResVar = res_var, ifSynInj = inj })
+                             , ifResVar = res_var, ifFamInj = inj })
   = vcat [ hang (text "type family" <+> pprIfaceDeclHead [] ss tycon tyvars)
               2 (pp_inj res_var inj <+> ppShowRhs ss (pp_rhs rhs))
          , ppShowRhs ss (nest 2 (pp_branches rhs)) ]
   where
-    pp_inj Nothing    _          = dcolon <+> ppr kind
-    pp_inj (Just res) (Just inj) = hsep [ equals, ppr res, dcolon, ppr kind
-                                        , pp_inj_cond res inj]
-    pp_inj (Just _)    Nothing   = panic "pprIFaceDecl pp_inj"
+    pp_inj Nothing    _   = dcolon <+> ppr kind
+    pp_inj (Just res) inj
+        | or inj = hsep [ equals, ppr res, dcolon, ppr kind
+                        , pp_inj_cond res inj]
+        | otherwise = hsep [ equals, ppr res, dcolon, ppr kind ]
 
     pp_inj_cond res inj = case filterByList inj tyvars of
        []  -> empty
