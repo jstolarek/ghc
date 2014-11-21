@@ -48,8 +48,7 @@ module TyCon(
         isTypeFamilyTyCon, isDataFamilyTyCon,
         isOpenTypeFamilyTyCon, isClosedSynFamilyTyCon_maybe,
         isInjectiveTypeFamilyTyCon,
-        -- JSTOLAREK: change this name!
-        synTyConInjectivityInfo,
+        familyTyConInjectivityInfo,
         isBuiltInSynFamTyCon_maybe,
         isUnLiftedTyCon,
         isGadtSyntaxTyCon, isDistinctTyCon, isDistinctAlgRhs,
@@ -491,9 +490,9 @@ data TyCon
                                  -- Note that it does /not/ scope over the data
                                  -- constructors.
 
-        -- JSTOLAREK: ask Simon
-        tyConResVar  :: Maybe Name, -- ^ Result type variable, used
-                                    --   only for --show-face
+        famTcResVar  :: Maybe FastString,
+                                      -- ^ Result type variable, used only for
+                                      -- --show-face
 
         famTcFlav    :: FamTyConFlav, -- ^ Type family flavour: open, closed,
                                       -- abstract, built-in. See comments for
@@ -501,10 +500,10 @@ data TyCon
 
         famTcParent  :: TyConParent   -- ^ TyCon of enclosing class for
                                       -- associated type families
-        -- JSTOLAREK: change name to famTcInj
-        synInjective :: [Bool]        -- ^ is this a type family injective in
+
+        famTcInj     :: [Bool]        -- ^ is this a type family injective in
                                       -- its type variables?
-        -- invariant: length tyConTyVars = length synInjective
+        -- invariant: length tyConTyVars = length famTcInj
     }
 
   -- | Primitive types; cannot be defined in Haskell. This includes
@@ -1358,18 +1357,17 @@ isClosedSynFamilyTyCon_maybe
   (FamilyTyCon {famTcFlav = ClosedSynFamilyTyCon ax}) = Just ax
 isClosedSynFamilyTyCon_maybe _                        = Nothing
 
--- | Try to read the injectivity information from a TyCon. Only SynTyCons can be
--- injective so for every other TyCon this function returns Nothing
+-- | Try to read the injectivity information from a TyCon. Only FamilyTyCons can
+-- be injective so for every other TyCon this function returns Nothing
 tyConInjectivityInfo_maybe :: TyCon -> Maybe [Bool]
-tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = inj
-tyConInjectivityInfo_maybe _                                 = Nothing
+tyConInjectivityInfo_maybe (FamilyTyCon { tcFamInj = inj }) = Just inj
+tyConInjectivityInfo_maybe _                                = Nothing
 
--- | Try to read the injectivity information from a SynTyCon (other
--- than a type synonym). Only SynTyCons can be injective so for every
--- other TyCon (or type synonym TyCon) this function panics.
-synTyConInjectivityInfo :: TyCon -> [Bool]
-synTyConInjectivityInfo (SynTyCon { synInjective = Just inj }) = inj
-synTyConInjectivityInfo _ = panic "synTyConInjectivityInfo"
+-- | Try to read the injectivity information from a FamilyTyCon. Only
+-- FamilyTyCons can be injective so for every other TyCon this function panics.
+familyTyConInjectivityInfo :: TyCon -> [Bool]
+familyTyConInjectivityInfo (FamilyTyCon { tcFamInj = inj }) = inj
+familyTyConInjectivityInfo _ = panic "familyTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily
 isBuiltInSynFamTyCon_maybe

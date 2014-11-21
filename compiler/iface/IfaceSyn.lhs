@@ -114,7 +114,7 @@ data IfaceDecl
                    ifFamKind :: IfaceKind,         -- Kind of the *rhs* (not of
                                                    -- the tycon)
                    ifFamFlav :: IfaceFamTyConFlav,
-                   ifFamInj  :: Maybe [Bool] }     -- injectivity information
+                   ifFamInj  :: [Bool] }           -- injectivity information
                 -- invariant: length ifTyVars = length ifFamInj
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Context...
