@@ -971,7 +971,8 @@ rnTyClDecl (DataDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdDataDefn = defn 
        ; let kvs = extractDataDefnKindVars defn
              doc = TyDataCtx tycon
        ; traceRn (text "rntycl-data" <+> ppr tycon <+> ppr kvs)
-       ; ((tyvars', defn'), fvs) <- bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
+       ; ((tyvars', defn'), fvs) <-
+                      bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
                                     do { (defn', fvs) <- rnDataDefn doc defn
                                        ; return ((tyvars', defn'), fvs) }
        ; return (DataDecl { tcdLName = tycon', tcdTyVars = tyvars'
@@ -1146,8 +1147,8 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdKindSig = kindSig
-                             , fdInjective = L injSpan injectivity })
+                             , fdInfo = info, fdResultSig = kindSig
+                             , fdInjective = injectivity })
 -- RAE: Is there anywhere that checks that the result tyvar is fresh?
 -- Can it be the same as a tyvar of an enclosing class?
   = do { ((tycon', tyvars', kindSig', injectivity'), fv1) <-
@@ -1179,8 +1180,8 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdKindSig = kindSig'
-                            , fdInjective = L injSpan injectivity' }
+                            , fdInfo = info', fdResultSig = kindSig'
+                            , fdInjective = injectivity' }
                 , fv1 `plusFV` fv2) }
   where
      fmly_doc = TyFamilyCtx tycon
@@ -1212,9 +1213,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      -- JSTOLAREK: I don't understand Richard's remark
      rn_injectivity :: [LHsTyVarBndr RdrName]  -- type variables declared in
                                                -- type family head
-                    -> InjectivityInfo RdrName -- injectivity information
-                    -> RnM (InjectivityInfo Name)
-     rn_injectivity tyvars (InjectivityInfo injFrom injTo) = do
+                    -> LInjectivityDecl RdrName -- injectivity information
+                    -> RnM (LInjectivityDecl Name)
+     rn_injectivity tyvars (L srcSpan (InjectivityDecl injFrom injTo)) = do
         let -- the only type variable allowed on the LHS of injectivity
             -- condition is the variable naming the result in type family head
             lhsValid   = resName == unLoc injFrom
@@ -1267,7 +1268,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                                  ++ "exactly the same order as they were bound."
                                 ], ly)
 
-        ((_,errs), (injFrom', injTo')) <- askTcMessages $ do
+        ((injFrom', injTo'), isError) <- askNoErrs $ do
           injFrom' <- rnLTyVar True injFrom
           injTo'   <- mapM (rnLTyVar True) injTo
           return (injFrom', injTo')
@@ -1276,17 +1277,19 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
         -- not-in-scope variables) don't check the validity of injectivity
         -- declaration. This gives better error messages and saves us from
         -- unnecessary computations if renaming of type variables fails.
-        unless (not (isEmptyBag errs) || lhsValid) $ setSrcSpan (getLoc injFrom) $ addErr
-               (vcat [ text $ "Incorrect type variable on the LHS of "
-                           ++ "injectivity condition"
+        unless (not isError || lhsValid) $
+               setSrcSpan (getLoc injFrom) $
+               addErr (vcat [ text $ "Incorrect type variable on the LHS of "
+                                  ++ "injectivity condition"
                      , nest 5
                      ( vcat [ text "Expected :" <+> ppr resName
                             , text "Actual   :" <+> ppr injFrom ])])
 
-        unless (not (isEmptyBag errs) || isNothing rhsValid) $ setSrcSpan (snd . fromJust $ rhsValid) $
+        unless (not isError || isNothing rhsValid) $
+               setSrcSpan (snd . fromJust $ rhsValid) $
                addErr (fst (fromJust rhsValid))
 
-        return $ InjectivityInfo injFrom' injTo'
+        return $ (L srcSpan (InjectivityDecl injFrom' injTo'))
 
      getLHsTyVarBndrName :: LHsTyVarBndr name -> name
      getLHsTyVarBndrName (L _ (UserTyVar   name  )) = name

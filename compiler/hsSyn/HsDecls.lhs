@@ -71,7 +71,8 @@ module HsDecls (
   -- ** Role annotations
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
-  FamilyResultSig(..), InjectivityInfo(..), extractInjectivityInformation,
+  FamilyResultSig(..), InjectivityDecl(..), LInjectivityDecl,
+  extractInjectivityInformation,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -108,7 +109,6 @@ import Data.Data        hiding (TyCon,Fixity)
 import Data.Foldable ( Foldable )
 import Data.Traversable ( Traversable )
 #endif
-import Data.Maybe
 \end{code}
 
 %************************************************************************
@@ -539,18 +539,62 @@ tyClGroupConcat = concatMap group_tyclds
 mkTyClGroup :: [LTyClDecl name] -> TyClGroup name
 mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
--- JSTOLAREK: Improve this comment
--- Signature of the return kind of a type family. This can be:
+-- Note [FamilyResultSig]
+-- ~~~~~~~~~~~~~~~~~~~~~~
 --
---  * ommited (NoSig):
---       type family Plus a b where ...
---  * a kind (KindOnlySig):
---       type family Plus a b :: Nat where ...
---  * a named type, possibly with a kind signature (KindedTyVarSig):
---       type family Plus a b = r where ...
---       type family Plus a b = (r :: Nat) where ...
+-- This data type represent the return type/kind signature of a type
+-- family. Possible values:
 --
-data FamilyResultSig name = NoSig
+--  * NoSig - the user supplied no return signature:
+--       type family Id a where ...
+--
+--  * KindOnlySig - the user supplied the return kind:
+--       type family Id a :: * where ...
+--
+--  * KindedTyVarSig - user named the result with a type variable and possibly
+--    provided a kind signature for that variable:
+--       type family Id a = r where ...
+--       type family Id a = (r :: *) where ...
+--
+--    Naming result of a type family is required if we want to provide
+--    injectivity declaration for a type family:
+--       type family Id a = r | r -> a where ...
+--
+-- See also: Note [Injectivity declaration]
+-- JSTOLAREK: this note should probably refer to other notes once they are made:
+-- one about injectivity
+
+-- Note [Injectivity declaration]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- A user can declare a type family to be injective:
+--
+--    type family Id a = r | r -> a where ...
+--
+--  * The part after the "|" is called "injectivity declaration".
+--  * "r -> a" part is called "injectivity condition"; at the moment terms
+--    "injectivity declaration" and "injectivity condition" are synonymous
+--    because we only allow a single injectivity condition.
+--  * "r" is the "LHS of injectivity condition". LHS contains only the variable
+--    naming the result of a type family.
+
+--  * "a" is the "RHS of injectivity condition". RHS contains space-separated
+--    type variables naming the arguments of a type family. The variables must
+--    appear in the order in which they were declared. Some variables can be
+--    omitted if a type family is not injective in these arguments. Example:
+--        type family Foo a b c = d |  d -> a c where ...
+--
+-- It is possible that in the future this syntax will be extended to support
+-- more complicated injectivity declarations. For example we ciuld declare that
+-- if we know the result of Plus and one of its arguments we can determine the
+-- other argument:
+--
+--    type family Plus a b = (r :: Nat) | r a -> b, r b -> a where ...
+--
+-- Here injectivity declaration consists of two comma-separated injectivity
+-- conditions.
+
+data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindOnlySig (LHsKind name)
                           | KindedTyVarSig (LHsTyVarBndr name)
                             deriving( Typeable )
@@ -559,21 +603,24 @@ deriving instance (DataId name) => Data (FamilyResultSig name)
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
   { fdInfo      :: FamilyInfo name               -- type or data, closed or open
-  -- JSTOLAREK: everything else here is Located, so I've made this located as
-  -- well. But perhaps I don't have to? I'm not introducing any bindings on the
-  -- one hand, but then again I'll be reporting errors later...
-  -- Located should go inside Maybe
-  , fdInjective :: Located (Maybe (InjectivityInfo name))
-                                                 -- injectivity information
+  , fdInjective :: Maybe (LInjectivityDecl name) -- optional injectivity decl.
   , fdLName     :: Located name                  -- type constructor
   , fdTyVars    :: LHsTyVarBndrs name            -- type variables
-  , fdKindSig   :: FamilyResultSig name }        -- result kind
+  , fdResultSig :: FamilyResultSig name }        -- result signature
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
--- JSTOLAREK: provide a comment about this data type
-data InjectivityInfo name
-  = InjectivityInfo (Located name) [Located name]
+-- If the user supplied an injectivity declaration it is represented using
+-- InjectivityDecl. At the moment this is a single injectivity condition - see
+-- Note [Injectivity declaration]. `Located name` stores the LHS of injectivity
+-- condition. [Located name] stores the RHS of injectivity condition. Example:
+--
+--   type family Foo a b c = r | r -> a c where ...
+--
+-- This will be represented as "InjectivityDecl `r` [`a`, `c`]"
+type LInjectivityDecl name = Located (InjectivityDecl name)
+data InjectivityDecl name
+  = InjectivityDecl (Located name) [Located name]
   deriving( Data, Typeable )
 
 data FamilyInfo name
@@ -694,9 +741,9 @@ hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 
 -- | Does this family declaration have a complete, user-supplied kind signature?
 famDeclHasCusk :: FamilyDecl name -> Bool
-famDeclHasCusk (FamilyDecl { fdInfo = ClosedTypeFamily _
-                           , fdTyVars = tyvars
-                           , fdKindSig = m_sig })
+famDeclHasCusk (FamilyDecl { fdInfo      = ClosedTypeFamily _
+                           , fdTyVars    = tyvars
+                           , fdResultSig = m_sig })
   = hsTvbAllKinded tyvars && existsSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
 
@@ -708,13 +755,13 @@ existsSignature _     = True
 
 -- JSTOLAREK: haddockify
 extractInjectivityInformation :: Eq name => FamilyDecl name -> [Bool]
-extractInjectivityInformation (FamilyDecl { fdInjective = L _ Nothing
+extractInjectivityInformation (FamilyDecl { fdInjective = Nothing
                                           , fdTyVars = tvbndrs } ) =
   -- No injectivity information => type family is not injective in any
   -- of its arguments. Return a list of Falses.
   replicate (length (hsq_tvs tvbndrs)) False
 extractInjectivityInformation (FamilyDecl
-                { fdInjective = L _ (Just (InjectivityInfo _ lInjNames))
+                { fdInjective = Just (L _ (InjectivityDecl _ lInjNames))
                 , fdTyVars = tvbndrs } ) =
   merge tvNames injNames
     where
@@ -800,7 +847,7 @@ instance OutputableBndr name => Outputable (TyClGroup name) where
 
 instance (OutputableBndr name) => Outputable (FamilyDecl name) where
   ppr (FamilyDecl { fdInfo = info, fdLName = ltycon,
-                    fdTyVars = tyvars, fdKindSig = mb_kind})
+                    fdTyVars = tyvars, fdResultSig = mb_kind})
       = vcat [ pprFlavour info <+> pp_vanilla_decl_head ltycon tyvars [] <+> pp_kind <+> pp_where
              , nest 2 $ pp_eqns ]
         where

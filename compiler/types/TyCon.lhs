@@ -495,7 +495,8 @@ data TyCon
         famTcParent  :: TyConParent   -- ^ TyCon of enclosing class for
                                       -- associated type families
         -- JSTOLAREK: change name to famTcInj
-        synInjective :: [Bool]        -- ^ is this an injective type family?
+        synInjective :: [Bool]        -- ^ is this a type family injective in
+                                      -- its type variables?
         -- invariant: length tyConTyVars = length synInjective
     }
 

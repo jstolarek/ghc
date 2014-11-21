@@ -738,7 +738,7 @@ ty_decl :: { LTyClDecl RdrName }
                           where_type_family
                 -- Note the use of type for the head; this allows
                 -- infix type constructors to be declared
-                {% amms (mkFamDecl (comb4 $1 $3 $4 $6) (snd $ unLoc $6) $3
+                {% amms (mkFamDecl (comb3 $1 $3 $4) (snd $ unLoc $6) $3
                                    (unLoc $4) $5)
                         (mj AnnType $1:mj AnnFamily $2:(fst $ unLoc $5)) }
 
@@ -763,8 +763,8 @@ ty_decl :: { LTyClDecl RdrName }
 
           -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig
-                {% amms (mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc Nothing)
-                         (noLoc []))
+                {% amms (mkFamDecl (comb3 $1 $2 $4) DataFamily $3 (unLoc $4)
+                        Nothing)
                         [mj AnnData $1,mj AnnFamily $2] }
 
 inst_decl :: { LInstDecl RdrName }
@@ -812,13 +812,13 @@ overlap_pragma :: { Maybe (Located OverlapMode) }
 
 -- Injective type families
 
-opt_injective_info :: { Located (Maybe (InjectivityInfo RdrName)) }
-        :                              { noLoc Nothing        }
-        | '|' injectivity_cond         { sLL $1 $> (Just (unLoc $2)) }
+opt_injective_info :: { Maybe (LInjectivityDecl RdrName) }
+        :                              { Nothing }
+        | '|' injectivity_cond         { Just $2 }
 
-injectivity_cond :: { Located (InjectivityInfo RdrName) }
+injectivity_cond :: { LInjectivityDecl RdrName }
         : tyvarid '->' inj_varids
-          { sLL $1 $> (InjectivityInfo $1 (reverse (unLoc $3))) }
+          { sLL $1 $> (InjectivityDecl $1 (reverse (unLoc $3))) }
 
 inj_varids :: { Located [Located RdrName] }
         : inj_varids tyvarid  { sLL $1 $> ($2 : unLoc $1) }
@@ -870,18 +870,18 @@ at_decl_cls :: { LHsDecl RdrName }
         :  -- data family declarations, with optional 'family' keyword
           'data' opt_family type opt_datafam_kind_sig
                 {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4) DataFamily $3
-                                                  (unLoc $4) (noLoc Nothing)))
+                                                  (unLoc $4) Nothing))
                         (mj AnnData $1:$2) }
 
            -- type family declarations, with optional 'family' keyword
            -- (can't use opt_instance because you get shift/reduce errors
         | 'type' type opt_tyfam_kind_sig opt_injective_info
-               {% amms (liftM mkTyClD (mkFamDecl (comb4 $1 $2 $3 $4)
+               {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $2 $3)
                                                   OpenTypeFamily $2 (unLoc $3)
                                                   $4))
                        [mj AnnType $1] }
         | 'type' 'family' type opt_tyfam_kind_sig opt_injective_info
-               {% amms (liftM mkTyClD (mkFamDecl (comb4 $1 $3 $4 $5)
+               {% amms (liftM mkTyClD (mkFamDecl (comb3 $1 $3 $4)
                                                   OpenTypeFamily $3 (unLoc $4)
                                                   $5))
                        [mj AnnType $1,mj AnnFamily $2] }

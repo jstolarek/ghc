@@ -181,6 +181,7 @@ checkFamInstConsistency famInstMods directlyImpMods
                    (famInstEnvElts env1)
  }
 
+-- JSTOLAREK: DIFFERENT NOTE NAME!
 -- Note [Structure of injectivity declarations]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --

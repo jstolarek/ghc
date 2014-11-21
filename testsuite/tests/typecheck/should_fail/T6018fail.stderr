@@ -25,17 +25,17 @@ T6018fail.hs:17:15:
       I Int Int Int -- Defined at T6018fail.hs:18:15
 
 T6018fail.hs:27:15:
-    Calling type family ‘Id’ is not allowed in injective type family equation:
+    Calling type family `Id' is not allowed in injective type family equation:
       IdProxy a -- Defined at T6018fail.hs:27:15
 
 T6018fail.hs:36:15:
-    Calling type family ‘P’ is not allowed in injective type family equation:
+    Calling type family `P' is not allowed in injective type family equation:
       P ('S n) m -- Defined at T6018fail.hs:36:15
 
 T6018fail.hs:41:15:
-    Family instance declaration violates injectivity declaration. Type variable ‘b’ should appear in the type family equation:
+    Family instance declaration violates injectivity declaration. Type variable `b' should appear in the type family equation:
       J Int b c -- Defined at T6018fail.hs:41:15
 
 T6018fail.hs:45:15:
-    Family instance declaration violates injectivity declaration. Type variable ‘n’ should appear in the type family equation:
+    Family instance declaration violates injectivity declaration. Type variable `n' should appear in the type family equation:
       K ('S n) m -- Defined at T6018fail.hs:45:15
