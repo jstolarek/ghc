@@ -114,8 +114,8 @@ data IfaceDecl
                    ifFamKind :: IfaceKind,         -- Kind of the *rhs* (not of
                                                    -- the tycon)
                    ifFamFlav :: IfaceFamTyConFlav,
-                   ifFamInj  :: [Bool] }           -- injectivity information
-                -- invariant: length ifTyVars = length ifSynInj
+                   ifFamInj  :: Maybe [Bool] }     -- injectivity information
+                -- invariant: length ifTyVars = length ifFamInj
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Context...
                  ifName    :: IfaceTopBndr,             -- Name of the class TyCon
@@ -758,13 +758,14 @@ pprIfaceDecl ss (IfaceFamily { ifName = tycon, ifTyVars = tyvars
               2 (pp_inj res_var inj <+> ppShowRhs ss (pp_rhs rhs))
          , ppShowRhs ss (nest 2 (pp_branches rhs)) ]
   where
-    pp_inj Nothing    _   = dcolon <+> ppr kind
-    pp_inj (Just res) inj = hsep [ equals, ppr res, dcolon, ppr kind
-                                 , pp_inj_cond res inj]
+    pp_inj Nothing    _          = dcolon <+> ppr kind
+    pp_inj (Just res) (Just inj) = hsep [ equals, ppr res, dcolon, ppr kind
+                                        , pp_inj_cond res inj]
+    pp_inj (Just _)    Nothing   = panic "pprIFaceDecl pp_inj"
 
     pp_inj_cond res inj = case filterByList inj tyvars of
        []  -> empty
-       tvs -> hsep [text "|", ppr res, text "->", interppSP tvs]
+       tvs -> hsep [text "|", ppr res, text "->", interppSP (map fst tvs)]
 
     pp_rhs IfaceOpenSynFamilyTyCon             = ppShowIface ss (ptext (sLit "open"))
     pp_rhs IfaceAbstractClosedSynFamilyTyCon   = ppShowIface ss (ptext (sLit "closed, abstract"))

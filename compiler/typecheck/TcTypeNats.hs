@@ -110,7 +110,7 @@ typeNatLeqTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
-    [False, False] -- because we have 2 type variables
+    (Just [False, False]) -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "<=?")
@@ -129,7 +129,7 @@ typeNatCmpTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
-    [False, False] -- because we have 2 type variables
+    (Just [False, False]) -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpNat")
@@ -148,7 +148,7 @@ typeSymbolCmpTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     NoParentTyCon
-    [False, False] -- because we have 2 type variables
+    (Just [False, False]) -- because we have 2 type variables
 
   where
   name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpSymbol")
@@ -172,7 +172,7 @@ mkTypeNatFunTyCon2 op tcb =
     Nothing
     (BuiltInSynFamTyCon tcb)
     NoParentTyCon
-    [False, False] -- because we have 2 type variables
+    (Just [False, False]) -- because we have 2 type variables
 
 
 

@@ -1360,13 +1360,14 @@ isClosedSynFamilyTyCon_maybe _                        = Nothing
 -- | Try to read the injectivity information from a TyCon. Only SynTyCons can be
 -- injective so for every other TyCon this function returns Nothing
 tyConInjectivityInfo_maybe :: TyCon -> Maybe [Bool]
-tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = Just inj
+tyConInjectivityInfo_maybe (SynTyCon { synInjective = inj }) = inj
 tyConInjectivityInfo_maybe _                                 = Nothing
 
--- | Try to read the injectivity information from a SynTyCon. Only SynTyCons can
--- be injective so for every other TyCon this function panics.
+-- | Try to read the injectivity information from a SynTyCon (other
+-- than a type synonym). Only SynTyCons can be injective so for every
+-- other TyCon (or type synonym TyCon) this function panics.
 synTyConInjectivityInfo :: TyCon -> [Bool]
-synTyConInjectivityInfo (SynTyCon { synInjective = inj }) = inj
+synTyConInjectivityInfo (SynTyCon { synInjective = Just inj }) = inj
 synTyConInjectivityInfo _ = panic "synTyConInjectivityInfo"
 
 isBuiltInSynFamTyCon_maybe :: TyCon -> Maybe BuiltInSynFamily

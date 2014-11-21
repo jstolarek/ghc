@@ -200,11 +200,9 @@ buildTyFamInjEnv :: [TyCon] -> FamInjEnv
 buildTyFamInjEnv inScopetyCons =
     listToUFM [ ( tyConName tyfam, injInfo )
               | tyfam <- inScopetyCons
-              , isSynTyCon tyfam
-              , not (isTypeSynonymTyCon tyfam)
+              , isSynFamilyTyCon tyfam
               -- synTyConInjectivityInfo will panic for anything different than
-              -- a SynTyCon. The above check makes sure that we only have open
-              -- and close type families, which are SynTyCons
+              -- a type family SynTyCon, thus the above check
               , let injInfo = synTyConInjectivityInfo tyfam
               , or injInfo ] -- skip type families without
                              -- injectivity declarations

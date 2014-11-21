@@ -60,7 +60,7 @@ buildFamilyTyCon :: Name -> [TyVar] -> Maybe Name
                  -> Kind                   -- ^ Kind of the RHS
                  -> TyConParent
 -- JSTOLAREK: refer to a note once it is made
-                 -> [Bool]                 -- injectivity information
+                 -> Maybe [Bool]              -- injectivity information
                  -> TcRnIf m n TyCon
 buildFamilyTyCon tc_name tvs res_tv rhs rhs_kind parent injectivity
   = return (mkFamilyTyCon tc_name kind tvs res_tv rhs parent injectivity)

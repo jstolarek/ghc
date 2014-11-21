@@ -686,7 +686,7 @@ tcFamDecl1 parent
   ; checkFamFlag tc_name
   ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                               OpenSynFamilyTyCon kind parent
-                              (getInjectivityInformation famDecl)
+                              (Just $ getInjectivityInformation famDecl)
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
@@ -736,7 +736,7 @@ tcFamDecl1 parent
        ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                                    -- JSTOLAREK: change syn_ths to fam_flav
                                    syn_rhs kind parent
-                                   (getInjectivityInformation famDecl)
+                                   (Just $ getInjectivityInformation famDecl)
 
        ; let result = if null eqns
                       then [ATyCon tycon]
