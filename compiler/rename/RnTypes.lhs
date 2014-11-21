@@ -966,17 +966,14 @@ extractHsTysRdrTyVars ty
   = case extract_ltys ty ([],[]) of
      (kvs, tvs) -> (nub kvs, nub tvs)
 
--- JSTOLAREK: here the intention is to return the KIND
 extractRdrKindSigVars :: FamilyResultSig RdrName -> [RdrName]
-extractRdrKindSigVars NoSig = []
-extractRdrKindSigVars (KindSig k) = nub (fst (extract_lkind k ([],[])))
-extractRdrKindSigVars (TyVarSig k) =
-    -- JSTOLAREK: SPJ says there must be a better way of doing this
-    -- Is setting hsq_kvs to [] correct?. I'm not sure if passing in k
-    -- to hsq_tvs is correct - after all this function cares about the return
-    -- kind, not type variables.
-    let tv_bndrs = HsQTvs { hsq_tvs = [k], hsq_kvs = [] }
-    in nub (fst (extract_hs_tv_bndrs tv_bndrs ([],[]) ([],[])))
+extractRdrKindSigVars resultSig
+    | KindSig k                        <- resultSig  = kindRdrNameFromSig k
+    | TyVarSig (L _ (KindedTyVar _ k)) <- resultSig  = kindRdrNameFromSig k
+    | TyVarSig (L _ (UserTyVar _))     <- resultSig = []
+    | otherwise = [] -- this can only be NoSig but pattern exhasutiveness
+                     -- checker complains about "NoSig <- resultSig"
+    where kindRdrNameFromSig k = nub (fst (extract_lkind k ([],[])))
 
 extractDataDefnKindVars :: HsDataDefn RdrName -> [RdrName]
 -- Get the scoped kind variables mentioned free in the constructor decls
