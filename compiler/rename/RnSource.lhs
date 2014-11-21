@@ -52,6 +52,7 @@ import Data.List( partition, sortBy )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Traversable (traverse)
 #endif
+import Data.Maybe ( isJust )
 import Maybes( orElse, mapMaybe )
 \end{code}
 
@@ -588,7 +589,7 @@ rnTyFamDefltEqn :: Name
 rnTyFamDefltEqn cls (TyFamEqn { tfe_tycon = tycon
                               , tfe_pats  = tyvars
                               , tfe_rhs   = rhs })
-  = bindHsTyVars ctx (Just cls) [] tyvars Nothing $ \ tyvars' ->
+  = bindHsTyVars ctx (Just cls) [] tyvars $ \ tyvars' ->
     do { tycon'      <- lookupFamInstName (Just cls) tycon
        ; (rhs', fvs) <- rnLHsType ctx rhs
        ; return (TyFamEqn { tfe_tycon = tycon'
@@ -956,8 +957,8 @@ rnTyClDecl (SynDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdRhs = rhs })
        ; let kvs = fst (extractHsTyRdrTyVars rhs)
              doc = TySynCtx tycon
        ; traceRn (text "rntycl-ty" <+> ppr tycon <+> ppr kvs)
-       ; ((tyvars', rhs'), fvs) <- bindHsTyVars doc Nothing kvs tyvars Nothing $
-                                    \ tyvars' ->
+       ; ((tyvars', rhs'), fvs) <- bindHsTyVars doc Nothing kvs tyvars $
+                                   \ tyvars' ->
                                     do { (rhs', fvs) <- rnTySyn doc rhs
                                        ; return ((tyvars', rhs'), fvs) }
        ; return (SynDecl { tcdLName = tycon', tcdTyVars = tyvars'
@@ -971,7 +972,7 @@ rnTyClDecl (DataDecl { tcdLName = tycon, tcdTyVars = tyvars, tcdDataDefn = defn 
              doc = TyDataCtx tycon
        ; traceRn (text "rntycl-data" <+> ppr tycon <+> ppr kvs)
        ; ((tyvars', defn'), fvs) <-
-                      bindHsTyVars doc Nothing kvs tyvars Nothing $ \ tyvars' ->
+                      bindHsTyVars doc Nothing kvs tyvars $ \ tyvars' ->
                                     do { (defn', fvs) <- rnDataDefn doc defn
                                        ; return ((tyvars', defn'), fvs) }
        ; return (DataDecl { tcdLName = tycon', tcdTyVars = tyvars'
@@ -988,7 +989,7 @@ rnTyClDecl (ClassDecl {tcdCtxt = context, tcdLName = lcls,
 
         -- Tyvars scope over superclass context and method signatures
         ; ((tyvars', context', fds', ats', sigs'), stuff_fvs)
-            <- bindHsTyVars cls_doc Nothing kvs tyvars Nothing $ \ tyvars' -> do
+            <- bindHsTyVars cls_doc Nothing kvs tyvars $ \ tyvars' -> do
                   -- Checks for distinct tyvars
              { (context', cxt_fvs) <- rnContext cls_doc context
              ; fds'  <- rnFds fds
@@ -1150,13 +1151,24 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                              , fdInjective = injectivity })
   = do { rdr_env <- getLocalRdrEnv
        ; ((tycon', tyvars', kindSig', injectivity'), fv1) <-
-           bindHsTyVars fmly_doc mb_cls kvs tyvars resTyVar $ \tyvars' ->
+           bindHsTyVars fmly_doc mb_cls kvs tyvars''' $ \tyvars'' ->
            do { tycon' <- lookupLocatedTopBndrRn tycon
+
+              -- if the user supplied a binding for result type variable we have
+              -- to remove it from the front of the variable bindings list. See
+              -- definition of tyvars''' in the where clause below. Note that
+              -- this makes the call to `tail` safe - when (isJust resTyVar) is
+              -- True the list of variable bindings is guaranteed to be
+              -- non-empty.
+              ; let tyvars' = if isJust resTyVar
+                              then let tvs = hsq_tvs tyvars''
+                                   in tyvars'' { hsq_tvs = tail tvs }
+                              else tyvars''
 
               -- `resTyVar` is a `Just` only the result of a type family was
               -- named by writing `= tyvar` or `= (tyvar :: kind)`. In such case
-              -- we must check that the supplied result name is not identical
-              -- to:
+              -- we want to be sure that the supplied result name is not
+              -- identical to an already in-scope type variables:
               --
               --  a) one of already declared type family arguments. Example of
               --     disallowed declaration:
@@ -1167,13 +1179,15 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
               --     some type variables. Example of disallowed declaration:
               --         class C a b where
               --            type F b = a
+              --
+              -- Case a) is handled internally by bindHsTyVars. (Note that we
+              -- add the result type variable binding to the list of type
+              -- variable bindings). Case b is handled below.
               ; case resTyVar of
                  Nothing -> return ()
                  Just resTv -> do
-                      let tvNames = map hsLTyVarName tvBndrs
-                          resName = hsLTyVarName resTv
-                      when (resName `elem` tvNames ||            -- case a)
-                            resName `elemLocalRdrEnv` rdr_env) $ -- case b)
+                      let resName = hsLTyVarName resTv
+                      when (resName `elemLocalRdrEnv` rdr_env) $
                            setSrcSpan (getLoc resTv) $
                            addErr (hsep [ text "Type variable"
                                         , pprQuotedList [resName]
@@ -1204,6 +1218,12 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
      tvBndrs  = hsQTvBndrs tyvars
+     -- if the user supplied a bindind for result type variable we add it to the
+     -- list of type variable bindings
+     tyvars'''= case resTyVar of
+                  Just bndr -> let tvs = hsq_tvs tyvars
+                               in tyvars { hsq_tvs = bndr : tvs }
+                  Nothing   -> tyvars
 
      maybeResultBndr :: FamilyResultSig name -> Maybe (LHsTyVarBndr name)
      maybeResultBndr (TyVarSig bndr) = Just bndr
@@ -1455,7 +1475,7 @@ rnConDecl decl@(ConDecl { con_names = names, con_qvars = tvs
 
         ; mb_doc' <- rnMbLHsDoc mb_doc
 
-        ; bindHsTyVars doc Nothing free_kvs new_tvs Nothing $ \new_tyvars -> do
+        ; bindHsTyVars doc Nothing free_kvs new_tvs $ \new_tyvars -> do
         { (new_context, fvs1) <- rnContext doc lcxt
         ; (new_details, fvs2) <- rnConDeclDetails doc details
         ; (new_details', new_res_ty, fvs3)

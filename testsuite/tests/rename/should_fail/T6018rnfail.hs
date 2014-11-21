@@ -15,14 +15,14 @@ class Fcl a where
 type family G a = a
 type family Gc a = a where
   Gc a = a
-class Gcl a where
+class Gcl b where
   type Gt a = a
 
 -- declare result tyvar to be duplicate (with ID)
 type family Gb a = a | a -> a
 type family Gcb a = a | a -> a where
   Gcb a = a
-class Gclb a where
+class Gclb a where -- here we want two errors
   type Gtb a = a | a -> a
 
 -- incorrect order of tyvars in RHS of ID

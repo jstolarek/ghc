@@ -865,7 +865,7 @@ renameSig ctxt sig@(PatSynSig v (flag, qtvs) prov req ty)
                    ; return qtvs }
             Qualified -> panic "renameSig: Qualified"
 
-        ; bindHsTyVars doc Nothing tv_kvs tv_bndrs Nothing $ \ tyvars -> do
+        ; bindHsTyVars doc Nothing tv_kvs tv_bndrs $ \ tyvars -> do
         { (prov', fvs1) <- rnContext doc prov
         ; (req', fvs2) <- rnContext doc req
         ; (ty', fvs3) <- rnLHsType doc ty
