@@ -1218,7 +1218,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      kvs      = extractRdrKindSigVars kindSig
      resTyVar = maybeResultBndr kindSig
      tvBndrs  = hsQTvBndrs tyvars
-     -- if the user supplied a bindind for result type variable we add it to the
+     -- if the user supplied a binding for result type variable we add it to the
      -- list of type variable bindings
      tyvars'''= case resTyVar of
                   Just bndr -> let tvs = hsq_tvs tyvars
