@@ -547,7 +547,8 @@ cgAlts gc_plan bndr (PrimAlt _) Nothing (Just altCons) states (Just hpOffsets)
         ; emitCmmLitSwitch (CmmReg bndr_reg) tagged_cmms' deflt
         ; return AssignedDirectly }
 
-cgAlts gc_plan bndr (AlgAlt tycon) Nothing (Just altCons) states (Just hpOffsets)
+cgAlts gc_plan bndr (AlgAlt tycon) Nothing (Just altCons) states
+       (Just hpOffsets)
   = do  { dflags <- getDynFlags
 
         ; (mb_deflt, branches) <- cgAlgAltRhss gc_plan altCons states hpOffsets
@@ -598,7 +599,8 @@ cgAlts _ _ _ _ _ _ _ = panic "cgAlts"
 --   goto L1
 
 -------------------
-cgAlgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CgState] -> [VirtualHpOffset]
+cgAlgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CgState]
+             -> [VirtualHpOffset]
              -> FCode ( Maybe CmmAGraph
                       , [(ConTagZ, CmmAGraph)] )
 cgAlgAltRhss gc_plan altCons states hpOffsets
