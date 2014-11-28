@@ -740,7 +740,7 @@ ty_decl :: { LTyClDecl RdrName }
                 -- infix type constructors to be declared
                 {% amms (mkFamDecl (comb3 $1 $3 $4) (snd $ unLoc $6) $3
                                    (unLoc $4) $5)
-                        (mj AnnType $1:mj AnnFamily $2:(fst $ unLoc $5)) }
+                        (mj AnnType $1:mj AnnFamily $2:(fst $ unLoc $6)) }
 
           -- ordinary data type or newtype declaration
         | data_or_newtype capi_ctype tycl_hdr constrs deriving
@@ -813,12 +813,13 @@ overlap_pragma :: { Maybe (Located OverlapMode) }
 -- Injective type families
 
 opt_injective_info :: { Maybe (LInjectivityDecl RdrName) }
-        :                              { Nothing }
-        | '|' injectivity_cond         { Just $2 }
+        : {- empty -}                  { Nothing }
+        | '|' injectivity_cond         {% ajs (Just $2) [mj AnnVbar $1]}
 
 injectivity_cond :: { LInjectivityDecl RdrName }
         : tyvarid '->' inj_varids
-          { sLL $1 $> (InjectivityDecl $1 (reverse (unLoc $3))) }
+          {% ams (sLL $1 $> (InjectivityDecl $1 (reverse (unLoc $3))))
+                 [mj AnnRarrow $2] }
 
 inj_varids :: { Located [Located RdrName] }
         : inj_varids tyvarid  { sLL $1 $> ($2 : unLoc $1) }
@@ -929,16 +930,20 @@ data_or_newtype :: { Located (AddAnn,NewOrData) }
 
 opt_kind_sig :: { Located (Maybe (LHsKind RdrName)) }
         :                             { noLoc Nothing }
-        | '::' kind                   {% ajl (sLL $1 $> (Just $2)) AnnDcolon (gl $1) }
+        | '::' kind                   {% ajl (sLL $1 $> (Just $2)) AnnDcolon
+                                             (gl $1) }
 
 opt_datafam_kind_sig :: { Located (FamilyResultSig RdrName) }
         :                               { noLoc NoSig     }
-        | '::' kind                     { sLL $1 $> (KindSig $2) }
+        | '::' kind                     {% ajl (sLL $1 $> (KindSig $2))
+                                                AnnDcolon (gl $1) }
 
 opt_tyfam_kind_sig :: { Located (FamilyResultSig RdrName) }
         :                               { noLoc NoSig             }
-        | '::' kind                     { sLL $1 $> (KindSig  $2) }
-        | '='  tv_bndr                  { sLL $1 $> (TyVarSig $2) }
+        | '::' kind                     {% ajl (sLL $1 $> (KindSig  $2))
+                                               AnnDcolon (gl $1)}
+        | '='  tv_bndr                  {% ajl (sLL $1 $> (TyVarSig $2))
+                                               AnnEqual (gl $1)}
 
 -- tycl_hdr parses the header of a class or data type decl,
 -- which takes the form
