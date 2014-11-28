@@ -494,6 +494,25 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
+-- JSTOLAREK: this note is a stub, it will be improved
+
+-- Note [Injectivity check for a pair of branches]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- Injectivity means that knowing the RHS allows us to determine the LHS. This
+-- requires that for each two equations of an open type family one of the
+-- following conditions holds:
+--
+-- 1. RHSs are different.
+--
+-- 2. If the RHSs can be unified under some substitution then it must be
+--    possible to unify the LHSs under the same substitution.
+--
+-- If any of the above two conditions holds we declare that the pair of
+-- equations does not violate injectivity declaration. But if we find a pair of
+-- equations where RHSs unify but LHSs don't we report that this pair violates
+-- injectivity declaration because for a given RHS we don't have a unique LHS.
+
 -- JSTOLAREK: comment this. I should make a note that describes the whole
 -- algorithm for checking injectivity.
 
@@ -503,22 +522,19 @@ injectiveBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectiveBranches injectivity
                   (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                   (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
-  = let get_inj  = filterByList injectivity
-    -- RAE: The FG variant of tcUnifyTys should only matter where type
-    -- families are involved. There are no type families on the left,
-    -- so you should be able to use tcUnifyTys, which is easier to
-    -- understand.
-    in case tcUnifyTysFG instanceBindFun (get_inj lhs1) (get_inj lhs2) of
-      -- JSTOLAREK: Voodoo programming here. Does that make sense?
-      -- The reasoning here is reversed compared to the original
-      -- proposal on the wiki
-      SurelyApart -> case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
-                       SurelyApart -> True
-                       _           -> False
-      Unifiable subst
-        | Type.substTy subst rhs1 `eqType` Type.substTy subst rhs2
-        -> True
-      _ -> False
+  = let getInjArgs  = filterByList injectivity
+    in case tcUnifyTy rhs1 rhs2 of
+       Nothing    -> True -- RHS are different, so equations are injective
+       Just subst ->      -- RHS unify under a substitution
+           let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
+               lhs2Subst = Type.substTys subst (getInjArgs lhs2)
+           in case tcUnifyTys instanceBindFun lhs1Subst lhs2Subst of
+                Nothing -> False -- LHSs don't unify under that substitution, so
+                                 -- this pair of equations violates injectivity
+                                 -- declaration
+                _       -> True  -- LHSs unify under the substitution used for
+                                 -- RHSs so this pari of equations does not
+                                 -- violate injectivity declaration
 
 
 -- takes a CoAxiom with unknown branch incompatibilities and computes

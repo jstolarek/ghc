@@ -1351,7 +1351,7 @@ isOpenTypeFamilyTyCon _                                               = False
 
 -- | Is this a closed type family TyCon?
 isClosedTypeFamilyTyCon :: TyCon -> Bool
-isClosedTypeFamilyTyCon (FamilyTyCon {famTcFlav = ClosedSynFamilyTyCon _}) = True
+isClosedTypeFamilyTyCon (FamilyTyCon{famTcFlav = ClosedSynFamilyTyCon _}) = True
 isClosedTypeFamilyTyCon _ = False
 
 -- leave out abstract closed families here

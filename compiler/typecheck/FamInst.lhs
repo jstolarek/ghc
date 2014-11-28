@@ -410,12 +410,12 @@ checkForInjectivityConflicts inj_env inst_envs fam_inst
               -- , ppr inst_envs
               -- , ppr inj
          ]
+       ; unless no_tyfams $
+                    tyfamsUsedInjErr fam_inst tyfams_used
        ; unless no_conflicts $
                     conflictInjInstErr fam_inst conflicts
        ; unless all_tvs_used $
                     unusedInjectiveVarsErr fam_inst unused_tvs
-       ; unless no_tyfams $
-                    tyfamsUsedInjErr fam_inst tyfams_used
        ; return (no_conflicts && all_tvs_used && no_tyfams) }
 
 
