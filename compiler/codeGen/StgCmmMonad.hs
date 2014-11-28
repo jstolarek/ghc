@@ -27,7 +27,7 @@ module StgCmmMonad (
         mkCmmIfThenElse, mkCmmIfThen, mkCmmIfGoto,
         mkCall, mkCmmCall,
 
-        forkClosureBody, forkLneBody, forkAlts, forkAltsWithVirtHp, codeOnly,
+        forkClosureBody, forkLneBody, forkAlts, codeOnly,
 
         ConTagZ,
 
@@ -627,25 +627,6 @@ forkAlts branch_fcodes
                   branch_state = (initCgState us1) {
                                         cgs_binds  = cgs_binds state
                                       , cgs_hp_usg = cgs_hp_usg state }
-              (_us, results) = mapAccumL compile us branch_fcodes
-              (branch_results, branch_out_states) = unzip results
-        ; setState $ foldl stateIncUsage state branch_out_states
-                -- NB foldl.  state is the *left* argument to stateIncUsage
-        ; return branch_results }
-
-forkAltsWithVirtHp :: [(FCode a, VirtualHpOffset)] -> FCode [a]
-forkAltsWithVirtHp branch_fcodes
-  = do  { info_down <- getInfoDown
-        ; us <- newUniqSupply
-        ; state <- getState
-        ; let compile us (branch, virtHeap)
-                = (us2, doFCode branch info_down branch_state)
-                where
-                  (us1,us2) = splitUniqSupply us
-                  branch_state = (initCgState us1) {
-                                        cgs_binds  = cgs_binds state
-                                      , cgs_hp_usg = (cgs_hp_usg state) { virtHp = hp_usg } }
-                  hp_usg = virtHeap + (virtHp (cgs_hp_usg state))
               (_us, results) = mapAccumL compile us branch_fcodes
               (branch_results, branch_out_states) = unzip results
         ; setState $ foldl stateIncUsage state branch_out_states

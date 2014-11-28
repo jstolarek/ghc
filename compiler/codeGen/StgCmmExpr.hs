@@ -345,10 +345,10 @@ cgCase (StgApp v []) bndr alt_type@(PrimAlt _) alts
        ; v_info <- getCgIdInfo v
        ; emitAssign (CmmLocal (idToReg dflags (NonVoid bndr))) (idInfoToAmode v_info)
        ; _ <- bindArgsToRegs [NonVoid bndr]
-       ; (maybeRetKind, maybeAltCons, precompAlts, maybeHpOffsets) <-
+       ; (maybeRetKind, maybeAltCons, precompStates, maybeHpOffsets) <-
            preCgAlts (NonVoid bndr) alt_type alts
-       ; cgAlts (NoGcInAlts,AssignedDirectly) (NonVoid bndr)
-                alt_type maybeRetKind maybeAltCons precompAlts maybeHpOffsets
+       ; cgAlts (NoGcInAlts, AssignedDirectly) (NonVoid bndr)
+                alt_type maybeRetKind maybeAltCons precompStates maybeHpOffsets
        }
   where
     reps_compatible = idPrimRep v == idPrimRep bndr
@@ -390,7 +390,7 @@ cgCase scrut bndr alt_type alts
              alt_regs  = map (idToReg dflags) ret_bndrs
        ; simple_scrut <- isSimpleScrut scrut alt_type
        ; _ <- bindArgsToRegs ret_bndrs
-       ; (maybeRetKind, maybeAltCons, precompAlts, maybeHpOffsets)
+       ; (maybeRetKind, maybeAltCons, precompStates, maybeHpOffsets)
            <- preCgAlts (NonVoid bndr) alt_type alts
        ; let allAllocate = case maybeHpOffsets of
                              Nothing   -> False
@@ -408,8 +408,8 @@ cgCase scrut bndr alt_type alts
        ; let sequel = AssignTo alt_regs do_gc{- Note [scrut sequel] -}
        ; ret_kind <- withSequel sequel (cgExpr scrut)
        ; restoreCurrentCostCentre mb_cc
-       ; cgAlts (gc_plan,ret_kind) (NonVoid bndr)
-                alt_type maybeRetKind maybeAltCons precompAlts maybeHpOffsets
+       ; cgAlts (gc_plan, ret_kind) (NonVoid bndr)
+                alt_type maybeRetKind maybeAltCons precompStates maybeHpOffsets
        }
 
 
@@ -483,7 +483,7 @@ chooseReturnBndrs _ _ _ = panic "chooseReturnBndrs"
 preCgAlts :: NonVoid Id -> AltType -> [StgAlt]
           -> FCode ( Maybe ReturnKind
                    , Maybe [AltCon]
-                   , [CmmAGraph]
+                   , [CgState]
                    , Maybe [VirtualHpOffset] )
 -- JSTOLAREK: document the invariants here
 preCgAlts bndr altType alts
@@ -494,22 +494,23 @@ preCgAlts bndr altType alts
     | otherwise                                          = panic "preCgAlts"
    where
     singleAlt rhs = do
-      (retKind, aGraph) <- getCodeR $ cgExpr rhs
-      return (Just retKind, Nothing, [aGraph], Nothing)
+      retKind <- cgExpr rhs
+      state   <- getState
+      return (Just retKind, Nothing, [state], Nothing)
     multipleAlts = do
       dflags <- getDynFlags
       let
           base_reg = idToReg dflags bndr
-          cg_alt :: StgAlt -> FCode ((AltCon, VirtualHpOffset), CmmAGraph)
+          cg_alt :: StgAlt -> FCode ((AltCon, CgState), VirtualHpOffset)
           cg_alt (con, bndrs, _uses, rhs)
-              = getCodeR $
-                getHeapUsage $
+              = getHeapUsage $
                 do { _ <- bindConArgs con base_reg bndrs
                    ; _ <- cgExpr rhs
-                   ; return con }
-      (consAndHeaps, aGraphs) <- unzip `liftM` mapM cg_alt alts
-      let (altCons, heapOffs) = unzip consAndHeaps
-      return (Nothing, Just altCons, aGraphs, Just heapOffs)
+                   ; state <- getState
+                   ; return (con, state) }
+      (consAndStates, heapOffs) <- unzip `liftM` mapM cg_alt alts
+      let (altCons, states) = unzip consAndStates
+      return (Nothing, Just altCons, states, Just heapOffs)
 
 -------------------------------------
 cgAlts :: (GcPlan,ReturnKind)
@@ -517,23 +518,23 @@ cgAlts :: (GcPlan,ReturnKind)
        -> AltType
        -> Maybe ReturnKind
        -> Maybe [AltCon]
-       -> [CmmAGraph]
+       -> [CgState]
        -> Maybe [VirtualHpOffset]
        -> FCode ReturnKind
 -- At this point the result of the case are in the binders
-cgAlts gc_plan _bndr PolyAlt (Just retKind) Nothing [altCmmAGraph] Nothing
-  = do maybeAltHeapCheck gc_plan altCmmAGraph
+cgAlts gc_plan _bndr PolyAlt (Just retKind) Nothing [state] Nothing
+  = do maybeAltHeapCheck gc_plan state
        return retKind
 
-cgAlts gc_plan _bndr (UbxTupAlt _) (Just retKind) Nothing [altCmmAGraph] Nothing
-  = do maybeAltHeapCheck gc_plan altCmmAGraph
+cgAlts gc_plan _bndr (UbxTupAlt _) (Just retKind) Nothing [state] Nothing
+  = do maybeAltHeapCheck gc_plan state
        return retKind
         -- Here bndrs are *already* in scope, so don't rebind them
 
-cgAlts gc_plan bndr (PrimAlt _) Nothing (Just altCons) alts (Just hpOffsets)
+cgAlts gc_plan bndr (PrimAlt _) Nothing (Just altCons) states (Just hpOffsets)
   = do  { dflags <- getDynFlags
 
-        ; altsWithHeapChecks <- cgAltRhss gc_plan alts hpOffsets
+        ; altsWithHeapChecks <- cgAltRhss gc_plan states hpOffsets
 
         ; let tagged_cmms = zip altCons altsWithHeapChecks
               bndr_reg = CmmLocal (idToReg dflags bndr)
@@ -546,10 +547,10 @@ cgAlts gc_plan bndr (PrimAlt _) Nothing (Just altCons) alts (Just hpOffsets)
         ; emitCmmLitSwitch (CmmReg bndr_reg) tagged_cmms' deflt
         ; return AssignedDirectly }
 
-cgAlts gc_plan bndr (AlgAlt tycon) Nothing (Just altCons) alts (Just hpOffsets)
+cgAlts gc_plan bndr (AlgAlt tycon) Nothing (Just altCons) states (Just hpOffsets)
   = do  { dflags <- getDynFlags
 
-        ; (mb_deflt, branches) <- cgAlgAltRhss gc_plan altCons alts hpOffsets
+        ; (mb_deflt, branches) <- cgAlgAltRhss gc_plan altCons states hpOffsets
 
         ; let fam_sz   = tyConFamilySize tycon
               bndr_reg = CmmLocal (idToReg dflags bndr)
@@ -597,11 +598,11 @@ cgAlts _ _ _ _ _ _ _ = panic "cgAlts"
 --   goto L1
 
 -------------------
-cgAlgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CmmAGraph] -> [VirtualHpOffset]
+cgAlgAltRhss :: (GcPlan,ReturnKind) -> [AltCon] -> [CgState] -> [VirtualHpOffset]
              -> FCode ( Maybe CmmAGraph
                       , [(ConTagZ, CmmAGraph)] )
-cgAlgAltRhss gc_plan altCons alts hpOffsets
-  = do { altsWithHeapChecks <- cgAltRhss gc_plan alts hpOffsets
+cgAlgAltRhss gc_plan altCons states hpOffsets
+  = do { altsWithHeapChecks <- cgAltRhss gc_plan states hpOffsets
 
        ; let tagged_cmms = zip altCons altsWithHeapChecks
              mb_deflt = case tagged_cmms of
@@ -617,23 +618,23 @@ cgAlgAltRhss gc_plan altCons alts hpOffsets
 
 
 -------------------
-cgAltRhss :: (GcPlan,ReturnKind) -> [CmmAGraph] -> [VirtualHpOffset]
+cgAltRhss :: (GcPlan,ReturnKind) -> [CgState] -> [VirtualHpOffset]
           -> FCode [CmmAGraph]
-cgAltRhss gc_plan alts hpOffsets = do
+cgAltRhss gc_plan states hpOffsets = do
   let
-    cg_alt :: CmmAGraph -> FCode CmmAGraph
-    cg_alt altCmmAGraph
+    cg_alt :: CgState -> FCode CmmAGraph
+    cg_alt altState
       = do ((), altWithHeapCheck)
-               <- getCodeR $ maybeAltHeapCheck gc_plan altCmmAGraph
+               <- getCodeR $ maybeAltHeapCheck gc_plan altState
            return altWithHeapCheck
-  forkAltsWithVirtHp (zip (map cg_alt alts) hpOffsets)
+  forkAlts (map cg_alt states)
 
-maybeAltHeapCheck :: (GcPlan,ReturnKind) -> CmmAGraph -> FCode ()
-maybeAltHeapCheck (NoGcInAlts,_)  graph = emit graph
-maybeAltHeapCheck (GcInAlts regs, AssignedDirectly) graph =
-  altHeapCheck regs (emit graph)
-maybeAltHeapCheck (GcInAlts regs, ReturnedTo lret off) graph =
-  altHeapCheckReturnsTo regs lret off (emit graph)
+maybeAltHeapCheck :: (GcPlan,ReturnKind) -> CgState -> FCode ()
+maybeAltHeapCheck (NoGcInAlts,_)  state = setState state
+maybeAltHeapCheck (GcInAlts regs, AssignedDirectly) state =
+  altHeapCheck regs (setState state)
+maybeAltHeapCheck (GcInAlts regs, ReturnedTo lret off) state =
+  altHeapCheckReturnsTo regs lret off (setState state)
 
 -----------------------------------------------------------------------------
 --      Tail calls
