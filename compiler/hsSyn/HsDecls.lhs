@@ -604,11 +604,12 @@ deriving instance (DataId name) => Data (FamilyResultSig name)
 
 type LFamilyDecl name = Located (FamilyDecl name)
 data FamilyDecl name = FamilyDecl
-  { fdInfo      :: FamilyInfo name               -- type or data, closed or open
-  , fdInjective :: Maybe (LInjectivityDecl name) -- optional injectivity decl.
-  , fdLName     :: Located name                  -- type constructor
-  , fdTyVars    :: LHsTyVarBndrs name            -- type variables
-  , fdResultSig :: FamilyResultSig name }        -- result signature
+  { fdInfo      :: FamilyInfo name                  -- type or data, closed or
+                                                    -- open
+  , fdInjective :: Maybe (LInjectivityDecl name)    -- optional injectivity decl
+  , fdLName     :: Located name                     -- type constructor
+  , fdTyVars    :: LHsTyVarBndrs name               -- type variables
+  , fdResultSig :: Located (FamilyResultSig name) } -- result signature
   deriving( Typeable )
 deriving instance (DataId id) => Data (FamilyDecl id)
 
@@ -745,7 +746,7 @@ hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 famDeclHasCusk :: FamilyDecl name -> Bool
 famDeclHasCusk (FamilyDecl { fdInfo      = ClosedTypeFamily _
                            , fdTyVars    = tyvars
-                           , fdResultSig = m_sig })
+                           , fdResultSig = L _ m_sig })
   = hsTvbAllKinded tyvars && hasReturnKindSignature m_sig
 famDeclHasCusk _ = True  -- all open families have CUSKs!
 
@@ -840,12 +841,12 @@ instance OutputableBndr name => Outputable (TyClGroup name) where
 
 instance (OutputableBndr name) => Outputable (FamilyDecl name) where
   ppr (FamilyDecl { fdInfo = info, fdLName = ltycon,
-                    fdTyVars = tyvars, fdResultSig = mb_kind})
+                    fdTyVars = tyvars, fdResultSig = L _ mb_kind})
       = vcat [ pprFlavour info <+> pp_vanilla_decl_head ltycon tyvars [] <+> pp_kind <+> pp_where
              , nest 2 $ pp_eqns ]
         where
           pp_kind = case mb_kind of
-                      NoSig            -> empty
+                      NoSig        -> empty
                       KindSig kind -> dcolon <+> ppr kind
                       TyVarSig tv_bndr -> ptext (sLit "=") <+> ppr tv_bndr
           (pp_where, pp_eqns) = case info of

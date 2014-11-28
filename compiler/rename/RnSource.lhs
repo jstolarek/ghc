@@ -1147,7 +1147,7 @@ rnFamDecl :: Maybe Name
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdResultSig = kindSig
+                             , fdInfo = info, fdResultSig = L sigSpan kindSig
                              , fdInjective = injectivity })
   = do { rdr_env <- getLocalRdrEnv
        ; ((tycon', tyvars', kindSig', injectivity'), fv1) <-
@@ -1210,7 +1210,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                        , fv_kind )  }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdResultSig = kindSig'
+                            , fdInfo = info', fdResultSig = L sigSpan kindSig'
                             , fdInjective = injectivity' }
                 , fv1 `plusFV` fv2) }
   where

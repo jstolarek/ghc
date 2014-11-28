@@ -412,7 +412,7 @@ getFamDeclInitialKind :: FamilyDecl Name
 getFamDeclInitialKind decl@(FamilyDecl { fdInfo      = info
                                        , fdLName     = L _ name
                                        , fdTyVars    = ktvs
-                                       , fdResultSig = ksig })
+                                       , fdResultSig = L _ ksig })
   = do { (fam_kind, _) <-
            kcHsTyVarBndrs (famDeclHasCusk decl) ktvs $
            do { res_k <-
@@ -682,7 +682,7 @@ tcTyClDecl1 _parent rec_info
 \begin{code}
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
-                              , fdTyVars = tvs, fdResultSig = sig
+                              , fdTyVars = tvs, fdResultSig = L _ sig
                               , fdInjective = inj })
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
@@ -694,7 +694,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
 
 tcFamDecl1 parent (FamilyDecl { fdInfo = ClosedTypeFamily eqns
                               , fdLName = lname@(L _ tc_name), fdTyVars = tvs
-                              , fdResultSig = sig, fdInjective = inj
+                              , fdResultSig = L _ sig, fdInjective = inj
                               })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
