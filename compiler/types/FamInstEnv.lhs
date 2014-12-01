@@ -513,6 +513,12 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
 -- equations where RHSs unify but LHSs don't we report that this pair violates
 -- injectivity declaration because for a given RHS we don't have a unique LHS.
 
+-- JSTOLAREK: in the presence of type families in the RHS 1) might
+-- hold but the equations might not be injective. A good example is
+-- declaring plus to be injective in both its arguments. That's why we
+-- do a separate check for presence of type families that will catch
+-- that the definition is incorrect.
+
 -- JSTOLAREK: comment this. I should make a note that describes the whole
 -- algorithm for checking injectivity.
 
@@ -524,7 +530,10 @@ injectiveBranches injectivity
                   (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
   = let getInjArgs  = filterByList injectivity
     in case tcUnifyTy rhs1 rhs2 of
-       Nothing    -> True -- RHS are different, so equations are injective
+       Nothing    -> True -- RHS are different, so equations are
+                          -- injective.  Note however that this is not
+                          -- true in the presence of type families -
+                          -- see Note JSTOLAREK: insert name here
        Just subst ->      -- RHS unify under a substitution
            let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
                lhs2Subst = Type.substTys subst (getInjArgs lhs2)
