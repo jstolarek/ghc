@@ -1537,15 +1537,16 @@ expand tvs rhs tys
 \end{code}
 
 \begin{code}
--- | As 'tyConDataCons_maybe', but returns the empty list of constructors if no constructors
--- could be found
+-- | As 'tyConDataCons_maybe', but returns the empty list of constructors if no
+-- constructors could be found
 tyConDataCons :: TyCon -> [DataCon]
 -- It's convenient for tyConDataCons to return the
 -- empty list for type synonyms etc
 tyConDataCons tycon = tyConDataCons_maybe tycon `orElse` []
 
--- | Determine the 'DataCon's originating from the given 'TyCon', if the 'TyCon' is the
--- sort that can have any constructors (note: this does not include abstract algebraic types)
+-- | Determine the 'DataCon's originating from the given 'TyCon', if the 'TyCon'
+-- is the sort that can have any constructors (note: this does not include
+-- abstract algebraic types)
 tyConDataCons_maybe :: TyCon -> Maybe [DataCon]
 tyConDataCons_maybe (AlgTyCon {algTcRhs = DataTyCon { data_cons = cons }}) = Just cons
 tyConDataCons_maybe (AlgTyCon {algTcRhs = NewTyCon { data_con = con }})    = Just [con]
@@ -1562,8 +1563,8 @@ tyConFamilySize (AlgTyCon   {algTcRhs = DataFamilyTyCon {}}) = 0
 tyConFamilySize (TupleTyCon {})                              = 1
 tyConFamilySize other = pprPanic "tyConFamilySize:" (ppr other)
 
--- | Extract an 'AlgTyConRhs' with information about data constructors from an algebraic or tuple
--- 'TyCon'. Panics for any other sort of 'TyCon'
+-- | Extract an 'AlgTyConRhs' with information about data constructors from an
+-- algebraic or tuple 'TyCon'. Panics for any other sort of 'TyCon'
 algTyConRhs :: TyCon -> AlgTyConRhs
 algTyConRhs (AlgTyCon {algTcRhs = rhs}) = rhs
 algTyConRhs (TupleTyCon {dataCon = con, tyConArity = arity})
@@ -1595,27 +1596,29 @@ tyConRoles tc
 \end{code}
 
 \begin{code}
--- | Extract the bound type variables and type expansion of a type synonym 'TyCon'. Panics if the
--- 'TyCon' is not a synonym
+-- | Extract the bound type variables and type expansion of a type synonym
+-- 'TyCon'. Panics if the 'TyCon' is not a synonym
 newTyConRhs :: TyCon -> ([TyVar], Type)
 newTyConRhs (AlgTyCon {tyConTyVars = tvs, algTcRhs = NewTyCon { nt_rhs = rhs }}) = (tvs, rhs)
 newTyConRhs tycon = pprPanic "newTyConRhs" (ppr tycon)
 
--- | The number of type parameters that need to be passed to a newtype to resolve it. May be less than in the definition if it can be eta-contracted.
+-- | The number of type parameters that need to be passed to a newtype to
+-- resolve it. May be less than in the definition if it can be eta-contracted.
 newTyConEtadArity :: TyCon -> Int
 newTyConEtadArity (AlgTyCon {algTcRhs = NewTyCon { nt_etad_rhs = tvs_rhs }})
         = length (fst tvs_rhs)
 newTyConEtadArity tycon = pprPanic "newTyConEtadArity" (ppr tycon)
 
--- | Extract the bound type variables and type expansion of an eta-contracted type synonym 'TyCon'.
--- Panics if the 'TyCon' is not a synonym
+-- | Extract the bound type variables and type expansion of an eta-contracted
+-- type synonym 'TyCon'.  Panics if the 'TyCon' is not a synonym
 newTyConEtadRhs :: TyCon -> ([TyVar], Type)
 newTyConEtadRhs (AlgTyCon {algTcRhs = NewTyCon { nt_etad_rhs = tvs_rhs }}) = tvs_rhs
 newTyConEtadRhs tycon = pprPanic "newTyConEtadRhs" (ppr tycon)
 
--- | Extracts the @newtype@ coercion from such a 'TyCon', which can be used to construct something
--- with the @newtype@s type from its representation type (right hand side). If the supplied 'TyCon'
--- is not a @newtype@, returns @Nothing@
+-- | Extracts the @newtype@ coercion from such a 'TyCon', which can be used to
+-- construct something with the @newtype@s type from its representation type
+-- (right hand side). If the supplied 'TyCon' is not a @newtype@, returns
+-- @Nothing@
 newTyConCo_maybe :: TyCon -> Maybe (CoAxiom Unbranched)
 newTyConCo_maybe (AlgTyCon {algTcRhs = NewTyCon { nt_co = co }}) = Just co
 newTyConCo_maybe _                                               = Nothing
@@ -1632,8 +1635,9 @@ tyConPrimRep tc = ASSERT(not (isUnboxedTupleTyCon tc)) PtrRep
 \end{code}
 
 \begin{code}
--- | Find the \"stupid theta\" of the 'TyCon'. A \"stupid theta\" is the context to the left of
--- an algebraic type declaration, e.g. @Eq a@ in the declaration @data Eq a => T a ...@
+-- | Find the \"stupid theta\" of the 'TyCon'. A \"stupid theta\" is the context
+-- to the left of an algebraic type declaration, e.g. @Eq a@ in the declaration
+-- @data Eq a => T a ...@
 tyConStupidTheta :: TyCon -> [PredType]
 tyConStupidTheta (AlgTyCon {algTcStupidTheta = stupid}) = stupid
 tyConStupidTheta (TupleTyCon {})                        = []
@@ -1723,9 +1727,9 @@ tyConFamInst_maybe tc
       FamInstTyCon _ f ts -> Just (f, ts)
       _                   -> Nothing
 
--- | If this 'TyCon' is that of a family instance, return a 'TyCon' which represents
--- a coercion identifying the representation type with the type instance family.
--- Otherwise, return @Nothing@
+-- | If this 'TyCon' is that of a family instance, return a 'TyCon' which
+-- represents a coercion identifying the representation type with the type
+-- instance family.  Otherwise, return @Nothing@
 tyConFamilyCoercion_maybe :: TyCon -> Maybe (CoAxiom Unbranched)
 tyConFamilyCoercion_maybe tc
   = case tyConParent tc of
