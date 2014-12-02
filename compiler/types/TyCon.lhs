@@ -143,14 +143,14 @@ Note [Type synonym families]
 * Translation of type family decl:
         type family F a :: *
   translates to
-    a SynTyCon 'F', whose SynTyConRhs is OpenSynFamilyTyCon
+    a FamilyTyCon 'F', whose FamTyConFlav is OpenSynFamilyTyCon
 
         type family G a :: * where
           G Int = Bool
           G Bool = Char
           G a = ()
   translates to
-    a SynTyCon 'G', whose SynTyConRhs is ClosedSynFamilyTyCon, with the
+    a FamilyTyCon 'G', whose FamTyConFlav is ClosedSynFamilyTyCon, with the
     appropriate CoAxiom representing the equations
 
 -- JSTOLAREK: oh yes, we do :-) Update
