@@ -954,9 +954,16 @@ checkBootTyCon tc1 tc2
             = eqClosedFamilyAx ax1 ax2
         eqFamFlav (BuiltInSynFamTyCon _) (BuiltInSynFamTyCon _) = tc1 == tc2
         eqFamFlav _ _ = False
+        injInfo1 = tyConInjectivityInfo_maybe tc1
+        injInfo2 = tyConInjectivityInfo_maybe tc2
+        eqInjInfo (Just inj1) (Just inj2) = inj1 == inj2
+        eqInjInfo Nothing      Nothing    = True
+        eqInjInfo _             _         = False
     in
     check (roles1 == roles2) roles_msg `andThenCheck`
-    check (eqFamFlav fam_flav1 fam_flav2) empty   -- nothing interesting to say
+    -- nothing interesting to say
+    check (eqFamFlav fam_flav1 fam_flav2) empty `andThenCheck`
+    check (eqInjInfo injInfo1 injInfo2) empty
 
   | isAlgTyCon tc1 && isAlgTyCon tc2
   , Just env <- eqTyVarBndrs emptyRnEnv2 (tyConTyVars tc1) (tyConTyVars tc2)
