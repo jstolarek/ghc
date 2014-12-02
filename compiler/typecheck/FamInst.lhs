@@ -173,7 +173,9 @@ checkFamInstConsistency famInstMods directlyImpMods
            --
            -- JSTOLAREK: I think that this check might actually not work - I got
            -- some erros from checkForInjectivityConflicts from type families in
-           -- Data.Equality even though they don't define injectivity
+           -- Data.Equality even though they don't define injectivity This
+           -- happened when I didn't use lookup in tyFamsUsedInRHS but called
+           -- filter right away.
            ; when (not . isNullUFM $ injEnv) $
              mapM_ (checkForInjectivityConflicts injEnv (emptyFamInstEnv,env2))
                    (famInstEnvElts env1)
@@ -182,18 +184,25 @@ checkFamInstConsistency famInstMods directlyImpMods
 -- Note [Environment of injectivity declarations]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
--- To perform injectivity check we gather all in-scope declarations of
--- type families (not instances!) and put these into a map. Type
--- family names are the keys. Values are lists of Bools that say in
--- which arguments the type family is injective. It is assumed that
--- the order of values in the list corresponds to order of type family
--- argument declaration in the source file. Eg. if a user declared:
+-- To perform injectivity check we gather in-scope declarations of type families
+-- (not instances!) and put these into a map. Type family names are the
+-- keys. Values are lists of Bools that say in which arguments the type family
+-- is injective. It is assumed that the order of values in the list corresponds
+-- to order of type family argument declaration in the source file. Eg. if a
+-- user declared:
 --
 --   type family Foo a b c = r | r -> a b
 --
--- then the map entry for Foo will store [True, True, False], because
--- Foo was declared injective in its first two arguments but not the
--- third one.
+-- then the map entry for Foo will store [True, True, False], because Foo was
+-- declared injective in its first two arguments but not the third one. Note
+-- also that the above example does not use kind polymorphism. If it did each
+-- list would also contain entries for kind variables (even if they were not
+-- mentioned explicitly in the source code). For kind variables corresponding
+-- entries should be False.  Note that if a type family does not have an
+-- injectivity declaration (in other words the entry for it is a list of Falses)
+-- we don't put it into the environment. This makes the injectivity check
+-- faster, which is importnat given that most type families don't have
+-- injectivity declarations.
 
 -- see Note [Environment of injectivity declarations]
 buildTyFamInjEnv :: [TyCon] -> FamInjEnv
@@ -396,9 +405,78 @@ checkForConflicts inst_envs fam_inst
        ; return no_conflicts }
 
 
+-- Note [Injectivity check for open type families]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- When we add a new equation of an open type family we need to make sure that
+-- this equation does not violate injectivity declaration. Of course if the type
+-- family has no injectivity declaration then this check is trivialy simple.
+-- But if a type family has injectivity declaration we need to make sure that
+-- the following conditions hold:
+--
+-- 1. Injectivity means that knowing the RHS of a type family instance allows us
+--    to determine the LHS.  This requires that for each pair of equations of an
+--    open type family one of the following conditions holds:
+--
+--    A. RHSs are different.
+--
+--    B. If the RHSs can be unified under some substitution then it must be
+--       possible to unify the LHSs under the same substitution. A special case
+--       of this is when a substitution is empty ie. both equations are
+--       identical. Note that we only take into account these LHS paterns that
+--       were declared as injective.
+--
+--    If any of the above two conditions holds we declare that the pair of
+--    equations does not violate injectivity declaration. But if we find a pair
+--    of equations where RHSs unify but LHSs don't we report that this pair
+--    violates injectivity declaration because for a given RHS we don't have a
+--    unique LHS.
+--
+--    Note however that in the presence of type families in the RHS the above
+--    check is not reliable. Consider this example of a type family calling
+--    itself:
+--
+--        type family F (a :: Nat) = (r :: Nat) | r -> a where
+--             F Z        = Z
+--             F (S Z)    = F Z
+--
+--    Obviously it is not injective. But we won't discover this with the above
+--    check because the RHSs of these two equations don't unify and we will
+--    incorrectly claim they don't violate injectivity declaration.
+--
+-- 2. All injective type variables mentioned in the LHS (ie. variables used for
+--    patterns) need to be mentioned in th RHS. Here's a trivial example why
+--    this is necessary:
+--
+--        type family Foo a b = r | r -> a b
+--        type instance Foo Int b = Int
+--
+--    `Foo` is not injective in its second parameter because both `Foo Int Int`
+--    and `Foo Int Char` return the same result Int. Note however that if `Foo`
+--    was not declared injective in its second argument the above instance
+--    declaration would be entirely correct.
+--
+-- 3. RHS of a type instance is not allowed to call any type families. Main
+--    motivation for this restriction is that this check is non-trivial (to say
+--    the least). Consider this example. Let us assume that we have type
+--    families `X` and `Y` that we already know are injective, and type
+--    constructors `Bar :: * -> *` and `Baz :: * -> * -> *`. Now we declare:
+--
+--        type family Foo a = r | r -> a where
+--             Foo (Bar a)   = X a
+--             Foo (Baz a b) = Y a b
+--
+--    Here we would need to check whether results of `X a` and `Y a b` can
+--    overlap.  I'm [JS] not aware of any good way of doing this. Second of all
+--    if we see `Foo a ~ Bool` during type checking GHC can't solve that without
+--    trying each equation one by one to see which one returns `Bool`. This
+--    takes a lot of guessing and GHC should refuse to do that.
+
+
 checkForInjectivityConflicts :: FamInjEnv -> FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts inj_env inst_envs fam_inst
-  = do { let conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
+  = do { let -- see Note [Injectivity check for open type families]
+             conflicts = lookupFamInjInstEnvConflicts inj_env inst_envs fam_inst
              no_conflicts = null conflicts
              unused_tvs   = unusedInjTvsInRHS inj_env fam_inst
              all_tvs_used = isEmptyVarSet unused_tvs

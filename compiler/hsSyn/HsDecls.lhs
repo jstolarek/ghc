@@ -587,7 +587,7 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --        type family Foo a b c = d |  d -> a c where ...
 --
 -- It is possible that in the future this syntax will be extended to support
--- more complicated injectivity declarations. For example we ciuld declare that
+-- more complicated injectivity declarations. For example we could declare that
 -- if we know the result of Plus and one of its arguments we can determine the
 -- other argument:
 --
@@ -595,6 +595,9 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --
 -- Here injectivity declaration consists of two comma-separated injectivity
 -- conditions.
+--
+-- Another possible extension to this syntax is admitting kind variables in
+-- injectivity declaration.
 
 data FamilyResultSig name = NoSig -- see Note [FamilyResultSig]
                           | KindSig  (LHsKind name)

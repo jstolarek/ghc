@@ -1236,6 +1236,53 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
 
+-- Note [Renaming injectivity declaration]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- During renaming of injectivity declaration we have to make several checks to
+-- make sure that it is well-formed. At the moment injectivity declaration
+-- consists of a single injectivity condition, so these terms might be used
+-- interchangeably. See Note [Injectivity declaration] for a detailed discussion
+-- of currently allowed injectivity declarations.
+--
+-- Checking LHS is simple because the only type variable allowed on the LHS of
+-- injectivity condition is the variable naming the result in type family head.
+-- Example of disallowed declaration:
+--
+--     type family Foo a b = r | b -> a
+--
+-- Verifying RHS of injectivity condition is more involved. We require that:
+--
+--  1. only variables defined in type family head appear on the RHS.  Example of
+--     disallowed declaration:
+--
+--        type family Foo a = r | r -> b
+--
+--  2. each variable appears at most once. Example of disallowed declaration:
+--
+--        type family Foo a = r | r -> a a
+--
+--  3. variables are listed in the order in which they were bound in type family
+--     head. Example of disallowed declaration:
+--
+--        type family Foo a b = r | r -> b a
+--
+--  4. for associated types the result variable does not shadow any of type
+--     class variables. Example of disallowed declaration:
+--
+--        class Foo a b where
+--           type F a = b
+--
+-- Breaking any of these assumptions results in an error. Note that there is no
+-- one-to-one correspondence between these conditions and error messages
+-- generated below. The reason is that when we see an unexpected variable we
+-- don't try to find out whether that happened because variable was repeated or
+-- because the order of variables was incorrect.
+--
+-- Note that while injectivity declarations are allowed in the presence of kind
+-- polymorphism we only admit type variables in injectivity declarations.
+
+
 -- | Rename injectivity declaration. Note that injectivity declaration
 -- is just the part after the "|". Everything that appears before it
 -- is renamed in rnFamDecl.
@@ -1249,30 +1296,8 @@ rnInjectivityDecl tvBndrs (Just resTv)
  = do
    let tvNames = map hsLTyVarName tvBndrs
        resName = hsLTyVarName resTv
-       -- the only type variable allowed on the LHS of injectivity
-       -- condition is the variable naming the result in type family head.
-       -- Example of disallowed declaration:
-       --     type family Foo a b = r | b -> a
+       -- See Note [Renaming injectivity declaration]
        lhsValid   = resName == unLoc injFrom
-       -- verifying RHS of injectivity condition is more involved. We
-       -- require that:
-       --  1. only variables defined in type family head appear on the RHS.
-       --     Example of disallowed declaration:
-       --        type family Foo a = r | r -> b
-       --
-       --  2. each variable appears at most once. Example of disallowed
-       --     declaration:
-       --        type family Foo a = r | r -> a a
-       --
-       --  3. variables are listed in the order in which they were bound in
-       --     type family head. Example of disallowed declaration:
-       --        type family Foo a b = r | r -> b a
-       --
-       -- Breaking any of these assumptions results in an error. Note that there
-       -- is no one-to-one correspondence between these conditions and error
-       -- messages generated below. The reason is that when we see an unexpected
-       -- variable we don't try to find out whether that happened because
-       -- variable was repeated or because the order of variables was incorrect.
        rhsValid   = merge tvNames injTo
        merge :: [RdrName] -> [Located RdrName] -> Maybe (SDoc, SrcSpan)
        merge _     [] = Nothing

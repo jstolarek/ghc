@@ -324,8 +324,7 @@ type FamInstEnvs = (FamInstEnv, FamInstEnv)
 newtype FamilyInstEnv
   = FamIE [FamInst]     -- The instances for a particular family, in any order
 
-type FamInjEnv = UniqFM [Bool] -- maps type family to its injctivity
-                                       -- information
+type FamInjEnv = UniqFM [Bool] -- maps type family to its injctivity information
 
 instance Outputable FamilyInstEnv where
   ppr (FamIE fs) = ptext (sLit "FamIE") <+> vcat (map ppr fs)
@@ -494,46 +493,21 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
--- JSTOLAREK: this note is a stub, it will be improved
 
--- Note [Injectivity check for a pair of branches]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
---
--- Injectivity means that knowing the RHS allows us to determine the LHS. This
--- requires that for each two equations of an open type family one of the
--- following conditions holds:
---
--- 1. RHSs are different.
---
--- 2. If the RHSs can be unified under some substitution then it must be
---    possible to unify the LHSs under the same substitution.
---
--- If any of the above two conditions holds we declare that the pair of
--- equations does not violate injectivity declaration. But if we find a pair of
--- equations where RHSs unify but LHSs don't we report that this pair violates
--- injectivity declaration because for a given RHS we don't have a unique LHS.
-
--- JSTOLAREK: in the presence of type families in the RHS 1) might
--- hold but the equations might not be injective. A good example is
--- declaring plus to be injective in both its arguments. That's why we
--- do a separate check for presence of type families that will catch
--- that the definition is incorrect.
-
--- JSTOLAREK: comment this. I should make a note that describes the whole
--- algorithm for checking injectivity.
-
--- | Check whether two type family equations don't violate injectivity
+-- | Check whether two open type family equations don't violate injectivity
 -- declaration
 injectiveBranches :: [Bool] -> CoAxBranch -> CoAxBranch -> Bool
 injectiveBranches injectivity
                   (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                   (CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
+  -- See Note [Injectivity check for open type families]. This function
+  -- implements first check described there.
   = let getInjArgs  = filterByList injectivity
     in case tcUnifyTy rhs1 rhs2 of
        Nothing    -> True -- RHS are different, so equations are
                           -- injective.  Note however that this is not
-                          -- true in the presence of type families -
-                          -- see Note JSTOLAREK: insert name here
+                          -- true in the presence of type families.
+                          -- See Note [Injectivity check for open type families]
        Just subst ->      -- RHS unify under a substitution
            let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
                lhs2Subst = Type.substTys subst (getInjArgs lhs2)
@@ -542,7 +516,7 @@ injectiveBranches injectivity
                                  -- this pair of equations violates injectivity
                                  -- declaration
                 _       -> True  -- LHSs unify under the substitution used for
-                                 -- RHSs so this pari of equations does not
+                                 -- RHSs so this pair of equations does not
                                  -- violate injectivity declaration
 
 
@@ -709,42 +683,50 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
     noSubst = panic "lookupFamInstEnvConflicts noSubst"
     new_branch = coAxiomSingleBranch new_axiom
 
-
-lookupFamInjInstEnvConflicts :: FamInjEnv
-                             -> FamInstEnvs
-                             -> FamInst
-                             -> [FamInstMatch]
-                        -- Conflicting matches (don't look at the fim_tys field)
+-- | Check whether an open type family equation can be added to already existing
+-- instance environment without causing conflicts with supplied injectivity
+-- declarations.
+lookupFamInjInstEnvConflicts
+    :: FamInjEnv      -- environment of all injective type families
+    -> FamInstEnvs    -- all type instances seens so far
+    -> FamInst        -- new type instance that we're checking
+    -> [FamInstMatch] -- conflicting matches (don't look at the fim_tys field)
 lookupFamInjInstEnvConflicts injEnv envs
                              fam_inst@(FamInst { fi_axiom = new_axiom })
+  -- See Note [Injectivity check for open type families]
   = case injInfo of
-      Nothing  -> []
+      Nothing  -> [] -- instance of a type family that was not declared
+                     -- injective
       Just inj -> lookup_fam_inst_env True (my_unify inj) envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
-      -- In example above,   fam tys' = F [b]
       injInfo = lookupUFM injEnv (tyConName fam)
 
+      -- unification function used by `lookup_fam_inst_env` to check whether two
+      -- open type family equations unify. This function uses
+      -- `injectiveBranches` to check whether a pair of equations is compatible
+      -- with injectivity declaration. If they are not it returns a bogus
+      -- substitution. Don't try to look at `fim_tys` field of resulting
+      -- `FamInstMatch` or you'll force panic in `noSubst`.
       my_unify inj (FamInst { fi_axiom = old_axiom }) tpl_tvs tpl_tys _
           = ASSERT2( tyVarsOfTypes tys `disjointVarSet` tpl_tvs,
                        (ppr fam <+> ppr tys) $$
                        (ppr tpl_tvs <+> ppr tpl_tys) )
-      -- Unification will break badly if the variables overlap
-      -- They shouldn't because we allocate separate uniques for them
             if injectiveBranches inj (coAxiomSingleBranch old_axiom)
                                       new_branch
             then Nothing
             else Just noSubst
-      -- JSTOLAREK: this probably deserves a note
 
       noSubst = panic "lookupFamInjInstEnvConflicts noSubst"
       new_branch = coAxiomSingleBranch new_axiom
 
--- JSTOLAREK: this should refer to note that describes injectivity check.
+
 -- | Returns a list of type variables that the function is injective in and that
 -- are not used in the RHS of family instance declaration.
 unusedInjTvsInRHS :: FamInjEnv -> FamInst -> TyVarSet
 unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
+    -- See Note [Injectivity check for open type families]. This function
+    -- implements second check described there.
     let (fam, _) = famInstSplitLHS famInst
     in case lookupUFM injEnv (tyConName fam) of
       Nothing  -> emptyVarSet
@@ -760,6 +742,8 @@ unusedInjTvsInRHS injEnv famInst@(FamInst {fi_tys = lhs,fi_rhs = rhs}) =
 -- declaration.
 tyFamsUsedInRHS :: FamInjEnv -> FamInst -> NameEnv TyCon
 tyFamsUsedInRHS injEnv famInst@(FamInst {fi_rhs = rhs}) =
+    -- See Note [Injectivity check for open type families]. This function
+    -- implements third check described there.
     let (fam, _) = famInstSplitLHS famInst
     -- invariant assumed: type family declaration is in the injectivity
     -- environment iff it was declared injective in at least one of its type

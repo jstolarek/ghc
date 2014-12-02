@@ -153,10 +153,7 @@ Note [Type synonym families]
     a FamilyTyCon 'G', whose FamTyConFlav is ClosedSynFamilyTyCon, with the
     appropriate CoAxiom representing the equations
 
--- JSTOLAREK: oh yes, we do :-) Update
-* In the future we might want to support
-    * injective type families (allow decomposition)
-  but we don't at the moment [2013]
+We also support injective type families -- see Note [Injective type families]
 
 Note [Data type families]
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -301,6 +298,29 @@ tuples' parameters are at role R. Each primitive tycon declares its roles;
 it's worth noting that (~#)'s parameters are at role N. Promoted data
 constructors' type arguments are at role R. All kind arguments are at role
 N.
+
+-- JSTOLAREK: polish that note; make sure that all the cross-references are
+-- right
+
+Note [Injective type families]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We allow injectivity declarations for type families (both open and closed):
+
+  type family F (a :: k) (b :: k) = r | r -> a
+  type family G a b = res | res -> a b where ...
+
+Injectivity information is stored in the `famTcInj` field of `FamilyTyCon`.
+`famTcInj` stores a list of Bools where each entry corresponds to a single
+element of `tyConTyVars` (both lists should have identical length). Note that
+while `tyConTyVars` stores both type and kind variables (also ones not mentioned
+explicitly in the source code) we only allow injectivity in types.
+
+See Note [Renaming injectivity declaration] for precise rules how an injectivity
+condition should be written down.  See Note [Injectivity check for open type
+families] for details of injectivity check for open type families.
+-- JSTOLAREK: add reference to note about closed type families once this is made
+
 
 %************************************************************************
 %*                                                                      *
@@ -1300,7 +1320,7 @@ isTypeSynonymTyCon _                 = False
 --
 
 isDecomposableTyCon :: TyCon -> Bool
--- JSTOLAREK: this comment needs updating
+-- JSTOLAREK: this comment needs updating. See #88
 -- True iff we can decompose (T a b c) into ((T a b) c)
 --   I.e. is it injective?
 -- Specifically NOT true of synonyms (open and otherwise)
