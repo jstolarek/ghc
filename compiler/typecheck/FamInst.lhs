@@ -168,14 +168,7 @@ checkFamInstConsistency famInstMods directlyImpMods
            ; env2 <- getFamInsts hpt_fam_insts m2
            ; mapM_ (checkForConflicts (emptyFamInstEnv, env2))
                    (famInstEnvElts env1)
-           -- if there are no type families with injectivity declarations skip
-           -- the check
-           --
-           -- JSTOLAREK: I think that this check might actually not work - I got
-           -- some erros from checkForInjectivityConflicts from type families in
-           -- Data.Equality even though they don't define injectivity This
-           -- happened when I didn't use lookup in tyFamsUsedInRHS but called
-           -- filter right away.
+           -- see Note [Skipping injectivity check for empty environments]
            ; when (not . isNullUFM $ injEnv) $
              mapM_ (checkForInjectivityConflicts injEnv (emptyFamInstEnv,env2))
                    (famInstEnvElts env1)
@@ -203,6 +196,18 @@ checkFamInstConsistency famInstMods directlyImpMods
 -- we don't put it into the environment. This makes the injectivity check
 -- faster, which is importnat given that most type families don't have
 -- injectivity declarations.
+
+-- Note [Skipping injectivity check for empty environments]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- Environment of injectivity declarations contains only type families that were
+-- declared injective in at least one argument (see Note [Environment of
+-- injectivity declarations]). If there are no injectivity declarations this
+-- environment is empty. This is likely to be the case most of the time - all
+-- code written prior to GHC 7.12 does not use injectivity. Thus we perform a
+-- small optimisation: before attempting injectivity check for new type family
+-- instance we check whether the injectivity environment is empty. If it is then
+-- we skip the check for injectivity conflicts.
 
 -- see Note [Environment of injectivity declarations]
 buildTyFamInjEnv :: [TyCon] -> FamInjEnv
@@ -347,7 +352,7 @@ addLocalFamInst :: FamInjEnv
                 -> (FamInstEnv,[FamInst])
                 -> FamInst
                 -> TcM (FamInstEnv, [FamInst])
-addLocalFamInst inj_env (home_fie, my_fis) fam_inst
+addLocalFamInst injEnv (home_fie, my_fis) fam_inst
         -- home_fie includes home package and this module
         -- my_fies is just the ones from this module
   = do { traceTc "addLocalFamInst" (ppr fam_inst)
@@ -374,7 +379,10 @@ addLocalFamInst inj_env (home_fie, my_fis) fam_inst
        ; no_conflict
            <- checkForConflicts inst_envs fam_inst
        ; injectivity_ok
-           <- checkForInjectivityConflicts inj_env inst_envs fam_inst
+           <- case isNullUFM injEnv of
+                -- see Note [Skipping injectivity check for empty environments]
+                 True  -> return True
+                 False -> checkForInjectivityConflicts injEnv inst_envs fam_inst
 
        ; if no_conflict && injectivity_ok then
             return (home_fie'', fam_inst : my_fis')
