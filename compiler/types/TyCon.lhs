@@ -299,9 +299,6 @@ it's worth noting that (~#)'s parameters are at role N. Promoted data
 constructors' type arguments are at role R. All kind arguments are at role
 N.
 
--- JSTOLAREK: polish that note; make sure that all the cross-references are
--- right
-
 Note [Injective type families]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

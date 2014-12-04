@@ -467,7 +467,7 @@ checkForConflicts inst_envs fam_inst
 --             Foo (Baz a b) = Y a b
 --
 --    Here we would need to check whether results of `X a` and `Y a b` can
---    overlap.  I'm [JS] not aware of any good way of doing this. Second of all
+--    overlap.  I [JS] am not aware of any good way of doing this. Second of all
 --    if we see `Foo a ~ Bool` during type checking GHC can't solve that without
 --    trying each equation one by one to see which one returns `Bool`. This
 --    takes a lot of guessing and GHC should refuse to do that.
