@@ -578,6 +578,13 @@ wrapTick t (FB tops defns)
 -- full-laziness. In due time it will have its own module but for now I want to
 -- avoid doing a full rebuild every time I switch barnches.
 
+-- TODOs:
+-- replace IdSet with []
+-- ppr cardinality information for found Ids (result of dmdTransform might be
+-- relevant)
+-- isClassOpId_maybe might allow to filter out dictionaries
+-- think about special-casing data constructors
+
 fullerLaziness :: DynFlags -> CoreProgram -> IO CoreProgram
 fullerLaziness dflags program = do
   let vars = findSimpleFreeArgs program
@@ -602,6 +609,7 @@ findSFArgsInBndr (Rec bndrs) = foldl findSFArgsInRecBndr emptyVarSet bndrs
           let annExpr@(fvs,_) = freeVars expr
           in vars `unionVarSet` findSFArgsInExpr fvs annExpr
 
+-- use snd . collectBinders
 dropLamBinds :: CoreExprWithFVs -> CoreExprWithFVs
 dropLamBinds (_, AnnLam _ expr) = dropLamBinds expr
 dropLamBinds expr = expr
