@@ -648,7 +648,7 @@ lookupFamInstEnv
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnv
-   = lookup_fam_inst_env False match
+   = lookup_fam_inst_env ConflictsCheck match
    where
      match _ tpl_tvs tpl_tys tys = tcMatchTys tpl_tvs tpl_tys tys
 
@@ -664,7 +664,7 @@ lookupFamInstEnvConflicts
 -- Precondition: the tycon is saturated (or over-saturated)
 
 lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
-  = lookup_fam_inst_env False my_unify envs fam tys
+  = lookup_fam_inst_env ConflictsCheck my_unify envs fam tys
   where
     (fam, tys) = famInstSplitLHS fam_inst
         -- In example above,   fam tys' = F [b]
@@ -697,7 +697,8 @@ lookupFamInjInstEnvConflicts injEnv envs
   = case injInfo of
       Nothing  -> [] -- instance of a type family that was not declared
                      -- injective
-      Just inj -> lookup_fam_inst_env True (my_unify inj) envs fam tys
+      Just inj -> lookup_fam_inst_env InjectivityCheck (my_unify inj)
+                                      envs fam tys
     where
       (fam, tys) = famInstSplitLHS fam_inst
       injInfo = lookupUFM injEnv (tyConName fam)
@@ -778,14 +779,25 @@ type MatchFun =  FamInst                -- The FamInst template
               -> [Type]                 -- Target to match against
               -> Maybe TvSubst
 
+-- `lookup_fam_inst_env` function is used to detect two possible types of
+-- conflicts:
+--
+--   1. conflicts between open type family equations
+--   2. conflicts of open type family equation with injectivity declaration
+--
+-- Although logically different, implementation of both lookups is almost
+-- identical. So we perform both in the same function and use FamInstCheckType
+-- data type to distinguish which check is being done.
+data FamInstCheckType = ConflictsCheck
+                      | InjectivityCheck
+
 lookup_fam_inst_env'          -- The worker, local to this module
-    :: Bool                   -- True  <=> injectivity check
-                              -- False <=> conflicts check
+    :: FamInstCheckType       -- injectivity check or conflicts check?
     -> MatchFun
     -> FamInstEnv
     -> TyCon -> [Type]        -- What we are looking for
     -> [FamInstMatch]
-lookup_fam_inst_env' injectivityCheck match_fun ie fam match_tys
+lookup_fam_inst_env' checkType match_fun ie fam match_tys
   | isOpenFamilyTyCon fam
   , Just (FamIE insts) <- lookupUFM ie fam
   = find insts    -- The common case
@@ -796,7 +808,8 @@ lookup_fam_inst_env' injectivityCheck match_fun ie fam match_tys
     find (item@(FamInst { fi_tcs = mb_tcs, fi_tvs = tpl_tvs,
                           fi_tys = tpl_tys }) : rest)
         -- Fast check for no match, uses the "rough match" fields
-      | not injectivityCheck && instanceCantMatch rough_tcs mb_tcs
+      | ConflictsCheck <- checkType
+      , instanceCantMatch rough_tcs mb_tcs
       = find rest
 
         -- Proper check
@@ -830,18 +843,17 @@ lookup_fam_inst_env' injectivityCheck match_fun ie fam match_tys
       = (roughMatchTcs pre_match_tys1, pre_match_tys1, pre_match_tys2)
 
 lookup_fam_inst_env           -- The worker, local to this module
-    :: Bool                   -- True  <=> injectivity check
-                              -- False <=> conflicts check
+    :: FamInstCheckType       -- injectivity check or conflicts check?
     -> MatchFun
     -> FamInstEnvs
-    -> TyCon -> [Type]          -- What we are looking for
-    -> [FamInstMatch]           -- Successful matches
+    -> TyCon -> [Type]        -- What we are looking for
+    -> [FamInstMatch]         -- Successful matches
 
 -- Precondition: the tycon is saturated (or over-saturated)
 
-lookup_fam_inst_env injectivityCheck match_fun (pkg_ie, home_ie) fam tys
-  =  lookup_fam_inst_env' injectivityCheck match_fun home_ie fam tys
-  ++ lookup_fam_inst_env' injectivityCheck match_fun pkg_ie  fam tys
+lookup_fam_inst_env checkType match_fun (pkg_ie, home_ie) fam tys
+  =  lookup_fam_inst_env' checkType match_fun home_ie fam tys
+  ++ lookup_fam_inst_env' checkType match_fun pkg_ie  fam tys
 
 \end{code}
 
