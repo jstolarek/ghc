@@ -20,7 +20,8 @@ import CoreFVs
 
 import DynFlags
 import ErrUtils         ( dumpIfSet_dyn )
-import Id               ( Id, idArity, isBottomingId )
+import Id               ( Id, idArity, isBottomingId, idInfo )
+import IdInfo           ( oneShotInfo )
 import Var              ( Var )
 import SetLevels
 import UniqSupply       ( UniqSupply )
@@ -587,9 +588,11 @@ wrapTick t (FB tops defns)
 fullerLaziness :: DynFlags -> CoreProgram -> IO CoreProgram
 fullerLaziness dflags program = do
   let vars = findSimpleFreeArgs program
+      pprVar var = ppr var <+> text " has shotness info: " <+> ppr (oneShotInfo info)
+          where info = idInfo var
 
   dumpIfSet_dyn dflags Opt_D_verbose_core2core "Simple free function arguments:"
-                (ppr vars)
+                (vcat $ map pprVar vars)
 
   return program
 
@@ -615,7 +618,7 @@ dropLamBinds expr = expr
 findSFArgsInExpr :: VarSet -> CoreExprWithFVs -> [Id]
 findSFArgsInExpr _ (_  , AnnVar _) = []
 findSFArgsInExpr _ (_  , AnnLit _) = []
-findSFArgsInExpr _ (fvs, AnnLam b expr) =
+findSFArgsInExpr _ (fvs, AnnLam _ expr) =
     findSFArgsInExpr fvs (dropLamBinds expr)
 findSFArgsInExpr fvs (_, AnnApp e1 (_, AnnVar v)) =
     if v `elem` fvs
