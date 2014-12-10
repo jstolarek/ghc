@@ -579,7 +579,6 @@ wrapTick t (FB tops defns)
 -- avoid doing a full rebuild every time I switch barnches.
 
 -- TODOs:
--- replace IdSet with []
 -- ppr cardinality information for found Ids (result of dmdTransform might be
 -- relevant)
 -- isClassOpId_maybe might allow to filter out dictionaries
@@ -590,60 +589,59 @@ fullerLaziness dflags program = do
   let vars = findSimpleFreeArgs program
 
   dumpIfSet_dyn dflags Opt_D_verbose_core2core "Simple free function arguments:"
-                (ppr (varSetElems vars))
+                (ppr vars)
 
   return program
 
-findSimpleFreeArgs :: CoreProgram -> IdSet
-findSimpleFreeArgs bndrs = foldl (\idSet bndr ->
-                                     idSet `unionVarSet` findSFArgsInBndr bndr)
-                                 emptyVarSet bndrs
+findSimpleFreeArgs :: CoreProgram -> [Id]
+findSimpleFreeArgs bndrs = foldl (\ids bndr ->
+                                     ids ++ findSFArgsInBndr bndr)
+                                 [] bndrs
 
-findSFArgsInBndr :: CoreBind -> IdSet
+findSFArgsInBndr :: CoreBind -> [Id]
 findSFArgsInBndr (NonRec _ expr) =
     let annExpr@(fvs,_) = freeVars expr
     in findSFArgsInExpr fvs annExpr
-findSFArgsInBndr (Rec bndrs) = foldl findSFArgsInRecBndr emptyVarSet bndrs
+findSFArgsInBndr (Rec bndrs) = foldl findSFArgsInRecBndr [] bndrs
     where
       findSFArgsInRecBndr vars (_, expr) =
           let annExpr@(fvs,_) = freeVars expr
-          in vars `unionVarSet` findSFArgsInExpr fvs annExpr
+          in vars ++ findSFArgsInExpr fvs annExpr
 
--- use snd . collectBinders
 dropLamBinds :: CoreExprWithFVs -> CoreExprWithFVs
 dropLamBinds (_, AnnLam _ expr) = dropLamBinds expr
 dropLamBinds expr = expr
 
-findSFArgsInExpr :: VarSet -> CoreExprWithFVs -> IdSet
-findSFArgsInExpr _ (_  , AnnVar _) = emptyVarSet
-findSFArgsInExpr _ (_  , AnnLit _) = emptyVarSet
+findSFArgsInExpr :: VarSet -> CoreExprWithFVs -> [Id]
+findSFArgsInExpr _ (_  , AnnVar _) = []
+findSFArgsInExpr _ (_  , AnnLit _) = []
 findSFArgsInExpr _ (fvs, AnnLam b expr) =
     findSFArgsInExpr fvs (dropLamBinds expr)
 findSFArgsInExpr fvs (_, AnnApp e1 (_, AnnVar v)) =
-    if v `elemVarSet` fvs
-    then unitVarSet v `unionVarSet` findSFArgsInExpr fvs e1
-    else                            findSFArgsInExpr fvs e1
+    if v `elem` fvs
+    then v : findSFArgsInExpr fvs e1
+    else     findSFArgsInExpr fvs e1
 findSFArgsInExpr fvs (_, AnnApp e1 e2) =
-    findSFArgsInExpr fvs e1 `unionVarSet` findSFArgsInExpr fvs e2
+    findSFArgsInExpr fvs e1 ++ findSFArgsInExpr fvs e2
 findSFArgsInExpr fvs (_, AnnCase scrut _ _ alts) =
-    findSFArgsInExpr fvs scrut `unionVarSet`
-    foldl (\vs alt-> findSFArgsInAlts fvs alt `unionVarSet` vs) emptyVarSet alts
+    findSFArgsInExpr fvs scrut ++
+    foldl (\vs alt-> findSFArgsInAlts fvs alt ++ vs) [] alts
 findSFArgsInExpr fvs (_, AnnLet bndr expr)  =
-    findSFArgsInAnnBndr fvs bndr `unionVarSet` findSFArgsInExpr fvs expr
+    findSFArgsInAnnBndr fvs bndr ++ findSFArgsInExpr fvs expr
 findSFArgsInExpr fvs (_, AnnCast expr _) = findSFArgsInExpr fvs expr
 findSFArgsInExpr fvs (_, AnnTick _ expr) = findSFArgsInExpr fvs expr
-findSFArgsInExpr _   (_, AnnType     _)  = emptyVarSet
-findSFArgsInExpr _   (_, AnnCoercion _)  = emptyVarSet
+findSFArgsInExpr _   (_, AnnType     _)  = []
+findSFArgsInExpr _   (_, AnnCoercion _)  = []
 
-findSFArgsInAlts :: VarSet -> AnnAlt Id VarSet -> IdSet
+findSFArgsInAlts :: VarSet -> AnnAlt Id VarSet -> [Id]
 findSFArgsInAlts fvs (_, _, expr) = findSFArgsInExpr fvs expr
 
-findSFArgsInAnnBndr :: VarSet -> AnnBind Id VarSet -> IdSet
+findSFArgsInAnnBndr :: VarSet -> AnnBind Id VarSet -> [Id]
 findSFArgsInAnnBndr fvs (AnnNonRec _ expr) =
     findSFArgsInExpr fvs expr
-findSFArgsInAnnBndr fvs (AnnRec bndrs) = foldl findSFArgsInRecAnnBndr emptyVarSet bndrs
+findSFArgsInAnnBndr fvs (AnnRec bndrs) = foldl findSFArgsInRecAnnBndr [] bndrs
     where
       findSFArgsInRecAnnBndr vars (_, expr) =
-          vars `unionVarSet` findSFArgsInExpr fvs expr
+          vars ++ findSFArgsInExpr fvs expr
 
 \end{code}
