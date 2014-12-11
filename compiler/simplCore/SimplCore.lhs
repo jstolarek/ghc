@@ -286,7 +286,9 @@ getCoreToDo dflags
 
         runWhen do_float_in CoreDoFloatInwards,
 
-        runWhen fuller_laziness CoreDoFullerLaziness,
+        runWhen fuller_laziness (CoreDoPasses [
+            CoreDoStrictness,
+            CoreDoFullerLaziness]),
 
         maybe_rule_check (Phase 0),
 
