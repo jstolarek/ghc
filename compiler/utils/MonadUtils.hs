@@ -16,6 +16,7 @@ module MonadUtils
         , mapAccumLM
         , mapSndM
         , concatMapM
+        , concatMapAndUnzipM
         , mapMaybeM
         , fmapMaybeM, fmapEitherM
         , anyM, allM
@@ -121,6 +122,14 @@ mapSndM f ((a,b):xs) = do { c <- f b; rs <- mapSndM f xs; return ((a,c):rs) }
 -- | Monadic version of concatMap
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM f xs = liftM concat (mapM f xs)
+
+-- | Monadic map, concatenation and unzipping
+concatMapAndUnzipM :: Monad m => (a -> m ([b], [c])) -> [a] -> m ([b], [c])
+concatMapAndUnzipM _ [] = return ([], [])
+concatMapAndUnzipM f (x:xs) = do
+    (b , c ) <- f x
+    (bs, cs) <- concatMapAndUnzipM f xs
+    return (b ++ bs, c ++ cs)
 
 -- | Monadic version of mapMaybe
 mapMaybeM :: (Monad m) => (a -> m (Maybe b)) -> [a] -> m [b]

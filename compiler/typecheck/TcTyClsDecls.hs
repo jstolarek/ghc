@@ -138,7 +138,7 @@ tcTyClGroup boot_details tyclds
             -- the final TyCons and Classes
        ; let role_annots = extractRoleAnnots tyclds
              decls = group_tyclds tyclds
-       ; tyclss <- fixM $ \ rec_tyclss -> do
+       ; (tyclss, warns) <- fixM $ \ (rec_tyclss, _) -> do
            { is_boot <- tcIsHsBootOrSig
            ; let rec_flags = calcRecFlags boot_details is_boot
                                           role_annots rec_tyclss
@@ -155,7 +155,7 @@ tcTyClGroup boot_details tyclds
              tcExtendKindEnv names_w_poly_kinds              $
 
                  -- Kind and type check declarations for this group
-             concatMapM (tcTyClDecl rec_flags) decls }
+             concatMapAndUnzipM (tcTyClDecl rec_flags) decls }
 
            -- Step 3: Perform the validity check
            -- We can do this now because we are done with the recursive knot
@@ -163,6 +163,7 @@ tcTyClGroup boot_details tyclds
            -- expects well-formed TyCons
        ; tcExtendGlobalEnv tyclss $ do
        { traceTc "Starting validity check" (ppr tyclss)
+       ; mapM_ (\(span, msg) -> addWarnAt span msg) warns
        ; checkNoErrs $
          mapM_ (recoverM (return ()) . checkValidTyCl) tyclss
            -- We recover, which allows us to report multiple validity errors
@@ -586,14 +587,15 @@ TyCons or Classes of this recursive group.  Earlier, finished groups,
 live in the global env only.
 -}
 
-tcTyClDecl :: RecTyInfo -> LTyClDecl Name -> TcM [TyThing]
+tcTyClDecl :: RecTyInfo -> LTyClDecl Name -> TcM ([TyThing], [(SrcSpan, SDoc)])
 tcTyClDecl rec_info (L loc decl)
   = setSrcSpan loc $ tcAddDeclCtxt decl $
     traceTc "tcTyAndCl-x" (ppr decl) >>
     tcTyClDecl1 NoParentTyCon rec_info decl
 
   -- "type family" declarations
-tcTyClDecl1 :: TyConParent -> RecTyInfo -> TyClDecl Name -> TcM [TyThing]
+tcTyClDecl1 :: TyConParent -> RecTyInfo -> TyClDecl Name
+            -> TcM ([TyThing], [(SrcSpan, SDoc)])
 tcTyClDecl1 parent _rec_info (FamDecl { tcdFam = fd })
   = tcFamDecl1 parent fd
 
@@ -602,14 +604,16 @@ tcTyClDecl1 _parent rec_info
             (SynDecl { tcdLName = L _ tc_name, tcdTyVars = tvs, tcdRhs = rhs })
   = ASSERT( isNoParent _parent )
     tcTyClTyVars tc_name tvs $ \ tvs' kind ->
-    tcTySynRhs rec_info tc_name tvs' kind rhs
+     do { tyThing <- tcTySynRhs rec_info tc_name tvs' kind rhs
+        ; return (tyThing, []) }
 
   -- "data/newtype" declaration
 tcTyClDecl1 _parent rec_info
             (DataDecl { tcdLName = L _ tc_name, tcdTyVars = tvs, tcdDataDefn = defn })
   = ASSERT( isNoParent _parent )
     tcTyClTyVars tc_name tvs $ \ tvs' kind ->
-    tcDataDefn rec_info tc_name tvs' kind defn
+     do { tyThing <- tcDataDefn rec_info tc_name tvs' kind defn
+        ; return (tyThing, []) }
 
 tcTyClDecl1 _parent rec_info
             (ClassDecl { tcdLName = L _ class_name, tcdTyVars = tvs
@@ -650,7 +654,7 @@ tcTyClDecl1 _parent rec_info
                             ]
              ; class_ats = map ATyCon (classATs clas) }
 
-       ; return (ATyCon (classTyCon clas) : gen_dm_ids ++ class_ats ) }
+       ; return (ATyCon (classTyCon clas) : gen_dm_ids ++ class_ats, [] ) }
          -- NB: Order is important due to the call to `mkGlobalThings' when
          --     tying the the type and class declaration type checking knot.
   where
@@ -666,7 +670,8 @@ tcTyClDecl1 _parent rec_info
                Just tv' -> return tv'
                Nothing  -> pprPanic "tc_fd_tyvar" (ppr name $$ ppr tv $$ ppr ty) }
 
-tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
+tcFamDecl1 :: TyConParent -> FamilyDecl Name
+           -> TcM ([TyThing], [(SrcSpan, SDoc)])
 tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
                               , fdTyVars = tvs, fdResultSig = L _ sig
                               , fdInjectivityAnn = inj })
@@ -676,7 +681,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
   ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                               OpenSynFamilyTyCon kind parent
                               (getInjectivityList tvs' inj)
-  ; return [ATyCon tycon] }
+  ; return ([ATyCon tycon], []) }
 
 tcFamDecl1 parent (FamilyDecl { fdInfo = ClosedTypeFamily eqns
                               , fdLName = lname@(L _ tc_name), fdTyVars = tvs
@@ -714,7 +719,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = ClosedTypeFamily eqns
        ; co_ax_name <- newFamInstAxiomName loc tc_name []
 
          -- drop inaccessible type family equations and emit a warning
-       ; branches' <- dropDominatedAxioms tc_name kind branches
+       ; let (branches', wrnMsgs) = dropDominatedAxioms tc_name kind branches
 
          -- mkBranchedCoAxiom will fail on an empty list of branches, but
          -- we'll never look at co_ax in this case
@@ -731,7 +736,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = ClosedTypeFamily eqns
        ; let result = if null eqns
                       then [ATyCon tycon]
                       else [ATyCon tycon, ACoAxiom co_ax]
-       ; return result }
+       ; return (result, wrnMsgs) }
 -- We check for instance validity later, when doing validity checking for
 -- the tycon. Exception: checking equations overlap done by dropDominatedAxioms
 
@@ -748,7 +753,7 @@ tcFamDecl1 parent
                               False   -- Not promotable to the kind level
                               True    -- GADT syntax
                               parent
-  ; return [ATyCon tycon] }
+  ; return ([ATyCon tycon], []) }
 
 tcTySynRhs :: RecTyInfo
            -> Name
@@ -858,7 +863,7 @@ tcClassATs class_name parent ats at_defs
                                           (at_def_tycon at_def) [at_def])
                         emptyNameEnv at_defs
 
-    tc_at at = do { [ATyCon fam_tc] <- addLocM (tcFamDecl1 parent) at
+    tc_at at = do { ([ATyCon fam_tc], _) <- addLocM (tcFamDecl1 parent) at
                   ; let at_defs = lookupNameEnv at_defs_map (at_fam_name at)
                                   `orElse` []
                   ; atd <- tcDefaultAssocDecl fam_tc at_defs
@@ -1526,23 +1531,23 @@ checkValidTyCon tc
     check_fields [] = panic "checkValidTyCon/check_fields []"
 
 -- | Drop inaccessible closed type family equations and emit a warning
-dropDominatedAxioms :: Name -> Kind -> [CoAxBranch] -> TcM [CoAxBranch]
+dropDominatedAxioms :: Name -> Kind -> [CoAxBranch]
+                    -> ([CoAxBranch], [(SrcSpan, SDoc)])
 dropDominatedAxioms tc_name kind branches =
-    reverse `liftM` foldM check_accessibility [] branches
-    -- reverse is necessary because foldM folds from the left and thus the
-    -- resulting list is reversed
+    foldr check_accessibility ([], []) branches
   where
     -- Check whether the branch is dominated by earlier ones and hence is
     -- inaccessible
-    check_accessibility :: [CoAxBranch]     -- prev branches (in reverse order)
-                        -> CoAxBranch       -- cur branch
-                        -> TcM [CoAxBranch] -- cur : prev
-    check_accessibility prev_branches cur_branch
+    check_accessibility :: CoAxBranch -- cur branch
+                        -> ([CoAxBranch], [(SrcSpan, SDoc)])
+                        -- prev branches (in reverse order) and warnings
+                        -> ([CoAxBranch], [(SrcSpan, SDoc)])
+    check_accessibility cur_branch (prev_branches, warns)
         = if cur_branch `isDominatedBy` prev_branches
-          then do { addWarnAt (coAxBranchSpan cur_branch) $
-                    inaccessibleCoAxBranch tc_name kind cur_branch
-                  ; return prev_branches }
-          else return (cur_branch : prev_branches)
+          then let span = coAxBranchSpan cur_branch
+                   warn = inaccessibleCoAxBranch tc_name kind cur_branch
+               in (prev_branches, (span, warn) : warns)
+          else (cur_branch : prev_branches, warns)
 
 checkValidClosedCoAxiom :: CoAxiom Branched -> Maybe [Bool] -> TcM ()
 checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
