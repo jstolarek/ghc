@@ -841,10 +841,12 @@ unusedInjTvsInRHS :: [Bool] -> [Type] -> Type -> TyVarSet
 unusedInjTvsInRHS injList lhs rhs =
     -- See Note [Injectivity annotation check]. This function implements second
     -- check described there.
-    let dropKVars = filterVarSet (not . isKindVar)
-        -- get the list of type variables in which type family is injective
-        injVars = dropKVars $ tyVarsOfTypes (filterByList injList lhs)
-        rhsVars = dropKVars $ tyVarsOfType   rhs
+    let -- set of type and kind variables in which type family is injective
+        injVars = tyVarsOfTypes (filterByList injList lhs)
+        -- set of type variables appearing on the RHS (if a type variable
+        -- appears its associated kind variable is asuumed to also appear in the
+        -- RHS)
+        rhsVars = closeOverKinds $ tyVarsOfType rhs
     in  -- return all injective variables not mentioned in the RHS
         injVars `minusVarSet` rhsVars
 
