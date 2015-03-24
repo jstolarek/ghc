@@ -87,7 +87,7 @@ We unflatten after solving the wc_simples of an implication, and before attempti
 to float. This means that
 
  * The fsk/fmv flatten-skolems only survive during solveSimples.  We don't
-   need to worry about then across successive passes over the constraint tree.
+   need to worry about them across successive passes over the constraint tree.
    (E.g. we don't need the old ic_fsk field of an implication.
 
  * When floating an equality outwards, we don't need to worry about floating its
@@ -117,7 +117,7 @@ Note [Running plugins on unflattened wanteds]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 There is an annoying mismatch between solveSimpleGivens and
 solveSimpleWanteds, because the latter needs to fiddle with the inert
-set, unflatten and and zonk the wanteds.  It passes the zonked wanteds
+set, unflatten and zonk the wanteds.  It passes the zonked wanteds
 to runTcPluginsWanteds, which produces a replacement set of wanteds,
 some additional insolubles and a flag indicating whether to go round
 the loop again.  If so, prepareInertsForImplications is used to remove
@@ -217,7 +217,7 @@ See Note [Unflattening can force the solver to iterate]
 ---------------------------------------------------------------
 solveSimples :: Cts -> TcS ()
 -- Returns the final InertSet in TcS
--- Has no effect on work-list or residual-iplications
+-- Has no effect on work-list or residual-implications
 -- The constraints are initially examined in left-to-right order
 
 solveSimples cts
