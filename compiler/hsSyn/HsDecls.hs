@@ -826,12 +826,10 @@ getInjectivityList _ Nothing = Nothing
   --
   -- then we mark both `a` and `k1` as injective.
 getInjectivityList tvs (Just (L _ (InjectivityAnn _ lInjNames))) =
-  let injNames      = map unLoc lInjNames
-      namesEq n1 n2 = EQ == (n1 `stableNameCmp` n2)
-      isInjName n   = not . null $ filter (\injN -> namesEq n injN) injNames
-      injTvs        = filter (\tv -> isInjName (tyVarName tv)) tvs
-      injKvsTvs     = closeOverKinds (mkVarSet injTvs)
-  in Just $ map (`elemVarSet` injKvsTvs) tvs
+  let inj_tvs_names = mkNameSet (map unLoc lInjNames)
+      inj_tvs     = filter (\tv -> tyVarName tv `elemNameSet` inj_tvs_names) tvs
+      inj_kvs_tvs = closeOverKinds (mkVarSet inj_tvs)
+  in Just $ map (`elemVarSet` inj_kvs_tvs) tvs
 
 {-
 Note [Complete user-supplied kind signatures]

@@ -303,12 +303,8 @@ newNamedMetaTyVar name meta_info kind
 
 newSigTyVar :: Name -> Kind -> TcM TcTyVar
 newSigTyVar name kind
-  = do { uniq <- newUnique
-       ; let name' = setNameUnique name uniq
-                      -- Use the same OccName so that the tidy-er
-                      -- doesn't gratuitously rename 'a' to 'a0' etc
-       ; details <- newMetaDetails SigTv
-       ; return (mkTcTyVar name' kind details) }
+  = do { details <- newMetaDetails SigTv
+       ; return (mkTcTyVar name kind details) }
 
 newMetaDetails :: MetaInfo -> TcM TcTyVarDetails
 newMetaDetails info
@@ -574,15 +570,15 @@ skolemiseUnboundMetaTyVar tv details
   = ASSERT2( isMetaTyVar tv, ppr tv )
     do  { span <- getSrcSpanM    -- Get the location from "here"
                                  -- ie where we are generalising
-        ; uniq <- newUnique      -- Remove it from TcMetaTyVar unique land
         ; kind <- zonkTcKind (tyVarKind tv)
-        ; let tv_name = getOccName tv
+        ; let uniq        = getUnique tv
+              tv_name     = getOccName tv
               new_tv_name = if isWildcardVar tv
                             then generaliseWildcardVarName tv_name
                             else tv_name
-              final_name = mkInternalName uniq new_tv_name span
-              final_kind = defaultKind kind
-              final_tv   = mkTcTyVar final_name final_kind details
+              final_name  = mkInternalName uniq new_tv_name span
+              final_kind  = defaultKind kind
+              final_tv    = mkTcTyVar final_name final_kind details
 
         ; traceTc "Skolemising" (ppr tv <+> ptext (sLit ":=") <+> ppr final_tv)
         ; writeMetaTyVar tv (mkTyVarTy final_tv)
