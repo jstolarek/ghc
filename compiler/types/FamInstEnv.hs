@@ -21,11 +21,11 @@ module FamInstEnv (
         FamInstMatch(..),
         lookupFamInstEnv, lookupFamInstEnvConflicts, lookupFamInstEnvByTyCon,
 
+        isDominatedBy, apartnessCheck,
+
         -- Injectivity
         lookupFamInjInstEnvConflicts, unusedInjTvsInRHS,
         tyFamsUsedInRHS, injectiveBranches,
-
-        isDominatedBy,
 
         -- Normalisation
         topNormaliseType, topNormaliseType_maybe,

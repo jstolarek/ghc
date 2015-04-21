@@ -953,6 +953,17 @@ We get the constraint
    [W] F Int b ~ F Int beta
 where beta is a unification variable.  Injectivity lets us pick beta ~ b.
 
+Injectivity information is also used at the call sites. For example:
+   g = f True
+gives rise to
+   [W] F Int b ~ Bool
+from which we can derive b.  This requires looking at the defining equations of
+a type family, ie. finding equation with a matching RHS (Bool in this example)
+and infering values of type variables (b in this example) from the LHS patterns
+of the matching equation.  For closed type families we have to perform
+additional apartness check for the selected equation to check that the selected
+is guaranteed to fire for given LHS arguments.
+
 These new constraints are simply *Derived* constraints; they have no evidence.
 We could go further and offer evidence from decomposing injective type-function
 applications, but that would require new evidence forms, and an extension to
@@ -1417,24 +1428,28 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
   | Just ops <- isBuiltInSynFamTyCon_maybe fam_tc
   = sfInteractTop ops args rhs_ty
 
-  | Just ax <- isClosedTypeFamilyTyCon_maybe fam_tc
+  -- see Note [Type inference for type families with injectivity]
+  | isOpenTypeFamilyTyCon fam_tc
   , Just injective_args <- familyTyConInjectivityInfo fam_tc
-  = -- only use the equalities derived from the first matching equation of a
-    -- closed type family
-    take (length . filter id $ injective_args)
+  = -- it is possible to have several compatible equations in an open type
+    -- family but we only want to derive equalities from one such equation. Thus
+    -- we apply `take`.
+    take (length . filter id $ injective_args) $
     [ Pair arg (substTy subst ax_arg)
-    | CoAxBranch { cab_tvs = ax_tvs
-                 , cab_lhs = ax_args
-                 , cab_rhs = ax_rhs } <- fromBranchList (co_ax_branches ax)
-    , Just subst <- [tcMatchTy (mkVarSet ax_tvs) ax_rhs rhs_ty]
-    , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
-
-  | Just injective_args <- familyTyConInjectivityInfo fam_tc
-  = [ Pair arg (substTy subst ax_arg)
     | FamInst { fi_tvs = ax_tvs
               , fi_tys = ax_args
               , fi_rhs = ax_rhs } <- lookupFamInstEnvByTyCon fam_envs fam_tc
     , Just subst <- [tcMatchTy (mkVarSet ax_tvs) ax_rhs rhs_ty]
+    , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
+
+  | Just ax <- isClosedTypeFamilyTyCon_maybe fam_tc
+  , Just injective_args <- familyTyConInjectivityInfo fam_tc
+  = [ Pair arg (substTy subst ax_arg)
+    | branch@CoAxBranch { cab_tvs = ax_tvs
+                 , cab_lhs = ax_args
+                 , cab_rhs = ax_rhs } <- fromBranchList (co_ax_branches ax)
+    , Just subst <- [tcMatchTy (mkVarSet ax_tvs) ax_rhs rhs_ty]
+    , apartnessCheck (substTys subst ax_args) branch
     , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
 
   | otherwise

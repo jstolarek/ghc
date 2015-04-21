@@ -822,9 +822,16 @@ getInjectivityList _ Nothing = Nothing
   -- injective in that type variable). We also extend injectivity information to
   -- kind variables, so if a user declares:
   --
-  --   type family F (a :: k1) (b :: k2) = r | r -> a
+  --   type family F (a :: k1) (b :: k2) = (r :: k3) | r -> a
   --
   -- then we mark both `a` and `k1` as injective.
+  -- NB: the return kind is considered to be input argument to a type family.
+  -- Since injectivity allows to infer input arguments from the result in theory
+  -- we should always mark the result kind variable (`k3` in this example) as
+  -- injective.  The reason is that result type has always an assigned kind and
+  -- therefore we can always infer the result kind if we know the result type.
+  -- But this does not seem to be useful in any way so we don't do it.  (Another
+  -- reason is that the implementation would not be straightforward.)
 getInjectivityList tvs (Just (L _ (InjectivityAnn _ lInjNames))) =
   let inj_tvs_names = mkNameSet (map unLoc lInjNames)
       inj_tvs     = filter (\tv -> tyVarName tv `elemNameSet` inj_tvs_names) tvs
