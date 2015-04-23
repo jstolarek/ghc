@@ -1590,13 +1590,14 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
          -> TcM [CoAxBranch] -- current branch : previous branches
      check_injectivity inj prev_branches cur_branch = do
        { let conflicts = fst $ foldl gather_conflicts ([], 0) prev_branches
-             gather_conflicts (acc, n) branch
+             gather_conflicts (acc, n) branch =
                -- n is 0-based index of branch in prev_branches
-               | Just (ax1, ax2)
-                   <- injectiveBranches inj cur_branch branch
-               = if ax1 `isDominatedBy` (replaceBranch prev_branches n ax2)
-                 then (acc, n + 1) else (branch : acc, n + 1)
-               | otherwise = (acc, n + 1)
+               case injectiveBranches inj cur_branch branch of
+                 InjectivityUnified ax1 ax2 ->
+                     if ax1 `isDominatedBy` (replaceBranch prev_branches n ax2)
+                     then (acc, n + 1) else (branch : acc, n + 1)
+                 InjectivityAccepted -> (acc, n + 1)
+                 InjectivityViolated -> (branch : acc, n + 1)
 
              -- Replace n-th element in the list. Assumes 0-based indexing.
              replaceBranch :: [CoAxBranch] -> Int -> CoAxBranch -> [CoAxBranch]

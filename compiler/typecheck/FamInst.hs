@@ -399,10 +399,10 @@ checkForInjectivityConflicts instEnvs famInst
     , Just inj <- familyTyConInjectivityInfo tycon = do
     { let -- see Note [Injectivity annotation check] in FamInstEnv
           errs = makeInjectivityErrors famInst inj fi_tys fi_rhs
-                      (lookupFamInjInstEnvConflicts inj instEnvs famInst)
-                      (conflictInjInstErr      makeFamInstsErr)
-                      (tyfamsUsedInjErr        makeFamInstsErr)
-                      (unusedInjectiveVarsErr  makeFamInstsErr)
+                     (lookupFamInstEnvInjectivityConflicts inj instEnvs famInst)
+                     (conflictInjInstErr      makeFamInstsErr)
+                     (tyfamsUsedInjErr        makeFamInstsErr)
+                     (unusedInjectiveVarsErr  makeFamInstsErr)
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)
     }

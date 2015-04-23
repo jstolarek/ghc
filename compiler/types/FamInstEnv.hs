@@ -24,7 +24,8 @@ module FamInstEnv (
         isDominatedBy, apartnessCheck,
 
         -- Injectivity
-        lookupFamInjInstEnvConflicts, unusedInjTvsInRHS,
+        InjectivityCheckResult(..),
+        lookupFamInstEnvInjectivityConflicts, unusedInjTvsInRHS,
         tyFamsUsedInRHS, injectiveBranches,
 
         -- Normalisation
@@ -485,43 +486,53 @@ compatibleBranches (CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
         -> True
       _ -> False
 
+-- | Result of testing two type family equations for injectiviy.
+data InjectivityCheckResult
+   = InjectivityAccepted
+    -- ^ Either RHSs are distinct or unification of RHSs leads to unification of
+    -- LHSs
+   | InjectivityViolated
+    -- ^ It is not possible to determine whether RHS are distinct or not.
+    -- Happens when infinite types could lead to unification.
+    -- See Note [Fine-grained unification]
+   | InjectivityUnified CoAxBranch CoAxBranch
+    -- ^ RHSs unify but LHSs don't unify under that substitution.  Relevant for
+    -- closed type families where equation after unification might be
+    -- overlpapped (in which case it is OK if they don't unify).  Constructor
+    -- stores axioms after unification.
 
 -- | Check whether two type family axioms don't violate injectivity annotation.
--- Nothing means that branches don't violate injectivity annotation (possibly
--- under substitution). If equations conflict with an injectivity annotation
--- this function returns new axioms with substitution unifying RHS applied to
--- both LHSs and RHSs. This is useful when doing injectivity check for closed
--- type families where we have to detect possible overlap after substitution.
 -- Note that if any of the RHSs contains a type family this function will lie by
--- reporting Nothing. See code comments for further details.
+-- reporting InjectivityAccepted. See code comments for further details.
 injectiveBranches :: [Bool] -> CoAxBranch -> CoAxBranch
-                  -> Maybe (CoAxBranch, CoAxBranch)
+                  -> InjectivityCheckResult
 injectiveBranches injectivity
                   ax1@(CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                   ax2@(CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
   -- See Note [Injectivity annotation check]. This function implements first
   -- check described there.
   = let getInjArgs  = filterByList injectivity
-    in case tcUnifyTy rhs1 rhs2 of
-       Nothing -> Nothing -- RHS are different, so equations are injective.
-                          -- Note however that this is not true in the presence
-                          -- of type families.
-                          -- See Note [Injectivity annotation check]
-       Just subst -> -- RHS unify under a substitution
-           let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
-               lhs2Subst = Type.substTys subst (getInjArgs lhs2)
-           -- If LHSs are equal under the substitution used for RHSs then this
-           -- pair of equations does not violate injectivity annotation. If LHSs
-           -- are not equal under that substitution then this pair of equations
-           -- violates injectivity annotation, but for closed type families it
-           -- still might be the case that the LHS after substitution is
-           -- dominated.
-           in if eqTypes lhs1Subst lhs2Subst
-              then Nothing
-              else Just ( ax1 { cab_lhs = Type.substTys subst lhs1
-                              , cab_rhs = Type.substTy  subst rhs1 }
-                        , ax2 { cab_lhs = Type.substTys subst lhs2
-                              , cab_rhs = Type.substTy  subst rhs2 } )
+    in case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
+       SurelyApart -> InjectivityAccepted -- RHS are different, so equations are
+                                          -- injective.  Note however that this
+                                          -- is not true in the presence of type
+                                          -- families.  See Note [Injectivity
+                                          -- annotation check]
+       Unifiable subst -> -- RHS unify under a substitution
+        let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
+            lhs2Subst = Type.substTys subst (getInjArgs lhs2)
+        -- If LHSs are equal under the substitution used for RHSs then this pair
+        -- of equations does not violate injectivity annotation. If LHSs are not
+        -- equal under that substitution then this pair of equations violates
+        -- injectivity annotation, but for closed type families it still might
+        -- be the case that the LHS after substitution is dominated.
+        in if eqTypes lhs1Subst lhs2Subst
+           then InjectivityAccepted
+           else InjectivityUnified ( ax1 { cab_lhs = Type.substTys subst lhs1
+                                         , cab_rhs = Type.substTy  subst rhs1 })
+                                   ( ax2 { cab_lhs = Type.substTys subst lhs2
+                                         , cab_rhs = Type.substTy  subst rhs2 })
+       MaybeApart _ -> InjectivityViolated
 
 -- takes a CoAxiom with unknown branch incompatibilities and computes
 -- the compatibilities
@@ -807,13 +818,13 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 -- | Check whether an open type family equation can be added to already existing
 -- instance environment without causing conflicts with supplied injectivity
 -- annotations. Returns list of conflicting type instance declarations.
-lookupFamInjInstEnvConflicts
+lookupFamInstEnvInjectivityConflicts
     :: [Bool]         -- injectivity annotation for this type family instance
                       -- INVARIANT: list contains at least one True value
     -> FamInstEnvs    -- all type instances seens so far
     -> FamInst        -- new type instance that we're checking
     -> [FamInst]      -- conflicting instance delcarations
-lookupFamInjInstEnvConflicts injList (pkg_ie, home_ie)
+lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
                              fam_inst@(FamInst { fi_axiom = new_axiom })
   -- See Note [Injectivity annotation check]. This function implements first
   -- check for open type families described there.
@@ -825,8 +836,10 @@ lookupFamInjInstEnvConflicts injList (pkg_ie, home_ie)
       -- filtering function used by `lookup_inj_fam_conflicts` to check whether
       -- a pair of equations is compatible with injectivity annotation.
       isInjConflict (FamInst { fi_axiom = old_axiom })
-          = isJust $
+          | InjectivityAccepted <-
             injectiveBranches injList (coAxiomSingleBranch old_axiom) new_branch
+          = False -- no conflict
+          | otherwise = True
 
       lookup_inj_fam_conflicts ie
           | isOpenFamilyTyCon fam, Just (FamIE insts) <- lookupUFM ie fam
