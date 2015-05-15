@@ -6,7 +6,7 @@ module Unify (
         -- Matching of types:
         --      the "tc" prefix indicates that matching always
         --      respects newtypes (rather than looking through them)
-        tcMatchTy, tcMatchTys, tcMatchTyX,
+        tcMatchTy, tcUnifyTyWithTFs, tcMatchTys, tcMatchTyX,
         ruleMatchTyX, tcMatchPreds,
 
         MatchEnv(..), matchList,
@@ -30,7 +30,7 @@ import Type
 import TyCon
 import TypeRep
 
-import Control.Monad (liftM, ap)
+import Control.Monad (liftM, foldM, ap)
 #if __GLASGOW_HASKELL__ < 709
 import Control.Applicative (Applicative(..))
 #endif
@@ -385,6 +385,59 @@ tcUnifyTy ty1 ty2
   = case initUM (const BindMe) (unify ty1 ty2) of
       Unifiable subst -> Just subst
       _other          -> Nothing
+
+-- JSTOLAREK: haddockify, make a note
+tcUnifyTyWithTFs :: Bool -> Type -> Type -> Maybe TvSubst
+tcUnifyTyWithTFs twoWay t1 t2 = niFixTvSubst `fmap` go t1 t2 emptyTvSubstEnv
+    where
+      go :: Type -> Type -> TvSubstEnv -> Maybe TvSubstEnv
+      -- look through type synonyms
+      go t1 t2 theta | Just t1' <- tcView t1 = go t1' t2  theta
+      go t1 t2 theta | Just t2' <- tcView t2 = go t1  t2' theta
+      -- proper
+      go (TyVarTy tv) t2 theta
+          -- Equation (1)
+          | Just t1' <- lookupVarEnv theta tv
+          = go t1' t2 theta
+          | otherwise = -- JSTOLAREK: calling niFixTvSubst feels inefficient
+                        let t2' = Type.substTy (niFixTvSubst theta) t2
+                        in if tv `elemVarEnv` tyVarsOfType t2'
+                           -- Equation (2)
+                           then Just theta
+                           -- Equation (3)
+                           else Just $ extendVarEnv theta tv t2'
+      -- Equation (4)
+      go t1 t2@(TyVarTy _) theta | twoWay = go t2 t1 theta
+      -- Equation (5)
+      go (AppTy s1 s2) ty theta | Just(t1, t2) <- splitAppTy_maybe ty =
+          go s1 t1 theta >>= go s2 t2
+      go ty (AppTy s1 s2) theta | Just(t1, t2) <- splitAppTy_maybe ty =
+          go s1 t1 theta >>= go s2 t2
+
+      go (TyConApp tc1 tys1) (TyConApp tc2 tys2) theta
+        -- Equation (6)
+        | isAlgTyCon tc1 && isAlgTyCon tc2 && tc1 == tc2
+        = let tys = zip tys1 tys2
+          in foldM (\theta' (t1,t2) -> go t1 t2 theta') theta tys
+
+        -- Equation (7)
+        | isTypeFamilyTyCon tc1 && isTypeFamilyTyCon tc2 && tc1 == tc2
+        , Just inj <- familyTyConInjectivityInfo tc1
+        = let tys1' = filterByList inj tys1
+              tys2' = filterByList inj tys2
+              injTys = zip tys1' tys2'
+          in foldM (\theta' (t1,t2) -> go t1 t2 theta') theta injTys
+
+        -- Equations (8)
+        | isTypeFamilyTyCon tc1
+        = Just theta
+
+        -- Equations (9)
+        | isTypeFamilyTyCon tc2, twoWay
+        = Just theta
+
+      -- Equation (10)
+      go _ _ _ = Nothing
 
 -----------------
 tcUnifyTys :: (TyVar -> BindFlag)

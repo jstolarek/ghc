@@ -570,6 +570,7 @@ tcATDefault inst_subst defined_ats (ATI fam_tc defs)
              rhs'     = substTy subst' rhs_ty
              tv_set'  = tyVarsOfTypes pat_tys'
              tvs'     = varSetElemsKvsFirst tv_set'
+       -- JSTOLAREK: change this noLoc to fix #141
        ; rep_tc_name <- newFamInstTyConName (noLoc (tyConName fam_tc)) pat_tys'
        ; let axiom = mkSingleCoAxiom Nominal rep_tc_name tvs' fam_tc pat_tys' rhs'
        ; traceTc "mk_deflt_at_instance" (vcat [ ppr fam_tc, ppr rhs_ty

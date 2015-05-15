@@ -9,8 +9,10 @@ module FamInst (
         tcLookupDataFamInst, tcLookupDataFamInst_maybe,
         tcInstNewTyCon_maybe, tcTopNormaliseNewTypeTF_maybe,
         newFamInst,
-        makeInjectivityErrors,
-        conflictInjInstErr, unusedInjectiveVarsErr, tyfamsUsedInjErr
+
+        -- * Injectivity
+        makeInjectivityErrors, conflictInjInstErr, unusedInjectiveVarsErr,
+        tfHeadedErr, bareVariableInRHSErr
     ) where
 
 import HscTypes
@@ -400,9 +402,10 @@ checkForInjectivityConflicts instEnvs famInst
     { let -- see Note [Injectivity annotation check] in FamInstEnv
           errs = makeInjectivityErrors famInst inj fi_tys fi_rhs
                      (lookupFamInstEnvInjectivityConflicts inj instEnvs famInst)
-                     (conflictInjInstErr      makeFamInstsErr)
-                     (tyfamsUsedInjErr        makeFamInstsErr)
-                     (unusedInjectiveVarsErr  makeFamInstsErr)
+                     (conflictInjInstErr     makeFamInstsErr)
+                     (unusedInjectiveVarsErr makeFamInstsErr)
+                     (tfHeadedErr            makeFamInstsErr)
+                     (bareVariableInRHSErr   makeFamInstsErr)
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)
     }
@@ -423,20 +426,23 @@ makeInjectivityErrors
    -> (a ->  Type )                      -- Accessing the RHS of thing
    -> [a]                                -- List of injectivity conflicts
    -> (a -> [a]      -> (SDoc, SrcSpan)) -- Generates errors for inj. conflicts
-   -> (a -> [TyCon]  -> (SDoc, SrcSpan)) -- Ditto for type families in th RHS
    -> (a -> TyVarSet -> (SDoc, SrcSpan)) -- Ditto for unused injective vars
+   -> (a             -> (SDoc, SrcSpan)) -- Ditto for top-level type families
+   -> (a -> [Type]   -> (SDoc, SrcSpan)) -- Ditto for bare variable in RHS
    -> [(SDoc, SrcSpan)]
-makeInjectivityErrors thing inj lhs rhs conflicts conflictErr
-                      tyfamsErr unusedInjVarsErr =
-  let no_conflicts     = null conflicts
-      unused_inj_tvs   = unusedInjTvsInRHS inj (lhs thing) (rhs thing)
-      all_inj_tvs_used = isEmptyVarSet unused_inj_tvs
-      tyfams_used      = tyFamsUsedInRHS (rhs thing)
-      no_tyfams        = null tyfams_used
-      errorUnless p f  = if p then [] else [f]
-   in    errorUnless no_tyfams        (tyfamsErr         thing tyfams_used     )
-      ++ errorUnless no_conflicts     (conflictErr       thing conflicts       )
-      ++ errorUnless all_inj_tvs_used (unusedInjVarsErr  thing unused_inj_tvs  )
+makeInjectivityErrors thing inj lhs rhs conflicts conflictErr unusedInjVarsErr
+    tfHeadedErr bareVarInRHSErr =
+  let are_conflicts  = not $ null conflicts
+      unused_inj_tvs = unusedInjTvsInRHS inj (lhs thing) (rhs thing)
+      inj_tvs_unused = not $ isEmptyVarSet unused_inj_tvs
+      tf_headed      = isTFHeaded (rhs thing)
+      bare_variables = bareTvInRHSViolated (lhs thing) (rhs thing)
+      wrong_bare_rhs = not $ null bare_variables
+      errorIf p f    = if p then [f] else []
+   in    errorIf are_conflicts  (conflictErr      thing conflicts     )
+      ++ errorIf inj_tvs_unused (unusedInjVarsErr thing unused_inj_tvs)
+      ++ errorIf tf_headed      (tfHeadedErr      thing               )
+      ++ errorIf wrong_bare_rhs (bareVarInRHSErr  thing bare_variables)
 
 
 conflictInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
@@ -458,8 +464,7 @@ type InjErrorBuilder a = SDoc -> [a] -> (SDoc, SrcSpan)
 conflictInjInstErr :: InjErrorBuilder a -> a -> [a] -> (SDoc, SrcSpan)
 conflictInjInstErr errorBuilder tyfamEqn conflictingEqns
   | confEqn : _ <- conflictingEqns
-  = errorBuilder (text "Type family equations violate injectivity annotation:")
-                 [confEqn, tyfamEqn]
+  = errorBuilder empty [confEqn, tyfamEqn]
   | otherwise
   = panic "conflictInjInstErr"
 
@@ -469,10 +474,22 @@ unusedInjectiveVarsErr :: InjErrorBuilder a -> a -> TyVarSet -> (SDoc, SrcSpan)
 unusedInjectiveVarsErr errorBuilder tyfamEqn unused_tyvars
   = errorBuilder (mkUnusedInjectiveVarsErr unused_tyvars) [tyfamEqn]
 
--- | Build error message for equation with type families used in the RHS.
-tyfamsUsedInjErr :: InjErrorBuilder a -> a -> [TyCon] -> (SDoc, SrcSpan)
-tyfamsUsedInjErr errorBuilder tyfamEqn tyfams_called
-  = errorBuilder (mkTyfamsUsedInjErr tyfams_called) [tyfamEqn]
+-- | Build error message for equation that has a type family call at the top
+-- level of RHS
+tfHeadedErr :: InjErrorBuilder a -> a -> (SDoc, SrcSpan)
+tfHeadedErr errorBuilder famInst
+  = errorBuilder (text "RHS of injective type family equation cannot" <+>
+                  text "be a type family:") [famInst]
+
+-- | Build error message for equation that has a bare type variable in the RHS
+-- but LHS pattern is not a bare type variable.
+bareVariableInRHSErr :: InjErrorBuilder a -> a -> [Type] -> (SDoc, SrcSpan)
+bareVariableInRHSErr errorBuilder famInst tys
+  = errorBuilder (text "RHS of injective type family equation is a bare" <+>
+                  text "type variable" $$
+                  text "but these LHS type and kind patterns are not bare" <+>
+                  text "variables:" <+> pprQuotedList tys) [famInst]
+
 
 -- | Error message for injective type variables unused in the RHS.
 mkUnusedInjectiveVarsErr :: TyVarSet -> SDoc
@@ -483,33 +500,33 @@ mkUnusedInjectiveVarsErr unused_tyvars =
             = if not (null tyVars)
               then text "Injective type variable" <> plural tyVars <+>
                    pprQuotedList tyVars <+> doOrDoes tyVars <+>
-                   text "not appear in the RHS of type family equation"
+                   text "not appear on injective position."
               else empty
         kiVarsSDoc
             = if not (null kiVars)
-              then text "Kind variable" <> plural kiVars <+>
+              then text "Injective kind variable" <> plural kiVars <+>
                    pprQuotedList kiVars <+> isOrAre kiVars <+>
-                   text "not inferable from the RHS of type family equation"
+                   text "not inferable from the RHS type variables."
               else empty
-    in text "Type family equation violates injectivity annotation." $$
-       tyVarsSDoc $$ kiVarsSDoc
-
--- | Error message for type families used in the RHS of injective type family.
-mkTyfamsUsedInjErr :: [TyCon] -> SDoc
-mkTyfamsUsedInjErr tyfams_called =
-    text "Calling type" <+>
-    irregularPlural tyfams_called (text "family") (text "families") <+>
-    pprQuotedList tyfams_called <+>
-    text "is not allowed in injective type family equation:"
+    in tyVarsSDoc $$ kiVarsSDoc $$ text "In the RHS of type family equation:"
 
 makeFamInstsErr :: SDoc -> [FamInst] -> (SDoc, SrcSpan)
 makeFamInstsErr herald insts
   = ASSERT( not (null insts) )
-    ( hang herald
+    ( hang herald'
          2 (vcat [ pprCoAxBranchHdr (famInstAxiom fi) 0
                  | fi <- sorted ])
     , srcSpan )
  where
+   herald' = text "Type family equation" <> plural insts <+> text "violate" <>
+             thirdPerson insts <+> text "injectivity annotation" <>
+             irregularPlural insts dot colon $$ herald
+             -- Above is an ugly hack.  We want this: "sentence. herald:" (note
+             -- the dot and colon).  But if herald is empty we want "sentence:"
+             -- (note the colon).  We can't test herald for emptiness so we rely
+             -- on the fact that herald is empty only when there is more than
+             -- one element in insts.  If herald is non empty it must end with a
+             -- colon.
    getSpan = getSrcLoc . famInstAxiom
    sorted  = sortWith getSpan insts
    fi1     = head sorted

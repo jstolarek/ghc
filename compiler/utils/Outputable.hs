@@ -33,7 +33,7 @@ module Outputable (
         fsep, fcat,
         hang, punctuate, ppWhen, ppUnless,
         speakNth, speakNTimes, speakN, speakNOf, plural, irregularPlural,
-        isOrAre, doOrDoes,
+        thirdPerson, isOrAre, doOrDoes,
 
         coloured, PprColour, colType, colCoerc, colDataCon,
         colBinder, bold, keyword,
@@ -1001,6 +1001,16 @@ plural _   = char 's'
 irregularPlural :: [a] -> SDoc -> SDoc -> SDoc
 irregularPlural [_] singular _      = singular
 irregularPlural  _  _        plural = plural
+
+-- | Determines the suffix to use in 3rd person singular depending on the length
+-- of a list:
+--
+-- > thirdPerson [] = empty
+-- > thirdPerson ["Hello"] = char 's'
+-- > thirdPerson ["Hello", "World"] = empty
+thirdPerson :: [a] -> SDoc
+thirdPerson [_] = char 's'
+thirdPerson  _  = empty
 
 -- | Determines the form of to be appropriate for the length of a list:
 --

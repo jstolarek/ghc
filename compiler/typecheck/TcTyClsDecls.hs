@@ -836,13 +836,10 @@ The following is an example of associated type defaults:
                data D a
 
                type F a b :: *
-               type F a Z = [a]        -- Default
-               type F a (S n) = F a n  -- Default
+               type F a b = [a]        -- Default
 
-Note that:
-  - We can have more than one default definition for a single associated type,
-    as long as they do not overlap (same rules as for instances)
-  - We can get default definitions only for type families, not data families
+Note that we can get default definitions only for type families, not data
+families.
 -}
 
 tcClassATs :: Name                  -- The class name (not knot-tied)
@@ -1597,7 +1594,6 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
                      if ax1 `isDominatedBy` (replaceBranch prev_branches n ax2)
                      then (acc, n + 1) else (branch : acc, n + 1)
                  InjectivityAccepted -> (acc, n + 1)
-                 InjectivityViolated -> (branch : acc, n + 1)
 
              -- Replace n-th element in the list. Assumes 0-based indexing.
              replaceBranch :: [CoAxBranch] -> Int -> CoAxBranch -> [CoAxBranch]
@@ -1606,8 +1602,9 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
              errs = makeInjectivityErrors cur_branch inj
                       coAxBranchLHS coAxBranchRHS conflicts
                       (conflictInjInstErr      (makeClosedFamInjErr tc))
-                      (tyfamsUsedInjErr        (makeClosedFamInjErr tc))
                       (unusedInjectiveVarsErr  (makeClosedFamInjErr tc))
+                      (tfHeadedErr             (makeClosedFamInjErr tc))
+                      (bareVariableInRHSErr    (makeClosedFamInjErr tc))
          -- add found errors
        ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
        ; return (cur_branch : prev_branches) }
@@ -2340,8 +2337,19 @@ inaccessibleCoAxBranch name kind (CoAxBranch { cab_tvs = tvs
 
 makeClosedFamInjErr :: TyCon -> SDoc -> [CoAxBranch] -> (SDoc, SrcSpan)
 makeClosedFamInjErr tc herald eqns =
-    ( herald $$ vcat (map (pprCoAxBranch tc) eqns)
+    ( herald' $$ vcat (map (pprCoAxBranch tc) eqns)
     , coAxBranchSpan (head eqns) )
+    where
+     herald' = text "Type family equation" <> plural eqns <+> text "violate" <>
+               thirdPerson eqns <+> text "injectivity annotation" <>
+               irregularPlural eqns dot colon $$ herald
+               -- Above is an ugly hack.  We want this: "sentence. herald:"
+               -- (note the dot and colon).  But if herald is empty we want
+               -- "sentence:" (note the colon).  We can't test herald for
+               -- emptiness so we rely on the fact that herald is empty only
+               -- when there is more than one element in insts.  If herald is
+               -- non empty it must end with a colon.
+
 
 badRoleAnnot :: Name -> Role -> Role -> SDoc
 badRoleAnnot var annot inferred

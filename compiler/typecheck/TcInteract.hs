@@ -1436,20 +1436,18 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
     -- we apply `take`.
     take (length . filter id $ injective_args) $
     [ Pair arg (substTy subst ax_arg)
-    | FamInst { fi_tvs = ax_tvs
-              , fi_tys = ax_args
+    | FamInst { fi_tys = ax_args
               , fi_rhs = ax_rhs } <- lookupFamInstEnvByTyCon fam_envs fam_tc
-    , Just subst <- [tcMatchTy (mkVarSet ax_tvs) ax_rhs rhs_ty]
+    , Just subst <- [tcUnifyTyWithTFs False ax_rhs rhs_ty]
     , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
 
   | Just ax <- isClosedTypeFamilyTyCon_maybe fam_tc
   , Just injective_args <- familyTyConInjectivityInfo fam_tc
   = [ Pair arg (substTy subst ax_arg)
-    | branch@CoAxBranch { cab_tvs = ax_tvs
-                 , cab_lhs = ax_args
-                 , cab_rhs = ax_rhs } <- fromBranchList (co_ax_branches ax)
-    , Just subst <- [tcMatchTy (mkVarSet ax_tvs) ax_rhs rhs_ty]
-    , apartnessCheck (substTys subst ax_args) branch
+    | cabr@CoAxBranch { cab_lhs = ax_args
+                      , cab_rhs = ax_rhs } <- fromBranchList (co_ax_branches ax)
+    , Just subst <- [tcUnifyTyWithTFs False ax_rhs rhs_ty]
+    , apartnessCheck (substTys subst ax_args) cabr
     , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
 
   | otherwise

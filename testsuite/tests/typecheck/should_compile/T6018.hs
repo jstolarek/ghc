@@ -21,14 +21,22 @@ type instance I Int  Char Bool = Bool
 type instance I Int  Char Int  = Bool
 type instance I Bool Int  Int  = Int
 
--- this is injective - a type variables mentioned on LHS is not mentioned on RHS
--- but we don't claim injectivity in that argument.
+-- this is injective - a type variable introduced in the LHS is not mentioned on
+-- RHS but we don't claim injectivity in that argument.
 type family J a (b :: k) = r | r -> a
 type instance J Int b = Char
 
 type MaybeSyn a = Maybe a
+newtype MaybeNew a = MaybeNew (Maybe a)
+
+-- make sure we look through type synonyms...
 type family K a = r | r -> a
 type instance K a = MaybeSyn a
+
+-- .. but not newtypes
+type family M a = r | r -> a
+type instance M (Maybe a)    = MaybeSyn a
+type instance M (MaybeNew a) = MaybeNew a
 
 -- Closed type families
 
@@ -57,15 +65,15 @@ type family Bak a = r | r -> a where
      Bak Char = Int
      Bak a    = a
 
--- This is similar, except that the last equation contains concrete type.
+-- This is similar, except that the last equation contains concrete type.  Since
+-- it is overlapped it should be dropped with a warning
 type family Foo a = r | r -> a where
     Foo Int  = Bool
     Foo Bool = Int
     Foo Bool = Bool
 
-
--- this one is a strange beast. Last equation is unreachable but it generates
--- information used by injectivity. So we accept.
+-- this one was tricky in the early implementation of injectivity.  Now it is
+-- identical to the above but we still keep it as a regression test.
 type family Bar a = r | r -> a where
     Bar Int  = Bool
     Bar Bool = Int
@@ -144,7 +152,7 @@ class Hcl a b where
 -- (consistent with behaviour for functional dependencies)
 type family Jx a b = r | r -> a a
 type family Jcx a b = r | r -> a a where
-  Jcx a b = a
+  Jcx a b = a b
 class Jcl a b where
   type Jt a b = r | r -> a a
 
@@ -172,8 +180,44 @@ kproxy_id x = x
 
 kproxy_id_use = kproxy_id 'a'
 
-type family Fa (a :: k) (b :: k) = r | r -> k where
-    Fa a b = a
+-- Now test some awkward cases from The Injectivity Paper.  All should be
+-- accepted.
+type family Gx a
+type family Hx a
+type family Gi a = r | r -> a
+type family Hi a = r | r -> a
 
-type family Fb (a :: k) (b :: k) = r | r -> k where
-    Fb a b = b
+type family F2 a = r | r -> a
+type instance F2 [a]       = [Gi a]
+type instance F2 (Maybe a) = Hi a -> Int
+
+type family F4 a = r | r -> a
+type instance F4 [a]       = (Gx a, a,   a,    a)
+type instance F4 (Maybe a) = (Hx a, a, Int, Bool)
+
+type family G2 a b = r | r -> a b
+type instance G2 a    Bool = (a, a)
+type instance G2 Bool b    = (b, Bool)
+
+type family G6 a = r | r -> a
+type instance G6 [a]  = [Gi a]
+type instance G6 Bool = Int
+
+-- A sole exception to "bare variables in the RHS" rule
+type family Id (a :: k) = (result :: k) | result -> a
+type instance Id a = a
+
+-- This makes sure that over-saturated type family applications at the top-level
+-- are accepted.
+type family IdProxy (a :: k) b = r | r -> a
+type instance IdProxy a b = (Id a) b
+
+-- make sure we look through type synonyms properly
+type IdSyn a = Id a
+type family IdProxySyn (a :: k) b = r | r -> a
+type instance IdProxySyn a b = (IdSyn a) b
+
+-- this has bare variable in the RHS but all LHS varaiables are also bare so it
+-- should be accepted
+type family Fa (a :: k) (b :: k) = (r :: k2) | r -> k
+type instance Fa a b = a

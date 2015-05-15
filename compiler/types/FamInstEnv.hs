@@ -25,8 +25,8 @@ module FamInstEnv (
 
         -- Injectivity
         InjectivityCheckResult(..),
-        lookupFamInstEnvInjectivityConflicts, unusedInjTvsInRHS,
-        tyFamsUsedInRHS, injectiveBranches,
+        lookupFamInstEnvInjectivityConflicts, unusedInjTvsInRHS, isTFHeaded,
+        bareTvInRHSViolated, injectiveBranches,
 
         -- Normalisation
         topNormaliseType, topNormaliseType_maybe,
@@ -42,7 +42,7 @@ module FamInstEnv (
 import InstEnv
 import Unify
 import Type
-import TcType ( orphNamesOfTypes, tcTyFamInsts )
+import TcType ( orphNamesOfTypes )
 import TypeRep
 import TyCon
 import Coercion
@@ -491,16 +491,13 @@ data InjectivityCheckResult
    = InjectivityAccepted
     -- ^ Either RHSs are distinct or unification of RHSs leads to unification of
     -- LHSs
-   | InjectivityViolated
-    -- ^ It is not possible to determine whether RHS are distinct or not.
-    -- Happens when infinite types could lead to unification.
-    -- See Note [Fine-grained unification]
    | InjectivityUnified CoAxBranch CoAxBranch
     -- ^ RHSs unify but LHSs don't unify under that substitution.  Relevant for
     -- closed type families where equation after unification might be
     -- overlpapped (in which case it is OK if they don't unify).  Constructor
     -- stores axioms after unification.
 
+-- JSTOLAREK: Update source code documentation
 -- | Check whether two type family axioms don't violate injectivity annotation.
 -- Note that if any of the RHSs contains a type family this function will lie by
 -- reporting InjectivityAccepted. See code comments for further details.
@@ -512,13 +509,13 @@ injectiveBranches injectivity
   -- See Note [Injectivity annotation check]. This function implements first
   -- check described there.
   = let getInjArgs  = filterByList injectivity
-    in case tcUnifyTysFG instanceBindFun [rhs1] [rhs2] of
-       SurelyApart -> InjectivityAccepted -- RHS are different, so equations are
-                                          -- injective.  Note however that this
-                                          -- is not true in the presence of type
-                                          -- families.  See Note [Injectivity
-                                          -- annotation check]
-       Unifiable subst -> -- RHS unify under a substitution
+    in case tcUnifyTyWithTFs True rhs1 rhs2 of -- True = two-way pre-unification
+       Nothing -> InjectivityAccepted -- RHS are different, so equations are
+                                      -- injective.  Note however that this
+                                      -- is not true in the presence of type
+                                      -- families.  See Note [Injectivity
+                                      -- annotation check]
+       Just subst -> -- RHS unify under a substitution
         let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
             lhs2Subst = Type.substTys subst (getInjArgs lhs2)
         -- If LHSs are equal under the substitution used for RHSs then this pair
@@ -532,7 +529,6 @@ injectiveBranches injectivity
                                          , cab_rhs = Type.substTy  subst rhs1 })
                                    ( ax2 { cab_lhs = Type.substTys subst lhs2
                                          , cab_rhs = Type.substTy  subst rhs2 })
-       MaybeApart _ -> InjectivityViolated
 
 -- takes a CoAxiom with unknown branch incompatibilities and computes
 -- the compatibilities
@@ -708,6 +704,10 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
     noSubst = panic "lookupFamInstEnvConflicts noSubst"
     new_branch = coAxiomSingleBranch new_axiom
 
+--------------------------------------------------------------------------------
+--                 Type family injectivity checking bits                      --
+--------------------------------------------------------------------------------
+
 -- Note [Injectivity annotation check]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
@@ -821,8 +821,8 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 lookupFamInstEnvInjectivityConflicts
     :: [Bool]         -- injectivity annotation for this type family instance
                       -- INVARIANT: list contains at least one True value
-    -> FamInstEnvs    -- all type instances seens so far
-    -> FamInst        -- new type instance that we're checking
+    ->  FamInstEnvs   -- all type instances seens so far
+    ->  FamInst       -- new type instance that we're checking
     -> [FamInst]      -- conflicting instance delcarations
 lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
                              fam_inst@(FamInst { fi_axiom = new_axiom })
@@ -834,7 +834,7 @@ lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
       new_branch = coAxiomSingleBranch new_axiom
 
       -- filtering function used by `lookup_inj_fam_conflicts` to check whether
-      -- a pair of equations is compatible with injectivity annotation.
+      -- a pair of equations conflicts with the injectivity annotation.
       isInjConflict (FamInst { fi_axiom = old_axiom })
           | InjectivityAccepted <-
             injectiveBranches injList (coAxiomSingleBranch old_axiom) new_branch
@@ -848,29 +848,70 @@ lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
 
 
 -- | Return a list of type variables that the function is injective in and that
--- are not used in the RHS of family instance declaration
+-- do not appear on injective positions in the RHS of a family instance
+-- declaration.
 unusedInjTvsInRHS :: [Bool] -> [Type] -> Type -> TyVarSet
 -- INVARIANT: [Bool] list contains at least one True value
+-- See Note [Injectivity annotation check]. This function implements second
+-- check described there.
 unusedInjTvsInRHS injList lhs rhs =
-    -- See Note [Injectivity annotation check]. This function implements second
-    -- check described there.
-    let -- set of type and kind variables in which type family is injective
-        injVars = tyVarsOfTypes (filterByList injList lhs)
-        -- set of type variables appearing on the RHS (if a type variable
-        -- appears its associated kind variable is asuumed to also appear in the
-        -- RHS)
-        rhsVars = closeOverKinds $ tyVarsOfType rhs
-    in  -- return all injective variables not mentioned in the RHS
-        injVars `minusVarSet` rhsVars
+  -- return all injective variables not mentioned on injective positions in the
+  -- RHS
+  injLHSVars `minusVarSet` injRhsVars
+    where
+      -- set of type and kind variables in which type family is injective
+      injLHSVars = tyVarsOfTypes (filterByList injList lhs)
 
+      -- set of type variables appearing in the RHS on an injective position.
+      -- For all returned variables we assume their associated kind variables
+      -- also appear in the RHS.
+      injRhsVars = closeOverKinds $ collectInjVars rhs
 
--- | Return a list of type families used in the RHS of family instance
--- declaration.
-tyFamsUsedInRHS :: Type -> [TyCon]
-tyFamsUsedInRHS rhs =
-    -- See Note [Injectivity annotation check]. This function implements third
-    -- check described there.
-    map fst (tcTyFamInsts rhs)
+      -- JSTOLAREK: document this (mention that it could be achieved by
+      -- comparing equation with itself but we do it separately to get better
+      -- error messages).
+      collectInjVars :: Type -> VarSet
+      collectInjVars ty | Just (ty1, ty2) <- splitAppTy_maybe ty
+        = collectInjVars ty1 `unionVarSet` collectInjVars ty2
+      collectInjVars (TyVarTy v)
+        = unitVarSet v
+      collectInjVars (TyConApp tc tys)
+        | isTypeFamilyTyCon tc = maybe emptyVarSet (collectInjTFVars tys)
+                                       (familyTyConInjectivityInfo tc)
+        | otherwise            = mapUnionVarSet collectInjVars tys
+      collectInjVars (LitTy {})
+        = emptyVarSet
+      collectInjVars (FunTy arg res)
+        = collectInjVars arg `unionVarSet` collectInjVars res
+      collectInjVars (AppTy fun arg)
+        = collectInjVars fun `unionVarSet` collectInjVars arg
+      -- no forall types in the RHS of a type family
+      collectInjVars (ForAllTy _ _)    =
+          panic "unusedInjTvsInRHS.collectInjVars"
+
+      collectInjTFVars :: [Type] -> [Bool] -> VarSet
+      collectInjTFVars tys injList =
+          mapUnionVarSet collectInjVars (filterByList injList tys)
+
+-- | Is type headed by a type family application?
+isTFHeaded :: Type -> Bool
+isTFHeaded ty | Just ty' <- tcView ty
+              = isTFHeaded ty'
+isTFHeaded ty | (TyConApp tc args) <- ty
+              , isTypeFamilyTyCon tc
+              = tyConArity tc == length args
+isTFHeaded _  = False
+
+-- | If a RHS is a bare type variable return a set of LHS patterns that are not
+-- bare type variables.
+bareTvInRHSViolated :: [Type] -> Type -> [Type]
+bareTvInRHSViolated pats rhs | isTyVarTy rhs
+   = filter (not . isTyVarTy) pats
+bareTvInRHSViolated _ _ = []
+
+--------------------------------------------------------------------------------
+--                    Type family overlap checking bits                       --
+--------------------------------------------------------------------------------
 
 {-
 Note [Family instance overlap conflicts]

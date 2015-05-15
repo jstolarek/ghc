@@ -406,7 +406,7 @@ instance NamedThing TyThing where       -- Can't put this with the type
 -- the in-scope set is not relevant
 --
 -- 3. The substitution is only applied ONCE! This is because
--- in general such application will not reached a fixed point.
+-- in general such application will not reach a fixed point.
 data TvSubst
   = TvSubst InScopeSet  -- The in-scope type and kind variables
             TvSubstEnv  -- Substitutes both type and kind variables
