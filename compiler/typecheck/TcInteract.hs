@@ -39,6 +39,7 @@ import Outputable
 import TcRnTypes
 import TcSMonad
 import Bag
+import MonadUtils ( concatMapM )
 
 import Data.List( partition, foldl', deleteFirstsBy )
 import SrcLoc
@@ -1417,41 +1418,64 @@ improveTopFunEqs :: CtLoc -> FamInstEnvs
                  -> TyCon -> [TcType] -> TcTyVar -> TcS ()
 improveTopFunEqs loc fam_envs fam_tc args fsk
   = do { inert_eqs <- getInertEqs
-       ; let eqns = improve_top_fun_eqs fam_envs fam_tc args
-                                        (lookupFlattenTyVar inert_eqs fsk)
+       ; eqns <- improve_top_fun_eqs fam_envs fam_tc args
+                                    (lookupFlattenTyVar inert_eqs fsk)
        ; mapM_ (unifyDerived loc Nominal) eqns }
 
 improve_top_fun_eqs :: FamInstEnvs
                     -> TyCon -> [TcType] -> TcType
-                    -> [Eqn]
+                    -> TcS [Eqn]
 improve_top_fun_eqs fam_envs fam_tc args rhs_ty
   | Just ops <- isBuiltInSynFamTyCon_maybe fam_tc
-  = sfInteractTop ops args rhs_ty
+  = return (sfInteractTop ops args rhs_ty)
 
   -- see Note [Type inference for type families with injectivity]
   | isOpenTypeFamilyTyCon fam_tc
   , Just injective_args <- familyTyConInjectivityInfo fam_tc
   = -- it is possible to have several compatible equations in an open type
-    -- family but we only want to derive equalities from one such equation. Thus
-    -- we apply `take`.
-    take (length . filter id $ injective_args) $
-    [ Pair arg (substTy subst ax_arg)
-    | FamInst { fi_tys = ax_args
-              , fi_rhs = ax_rhs } <- lookupFamInstEnvByTyCon fam_envs fam_tc
-    , Just subst <- [tcUnifyTyWithTFs False ax_rhs rhs_ty]
-    , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
+    -- family but we only want to derive equalities from one such equation.
+    concatMapM (injImproveEqns injective_args) (take 1 $
+      buildImprovementData (lookupFamInstEnvByTyCon fam_envs fam_tc)
+                           fi_tys fi_rhs (const Nothing))
 
   | Just ax <- isClosedTypeFamilyTyCon_maybe fam_tc
   , Just injective_args <- familyTyConInjectivityInfo fam_tc
-  = [ Pair arg (substTy subst ax_arg)
-    | cabr@CoAxBranch { cab_lhs = ax_args
-                      , cab_rhs = ax_rhs } <- fromBranchList (co_ax_branches ax)
-    , Just subst <- [tcUnifyTyWithTFs False ax_rhs rhs_ty]
-    , apartnessCheck (substTys subst ax_args) cabr
-    , (arg, ax_arg, True) <- zip3 args ax_args injective_args ]
+  = concatMapM (injImproveEqns injective_args) $
+      buildImprovementData (fromBranchList (co_ax_branches ax))
+                           cab_lhs cab_rhs Just
 
   | otherwise
-  = []
+  = return []
+     where
+      buildImprovementData
+          :: [a]                     -- axioms for a TF (FamInst or CoAxBranch)
+          -> (a -> [Type])           -- get LHS of an axiom
+          -> (a -> Type)             -- get RHS of an axiom
+          -> (a -> Maybe CoAxBranch) -- Just => apartness check required
+          -> [( [Type], [Type], TvSubst, TyVarSet
+              , Maybe CoAxBranch )]
+      buildImprovementData axioms axiomLHS axiomRHS wrap =
+          [ (args, ax_args, subst, unsubstTvs, wrap axiom)
+          | axiom <- axioms
+          , let ax_args = axiomLHS axiom
+          , let ax_rhs  = axiomRHS axiom
+          , Just subst <- [tcUnifyTyWithTFs False ax_rhs rhs_ty]
+          , let tvs           = tyVarsOfTypes ax_args
+                notInSubst tv = not (tv `elemVarEnv` getTvSubstEnv subst)
+                unsubstTvs    = filterVarSet notInSubst tvs ]
+
+      injImproveEqns :: [Bool]
+                     -> ([Type], [Type], TvSubst, TyVarSet, Maybe CoAxBranch)
+                     -> TcS [Eqn]
+      injImproveEqns inj_args (args, ax_args, theta, unsubstTvs, cabr) = do
+        (theta', _) <- instFlexiTcS (varSetElems unsubstTvs)
+        let subst = theta `unionTvSubst` theta'
+        return [ Pair arg (substTy subst ax_arg)
+               | case cabr of
+                  Just cabr' -> apartnessCheck (substTys subst ax_args) cabr'
+                  _          -> True
+               , (arg, ax_arg, True) <- zip3 args ax_args inj_args ]
+
 
 shortCutReduction :: CtEvidence -> TcTyVar -> TcCoercion
                   -> TyCon -> [TcType] -> TcS (StopOrContinue Ct)

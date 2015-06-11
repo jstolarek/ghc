@@ -269,7 +269,7 @@ in TcSMonad, which has this example:
 Suppose we are trying to solve
   [G] d1 : Ord a
   [W] d2 : C [a]
-If we (bogusly) added the superclass of d2 as Gievn we'd have
+If we (bogusly) added the superclass of d2 as Given we'd have
   [G] d1 : Ord a
   [W] d2 : C [a]
   [G] d3 : Ord [a]   -- Superclass of d2, bogus
@@ -279,7 +279,7 @@ Then we'll use the instance decl to give
   [G] d3 : Ord [a]   -- Superclass of d2, bogus
   [W] d4: Ord [a]
 
-ANd now we could bogusly solve d4 from d3.
+And now we could bogusly solve d4 from d3.
 
 
 Note [Add superclasses only during canonicalisation]

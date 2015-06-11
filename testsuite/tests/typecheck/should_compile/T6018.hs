@@ -185,6 +185,7 @@ kproxy_id_use = kproxy_id 'a'
 type family Gx a
 type family Hx a
 type family Gi a = r | r -> a
+type instance Gi Int = Char
 type family Hi a = r | r -> a
 
 type family F2 a = r | r -> a
@@ -202,6 +203,12 @@ type instance G2 Bool b    = (b, Bool)
 type family G6 a = r | r -> a
 type instance G6 [a]  = [Gi a]
 type instance G6 Bool = Int
+
+g6_id :: G6 a -> G6 a
+g6_id x = x
+
+g6_use :: [Char]
+g6_use = g6_id "foo"
 
 -- A sole exception to "bare variables in the RHS" rule
 type family Id (a :: k) = (result :: k) | result -> a

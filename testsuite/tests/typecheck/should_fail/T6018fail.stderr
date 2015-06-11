@@ -14,12 +14,6 @@ T6018Cfail.hs:8:15:
       T6018Bfail.H Char Bool Int -- Defined at T6018Cfail.hs:8:15
       T6018Bfail.H Bool Int Char -- Defined at T6018Dfail.hs:7:15
 
-T6018fail.hs:1:1:
-    Type family equation violates injectivity annotation.
-    RHS of injective type family equation is a bare type variable
-    but these LHS type and kind patterns are not bare variables: ‘*’, ‘Char’
-      FC Char a -- Defined in ‘T6018fail’
-
 T6018fail.hs:12:15:
     Type family equations violate injectivity annotation:
       F Char Bool Int -- Defined at T6018fail.hs:12:15
@@ -146,4 +140,10 @@ T6018fail.hs:118:15:
 T6018fail.hs:125:10:
     Type family equations violate injectivity annotation:
       FC Int Char -- Defined at T6018fail.hs:125:10
-      FC Int Bool -- Defined in ‘T6018fail’
+      FC Int Bool -- Defined at T6018fail.hs:129:1
+
+T6018fail.hs:134:1:
+    Type family equation violates injectivity annotation.
+    RHS of injective type family equation is a bare type variable
+    but these LHS type and kind patterns are not bare variables: ‘*’, ‘Char’
+      FC Char a -- Defined at T6018fail.hs:134:1
