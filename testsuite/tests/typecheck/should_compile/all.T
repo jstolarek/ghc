@@ -358,7 +358,7 @@ test('tc263',
     extra_clean(['Tc263_Help.o','Tc263_Help.hi']),
     multimod_compile, ['tc263','-v0'])
 test('tc264', normal, multimod_compile, ['tc264.hsig', '-sig-of "ShouldCompile is base:Data.STRef"'])
-test('tc265', [timeout_multiplier(0.01)], compile, [''])
+test('tc265', compile_timeout_multiplier(0.01), compile, [''])
 
 test('GivenOverlapping', normal, compile, [''])
 test('GivenTypeSynonym', normal, compile, [''])
