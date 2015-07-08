@@ -1452,10 +1452,14 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
           -> (a -> [Type])           -- get LHS of an axiom
           -> (a -> Type)             -- get RHS of an axiom
           -> (a -> Maybe CoAxBranch) -- Just => apartness check required
-          -> [( [Type], [Type], TvSubst, TyVarSet
-              , Maybe CoAxBranch )]
+          -> [( [Type], TvSubst, TyVarSet, Maybe CoAxBranch )]
+             -- Result:
+             -- ( [arguments of a matching axiom]
+             -- , RHS-unifying substitution
+             -- , axiom variables without substitution
+             -- , Maybe matching axiom [Nothing - open TF, Just - closed TF ] )
       buildImprovementData axioms axiomLHS axiomRHS wrap =
-          [ (args, ax_args, subst, unsubstTvs, wrap axiom)
+          [ (ax_args, subst, unsubstTvs, wrap axiom)
           | axiom <- axioms
           , let ax_args = axiomLHS axiom
           , let ax_rhs  = axiomRHS axiom
@@ -1465,9 +1469,9 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
                 unsubstTvs    = filterVarSet notInSubst tvs ]
 
       injImproveEqns :: [Bool]
-                     -> ([Type], [Type], TvSubst, TyVarSet, Maybe CoAxBranch)
+                     -> ([Type], TvSubst, TyVarSet, Maybe CoAxBranch)
                      -> TcS [Eqn]
-      injImproveEqns inj_args (args, ax_args, theta, unsubstTvs, cabr) = do
+      injImproveEqns inj_args (ax_args, theta, unsubstTvs, cabr) = do
         (theta', _) <- instFlexiTcS (varSetElems unsubstTvs)
         let subst = theta `unionTvSubst` theta'
         return [ Pair arg (substTy subst ax_arg)
