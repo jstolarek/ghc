@@ -309,11 +309,11 @@ repSynDecl tc bndrs ty
        ; repTySyn tc bndrs ty1 }
 
 repFamilyDecl :: LFamilyDecl Name -> DsM (SrcSpan, Core TH.DecQ)
-repFamilyDecl (L loc (FamilyDecl { fdInfo      = info,
-                                   fdLName     = tc,
-                                   fdTyVars    = tvs,
-                                   fdResultSig = L _ resultSig,
-                                   fdInjectivityAnn = injectivity }))
+repFamilyDecl decl@(L loc (FamilyDecl { fdInfo      = info,
+                                        fdLName     = tc,
+                                        fdTyVars    = tvs,
+                                        fdResultSig = L _ resultSig,
+                                        fdInjectivityAnn = injectivity }))
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
        ; let mkHsQTvs tvs = HsQTvs { hsq_kvs = [], hsq_tvs = tvs }
              resTyVar = case resultSig of

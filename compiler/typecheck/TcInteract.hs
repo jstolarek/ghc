@@ -32,6 +32,7 @@ import FunDeps
 import FamInst
 import FamInstEnv
 import Inst( tyVarsOfCt )
+import Unify ( tcUnifyTyWithTFs )
 
 import TcEvidence
 import Outputable
@@ -1387,7 +1388,8 @@ reduce_top_fun_eq old_ev fsk ax_co rhs_ty
        ; stopWith old_ev "Fun/Top (given)" }
 
   | not (fsk `elemVarSet` tyVarsOfType rhs_ty)
-  = do { dischargeFmv (ctEvId old_ev) fsk ax_co rhs_ty
+    -- JSTOLAREK: Voodoo coding here on the second arg to dischargeFmv
+  = do { dischargeFmv old_ev fsk ax_co rhs_ty
        ; traceTcS "doTopReactFunEq" $
          vcat [ text "old_ev:" <+> ppr old_ev
               , nest 2 (text ":=") <+> ppr ax_co ]
@@ -1404,7 +1406,8 @@ reduce_top_fun_eq old_ev fsk ax_co rhs_ty
             --       ev :: alpha ~ rhs_ty
             --     ufsk := alpha
             -- final_co :: fam_tc args ~ alpha
-       ; dischargeFmv (ctEvId old_ev) fsk final_co alpha_ty
+    -- JSTOLAREK: Voodoo coding here on the second arg to dischargeFmv
+       ; dischargeFmv old_ev fsk final_co alpha_ty
        ; traceTcS "doTopReactFunEq (occurs)" $
          vcat [ text "old_ev:" <+> ppr old_ev
               , nest 2 (text ":=") <+> ppr final_co
@@ -1438,7 +1441,7 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
       buildImprovementData (lookupFamInstEnvByTyCon fam_envs fam_tc)
                            fi_tys fi_rhs (const Nothing))
 
-  | Just ax <- isClosedTypeFamilyTyCon_maybe fam_tc
+  | Just ax <- isClosedSynFamilyTyConWithAxiom_maybe fam_tc
   , Just injective_args <- familyTyConInjectivityInfo fam_tc
   = concatMapM (injImproveEqns injective_args) $
       buildImprovementData (fromBranchList (co_ax_branches ax))

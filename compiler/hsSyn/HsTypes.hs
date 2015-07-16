@@ -78,7 +78,6 @@ import Data.Maybe ( fromMaybe )
 #if __GLASGOW_HASKELL__ < 709
 import Data.Monoid hiding ((<>))
 #endif
-import qualified Data.Set as Set
 
 {-
 ************************************************************************

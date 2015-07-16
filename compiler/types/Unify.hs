@@ -29,6 +29,7 @@ import Kind
 import Type
 import TyCon
 import TypeRep
+import Util ( filterByList )
 
 import Control.Monad (liftM, foldM, ap)
 #if __GLASGOW_HASKELL__ < 709

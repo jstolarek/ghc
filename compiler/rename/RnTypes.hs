@@ -13,8 +13,7 @@ module RnTypes (
         rnHsKind, rnLHsKind, rnLHsMaybeKind,
         rnHsSigType, rnLHsInstType, rnConDeclFields,
         newTyVarNameRn, rnLHsTypeWithWildCards,
-        rnHsSigTypeWithWildCards,
-        rnLTyVar, newTyVarNameRn,
+        rnHsSigTypeWithWildCards, rnLTyVar,
 
         -- Precence related stuff
         mkOpAppRn, mkNegAppRn, mkOpFormRn, mkConOpPatRn,

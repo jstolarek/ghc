@@ -8,7 +8,7 @@ import System.IO
 type family Foo a = r | r -> a where
   Foo x = x
 
-type family Baz (a :: k) = r | r -> a
+type family Baz (a :: k) = (r :: k) | r -> a
 type instance Baz x = x
 
 $( do FamilyI foo@(ClosedTypeFamilyD _ tvbs1 res1 m_kind1 eqns1)

@@ -293,7 +293,14 @@ cvtDec (TySynInstD tc eqn)
             { tfid_inst = TyFamInstDecl { tfid_eqn = eqn'
                                         , tfid_fvs = placeHolderNames } } }
 
-cvtDec (ClosedTypeFamilyD tc tyvars mkind eqns)
+cvtDec (OpenTypeFamilyD tc tvs result injectivity)
+  = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tvs
+       ; result' <- cvtFamilyResultSig result
+       ; injectivity' <- traverse cvtInjectivityAnnotation injectivity
+       ; returnJustL $ TyClD $ FamDecl $
+         FamilyDecl OpenTypeFamily tc' tvs' result' injectivity' }
+
+cvtDec (ClosedTypeFamilyD tc tyvars result injectivity eqns)
   = do { (_, tc', tvs') <- cvt_tycl_hdr [] tc tyvars
        ; result' <- cvtFamilyResultSig result
        ; eqns' <- mapM (cvtTySynEqn tc') eqns

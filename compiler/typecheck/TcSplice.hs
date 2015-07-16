@@ -1121,8 +1121,12 @@ reifyTyCon tc
                              (TH.OpenTypeFamilyD (reifyName tc) tvs'
                                                  resultSig injectivity)
                              instances) }
-         else do { let Just ax = isClosedTypeFamilyTyCon_maybe tc
-                 ; eqns <- brListMapM reifyAxBranch $ coAxiomBranches ax
+         -- JSTOLAREK: T10306 and T8028 crashe here, because irrefutable pattern
+         -- fails
+         else do { eqns <-
+                     case isClosedSynFamilyTyConWithAxiom_maybe tc of
+                       Just ax -> brListMapM reifyAxBranch $ coAxiomBranches ax
+                       Nothing -> return []
                  ; return (TH.FamilyI
                       (TH.ClosedTypeFamilyD (reifyName tc) tvs' resultSig
                                             injectivity eqns)
@@ -1370,21 +1374,6 @@ reifyCxt   = mapM reifyPred
 
 reifyFunDep :: ([TyVar], [TyVar]) -> TH.FunDep
 reifyFunDep (xs, ys) = TH.FunDep (map reifyName xs) (map reifyName ys)
-
-reifyFamFlavour :: TyCon -> TcM (Either TH.FamFlavour [TH.TySynEqn])
-reifyFamFlavour tc
-  | isOpenTypeFamilyTyCon tc = return $ Left TH.TypeFam
-  | isDataFamilyTyCon     tc = return $ Left TH.DataFam
-  | Just flav <- famTyConFlav_maybe tc = case flav of
-      OpenSynFamilyTyCon           -> return $ Left TH.TypeFam
-      AbstractClosedSynFamilyTyCon -> return $ Right []
-      BuiltInSynFamTyCon _         -> return $ Right []
-      ClosedSynFamilyTyCon Nothing -> return $ Right []
-      ClosedSynFamilyTyCon (Just ax)
-        -> do { eqns <- brListMapM reifyAxBranch $ coAxiomBranches ax
-              ; return $ Right eqns }
-  | otherwise
-  = panic "TcSplice.reifyFamFlavour: not a type family"
 
 reifyTyVars :: [TyVar]
             -> TcM [TH.TyVarBndr]

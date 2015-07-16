@@ -12,6 +12,8 @@ module FamInst (
 
         -- * Injectivity
         makeInjectivityErrors, conflictInjInstErr, unusedInjectiveVarsErr,
+        injectivityErrorHerald,
+
         tfHeadedErr, bareVariableInRHSErr
     ) where
 
@@ -460,11 +462,25 @@ conflictInstErr fam_inst conflictingMatch
 -- type families.
 type InjErrorBuilder a = SDoc -> [a] -> (SDoc, SrcSpan)
 
+injectivityErrorHerald :: Bool -> SDoc
+injectivityErrorHerald isSingular =
+  text "Type family equation" <> s isSingular <+> text "violate" <>
+  s (not isSingular) <+> text "injectivity annotation" <>
+  if isSingular then dot else colon
+  -- Above is an ugly hack.  We want this: "sentence. herald:" (note the dot and
+  -- colon).  But if herald is empty we want "sentence:" (note the colon).  We
+  -- can't test herald for emptiness so we rely on the fact that herald is empty
+  -- only when isSingular is False.  If herald is non empty it must end with a
+  -- colon.
+    where
+      s False = text "s"
+      s True  = empty
+
 -- | Build error message for equations violating injectivity annotation.
 conflictInjInstErr :: InjErrorBuilder a -> a -> [a] -> (SDoc, SrcSpan)
 conflictInjInstErr errorBuilder tyfamEqn conflictingEqns
   | confEqn : _ <- conflictingEqns
-  = errorBuilder empty [confEqn, tyfamEqn]
+  = errorBuilder (injectivityErrorHerald False) [confEqn, tyfamEqn]
   | otherwise
   = panic "conflictInjInstErr"
 
@@ -472,20 +488,23 @@ conflictInjInstErr errorBuilder tyfamEqn conflictingEqns
 -- the RHS.
 unusedInjectiveVarsErr :: InjErrorBuilder a -> a -> TyVarSet -> (SDoc, SrcSpan)
 unusedInjectiveVarsErr errorBuilder tyfamEqn unused_tyvars
-  = errorBuilder (mkUnusedInjectiveVarsErr unused_tyvars) [tyfamEqn]
+  = errorBuilder (injectivityErrorHerald True $$
+                  mkUnusedInjectiveVarsErr unused_tyvars) [tyfamEqn]
 
 -- | Build error message for equation that has a type family call at the top
 -- level of RHS
 tfHeadedErr :: InjErrorBuilder a -> a -> (SDoc, SrcSpan)
 tfHeadedErr errorBuilder famInst
-  = errorBuilder (text "RHS of injective type family equation cannot" <+>
+  = errorBuilder (injectivityErrorHerald True $$
+                  text "RHS of injective type family equation cannot" <+>
                   text "be a type family:") [famInst]
 
 -- | Build error message for equation that has a bare type variable in the RHS
 -- but LHS pattern is not a bare type variable.
 bareVariableInRHSErr :: InjErrorBuilder a -> a -> [Type] -> (SDoc, SrcSpan)
 bareVariableInRHSErr errorBuilder famInst tys
-  = errorBuilder (text "RHS of injective type family equation is a bare" <+>
+  = errorBuilder (injectivityErrorHerald True $$
+                  text "RHS of injective type family equation is a bare" <+>
                   text "type variable" $$
                   text "but these LHS type and kind patterns are not bare" <+>
                   text "variables:" <+> pprQuotedList tys) [famInst]
@@ -513,20 +532,11 @@ mkUnusedInjectiveVarsErr unused_tyvars =
 makeFamInstsErr :: SDoc -> [FamInst] -> (SDoc, SrcSpan)
 makeFamInstsErr herald insts
   = ASSERT( not (null insts) )
-    ( hang herald'
+    ( hang herald
          2 (vcat [ pprCoAxBranchHdr (famInstAxiom fi) 0
                  | fi <- sorted ])
     , srcSpan )
  where
-   herald' = text "Type family equation" <> plural insts <+> text "violate" <>
-             thirdPerson insts <+> text "injectivity annotation" <>
-             irregularPlural insts dot colon $$ herald
-             -- Above is an ugly hack.  We want this: "sentence. herald:" (note
-             -- the dot and colon).  But if herald is empty we want "sentence:"
-             -- (note the colon).  We can't test herald for emptiness so we rely
-             -- on the fact that herald is empty only when there is more than
-             -- one element in insts.  If herald is non empty it must end with a
-             -- colon.
    getSpan = getSrcLoc . famInstAxiom
    sorted  = sortWith getSpan insts
    fi1     = head sorted

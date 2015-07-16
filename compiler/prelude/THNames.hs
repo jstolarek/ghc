@@ -153,7 +153,7 @@ qqFun  = mk_known_key_name OccName.varName  qqLib
 qTyConName, nameTyConName, fieldExpTyConName, patTyConName,
     fieldPatTyConName, expTyConName, decTyConName, typeTyConName,
     tyVarBndrTyConName, matchTyConName, clauseTyConName, funDepTyConName,
-    predTyConName, tExpTyConName, injAnnTyConName, kindTyConName, :: Name
+    predTyConName, tExpTyConName, injAnnTyConName, kindTyConName :: Name
 qTyConName        = thTc (fsLit "Q")              qTyConKey
 nameTyConName     = thTc (fsLit "Name")           nameTyConKey
 fieldExpTyConName = thTc (fsLit "FieldExp")       fieldExpTyConKey
@@ -299,7 +299,7 @@ funDName, valDName, dataDName, newtypeDName, tySynDName, classDName,
     pragSpecInlDName, pragSpecInstDName, pragRuleDName, pragAnnDName,
     standaloneDerivDName, defaultSigDName,
     dataInstDName, newtypeInstDName, tySynInstDName,
-    closedTypeFamilyKindDName, closedTypeFamilyNoKindDName,
+    dataFamilyDName, openTypeFamilyDName, closedTypeFamilyDName,
     infixLDName, infixRDName, infixNDName, roleAnnotDName :: Name
 funDName             = libFun (fsLit "funD")              funDIdKey
 valDName             = libFun (fsLit "valD")              valDIdKey

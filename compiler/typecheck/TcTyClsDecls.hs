@@ -706,9 +706,10 @@ tcFamDecl1 parent
          -- If Nothing, this is an abstract family in a hs-boot file;
          -- but eqns might be empty in the Just case as well
        ; case mb_eqns of
-           Nothing   -> do { tycon <- buildFamilyTyCon tc_name tvs'
-                                        AbstractClosedSynFamilyTyCon kind parent
-                           ; return [ATyCon tycon] }
+           Nothing   ->
+               return [ATyCon $ buildFamilyTyCon tc_name tvs' Nothing
+                                     AbstractClosedSynFamilyTyCon kind parent
+                                     Nothing ]
            Just eqns -> do {
 
          -- Process the equations, creating CoAxBranches
@@ -740,7 +741,7 @@ tcFamDecl1 parent
               | otherwise = Just $ mkBranchedCoAxiom co_ax_name fam_tc branches'
 
          -- now, finally, build the TyCon
-       ; tycon <- buildFamilyTyCon tc_name tvs' (resultVariableName sig)
+       ; let tycon = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                       (ClosedSynFamilyTyCon mb_co_ax) kind parent
                       (getInjectivityList tvs' inj)
        ; return $ ATyCon tycon : maybeToList (fmap ACoAxiom mb_co_ax) } }
@@ -2337,19 +2338,8 @@ inaccessibleCoAxBranch name kind (CoAxBranch { cab_tvs = tvs
 
 makeClosedFamInjErr :: TyCon -> SDoc -> [CoAxBranch] -> (SDoc, SrcSpan)
 makeClosedFamInjErr tc herald eqns =
-    ( herald' $$ vcat (map (pprCoAxBranch tc) eqns)
+    ( herald $$ vcat (map (pprCoAxBranch tc) eqns)
     , coAxBranchSpan (head eqns) )
-    where
-     herald' = text "Type family equation" <> plural eqns <+> text "violate" <>
-               thirdPerson eqns <+> text "injectivity annotation" <>
-               irregularPlural eqns dot colon $$ herald
-               -- Above is an ugly hack.  We want this: "sentence. herald:"
-               -- (note the dot and colon).  But if herald is empty we want
-               -- "sentence:" (note the colon).  We can't test herald for
-               -- emptiness so we rely on the fact that herald is empty only
-               -- when there is more than one element in insts.  If herald is
-               -- non empty it must end with a colon.
-
 
 badRoleAnnot :: Name -> Role -> Role -> SDoc
 badRoleAnnot var annot inferred
