@@ -1257,7 +1257,7 @@ kickOutRewritable :: CtFlavourRole  -- Flavour and role of the equality that is
    -- optimistically. But when we lookup we have to
    -- take the substitution into account
 kickOutRewritable new_fr new_tv
-                  ics@(IC { inert_eqs      = tv_eqs
+                      (IC { inert_eqs      = tv_eqs
                           , inert_dicts    = dictmap
                           , inert_safehask = safehask
                           , inert_funeqs   = funeqmap
@@ -1265,12 +1265,6 @@ kickOutRewritable new_fr new_tv
                           , inert_insols   = insols
                           , inert_count    = n
                           , inert_model    = model })
-  | not (new_fr `eqCanRewriteFR` new_fr)
-  = (emptyWorkList, ics)  -- If new_flavour can't rewrite itself, it can't rewrite
-                          -- anything else, so no need to kick out anything
-                          -- This is a common case: wanteds can't rewrite wanteds
-
-  | otherwise
   = (kicked_out, inert_cans_in)
   where
     inert_cans_in = IC { inert_eqs      = tv_eqs_in
@@ -1291,7 +1285,7 @@ kickOutRewritable new_fr new_tv
                     , wl_implics = emptyBag }
 
     (tv_eqs_out, tv_eqs_in) = foldVarEnv kick_out_eqs ([], emptyVarEnv) tv_eqs
-    (feqs_out,   feqs_in)   = partitionFunEqs  kick_out_ct funeqmap
+    (feqs_out,   feqs_in)   = partitionFunEqs  kick_out_fe funeqmap
     (dicts_out,  dicts_in)  = partitionDicts   kick_out_ct dictmap
     (irs_out,    irs_in)    = partitionBag     kick_out_irred irreds
     (insols_out, insols_in) = partitionBag     kick_out_ct    insols
@@ -1302,6 +1296,11 @@ kickOutRewritable new_fr new_tv
 
     kick_out_ct :: Ct -> Bool
     kick_out_ct ct = kick_out_ctev (ctEvidence ct)
+
+    kick_out_fe :: Ct -> Bool
+    kick_out_fe (CFunEqCan { cc_ev = ev, cc_fsk = fsk })
+      =  kick_out_ctev ev || fsk == new_tv
+    kick_out_fe _ = False  -- Can't happen
 
     kick_out_ctev :: CtEvidence -> Bool
     kick_out_ctev ev =  can_rewrite ev
