@@ -1,8 +1,10 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds             #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE PolyKinds                 #-}
+{-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE UndecidableInstances      #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module T6018 where
 
@@ -228,3 +230,25 @@ type instance IdProxySyn a b = (IdSyn a) b
 -- should be accepted
 type family Fa (a :: k) (b :: k) = (r :: k2) | r -> k
 type instance Fa a b = a
+
+-- Taken from #9587. This exposed a bug in the solver.
+type family Arr (repr :: * -> *) (a :: *) (b :: *) = (r :: *) | r -> repr a b
+
+class ESymantics repr where
+    int :: Int  -> repr Int
+    add :: repr Int  -> repr Int -> repr Int
+
+    lam :: (repr a -> repr b) -> repr (Arr repr a b)
+    app :: repr (Arr repr a b) -> repr a -> repr b
+
+te4 = let c3 = lam (\f -> lam (\x -> f `app` (f `app` (f `app` x))))
+      in (c3 `app` (lam (\x -> x `add` int 14))) `app` (int 0)
+
+-- This used to fail during development
+class Manifold' a where
+    type Base  a = r | r -> a
+    project :: a -> Base a
+    unproject :: Base a -> a
+
+id' :: forall a. ( Manifold' a ) => Base a -> Base a
+id' = project . unproject
