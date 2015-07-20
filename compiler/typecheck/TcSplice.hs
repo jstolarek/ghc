@@ -1121,8 +1121,6 @@ reifyTyCon tc
                              (TH.OpenTypeFamilyD (reifyName tc) tvs'
                                                  resultSig injectivity)
                              instances) }
-         -- JSTOLAREK: T10306 and T8028 crashe here, because irrefutable pattern
-         -- fails
          else do { eqns <-
                      case isClosedSynFamilyTyConWithAxiom_maybe tc of
                        Just ax -> brListMapM reifyAxBranch $ coAxiomBranches ax

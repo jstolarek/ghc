@@ -1388,7 +1388,6 @@ reduce_top_fun_eq old_ev fsk ax_co rhs_ty
        ; stopWith old_ev "Fun/Top (given)" }
 
   | not (fsk `elemVarSet` tyVarsOfType rhs_ty)
-    -- JSTOLAREK: Voodoo coding here on the second arg to dischargeFmv
   = do { dischargeFmv old_ev fsk ax_co rhs_ty
        ; traceTcS "doTopReactFunEq" $
          vcat [ text "old_ev:" <+> ppr old_ev
@@ -1406,7 +1405,6 @@ reduce_top_fun_eq old_ev fsk ax_co rhs_ty
             --       ev :: alpha ~ rhs_ty
             --     ufsk := alpha
             -- final_co :: fam_tc args ~ alpha
-    -- JSTOLAREK: Voodoo coding here on the second arg to dischargeFmv
        ; dischargeFmv old_ev fsk final_co alpha_ty
        ; traceTcS "doTopReactFunEq (occurs)" $
          vcat [ text "old_ev:" <+> ppr old_ev
