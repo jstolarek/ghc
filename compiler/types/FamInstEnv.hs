@@ -708,111 +708,111 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 --                 Type family injectivity checking bits                      --
 --------------------------------------------------------------------------------
 
--- Note [Injectivity annotation check]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
---
--- Injectivity means that the RHS of a type family uniquely determines the LHS
--- (see Note [Type inference for type families with injectivity]). So when we
--- check a new equation of a type family we need to make sure that adding this
--- equation to already known equations of that type family does not violate
--- injectivity annotation supplied by the user (see Note [Injectivity
--- annotation]). Of course if the type family has no injectivity annotation then
--- no check is required.  But if a type family has injectivity annotation we
--- need to make sure that the following conditions hold:
---
--- 1. For each pair of different equations of a type family one of the following
---    conditions holds:
---
---    A. RHSs are different.
---
---    B. OPEN TYPE FAMILIES: If the RHSs can be unified under some substitution
---       then it must be possible to unify the LHSs under the same substitution.
---       Example:
---
---          type family FunnyId a = r | r -> a
---          type instance FunnyId Int = Int
---          type instance FunnyId a = a
---
---       RHSs of these two equations unify under [ a |-> Int ] substitution.
---       Under this substitution LHSs are equal therefore these equations don't
---       violate injectivity annotation.
---
---       CLOSED TYPE FAMILIES: If the RHSs can be unified under some
---       substitution then either the LHSs unify under the same substitution or
---       the LHS of the latter equation is overlapped by earlier equations.
---       Example 1:
---
---          type family SwapIntChar a = r | r -> a where
---              SwapIntChar Int  = Char
---              SwapIntChar Char = Int
---              SwapIntChar a    = a
---
---       Say we are checking the last two equations. RHSs unify under [ a |->
---       Int ] substitution but LHSs don't. So we apply the substitution to LHS
---       of last equation and check whether it is overlapped by any of previous
---       equations. Since it is overlapped by the first equation we conclude
---       that pair of last two equations does not violate injectivity
---       annotation.
---
---    A special case of B is when RHSs unify witn an empty substitution ie. they
---    are identical.
---
---    If any of the above two conditions holds we conclude that the pair of
---    equations does not violate injectivity annotation. But if we find a pair
---    of equations where neither of the above holds we report that this pair
---    violates injectivity annotation because for a given RHS we don't have a
---    unique LHS. (Note that (B) actually implies (A).)
---
---    Note that we only take into account these LHS patterns that were declared
---    as injective.
---
---    In the presence of type families in the RHS the above check is not
---    reliable - see point (3).
---
--- 2. Type variables mentioned in the LHS (ie. variables used in patterns) can
---    appear in the RHS if and only if type family is declared to be injective
---    in these variables. Here's a trivial example why this is necessary:
---
---        type family Foo a b = r | r -> a b
---        type instance Foo Int b = Int
---
---    `Foo` is not injective in its second parameter because both `Foo Int Int`
---    and `Foo Int Char` return the same result Int. Note however that if `Foo`
---    was not declared injective in its second argument the above instance
---    declaration would be entirely correct. Here's an example of converse
---    situation (non-injective type variable mentioned in the RHS):
---
---        type family F a b = r | r -> a
---        type instance F Int b = b
---
---    Here `b` appears in the RHS but the user does not claim injectivity in
---    this argument.
---
--- 3. RHS of a type instance is not allowed to call any type families. One
---    reason is that check outlined in (1) would fail. Consider this example of
---    a type family calling itself:
---
---        type family F (a :: Nat) = (r :: Nat) | r -> a where
---             F Z     = Z
---             F (S Z) = F Z
---
---    Obviously it is not injective. But we won't discover this with check (1)
---    because the RHSs of these two equations don't unify and we will
---    incorrectly claim they don't violate injectivity annotation. Thus we rule
---    out type families in the RHS. There are other examples demonstrating that
---    checking injectivity in the presence of type families is non
---    trivial. Here's one more.  Let us assume that we have type families `X`
---    and `Y` that we already know are injective, and type constructors `Bar ::
---    * -> *` and `Baz :: * -> * -> *`.  Now we declare:
---
---        type family Foo a = r | r -> a where
---             Foo (Bar a)   = X a
---             Foo (Baz a b) = Y a b
---
---    Here we would need to check whether results of `X a` and `Y a b` can
---    overlap.  I [JS] am not aware of any good way of doing this.
---
--- See also Note [Injective type families] in TyCon
+{- Note [Injectivity annotation check]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Injectivity means that the RHS of a type family uniquely determines the LHS
+(see Note [Type inference for type families with injectivity]). So when we
+check a new equation of a type family we need to make sure that adding this
+equation to already known equations of that type family does not violate
+injectivity annotation supplied by the user (see Note [Injectivity
+annotation]). Of course if the type family has no injectivity annotation then
+no check is required.  But if a type family has injectivity annotation we
+need to make sure that the following conditions hold:
+
+1. For each pair of *different* equations of a type family, one of the following
+   conditions holds:
+
+   A:  RHSs are different.
+
+   B1: OPEN TYPE FAMILIES: If the RHSs can be unified under some substitution
+       then it must be possible to unify the LHSs under the same substitution.
+       Example:
+
+          type family FunnyId a = r | r -> a
+          type instance FunnyId Int = Int
+          type instance FunnyId a = a
+
+       RHSs of these two equations unify under [ a |-> Int ] substitution.
+       Under this substitution LHSs are equal therefore these equations don't
+       violate injectivity annotation.
+
+   B2: CLOSED TYPE FAMILIES: If the RHSs can be unified under some
+       substitution then either the LHSs unify under the same substitution or
+       the LHS of the latter equation is overlapped by earlier equations.
+       Example 1:
+
+          type family SwapIntChar a = r | r -> a where
+              SwapIntChar Int  = Char
+              SwapIntChar Char = Int
+              SwapIntChar a    = a
+
+       Say we are checking the last two equations. RHSs unify under [ a |->
+       Int ] substitution but LHSs don't. So we apply the substitution to LHS
+       of last equation and check whether it is overlapped by any of previous
+       equations. Since it is overlapped by the first equation we conclude
+       that pair of last two equations does not violate injectivity
+       annotation.
+
+   A special case of B is when RHSs unify with an empty substitution ie. they
+   are identical.
+
+   If any of the above two conditions holds we conclude that the pair of
+   equations does not violate injectivity annotation. But if we find a pair
+   of equations where neither of the above holds we report that this pair
+   violates injectivity annotation because for a given RHS we don't have a
+   unique LHS. (Note that (B) actually implies (A).)
+
+   Note that we only take into account these LHS patterns that were declared
+   as injective.
+
+   In the presence of type families in the RHS the above check is not
+   reliable - see point (3).
+
+2. Type variables mentioned in the LHS (ie. variables used in patterns) can
+   appear in the RHS if and only if type family is declared to be injective
+   in these variables. Here's a trivial example why this is necessary:
+
+       type family Foo a b = r | r -> a b
+       type instance Foo Int b = Int
+
+   `Foo` is not injective in its second parameter because both `Foo Int Int`
+   and `Foo Int Char` return the same result Int. Note however that if `Foo`
+   was not declared injective in its second argument the above instance
+   declaration would be entirely correct. Here's an example of converse
+   situation (non-injective type variable mentioned in the RHS):
+
+       type family F a b = r | r -> a
+       type instance F Int b = b
+
+   Here `b` appears in the RHS but the user does not claim injectivity in
+   this argument.
+
+3. RHS of a type instance is not allowed to call any type families. One
+   reason is that check outlined in (1) would fail. Consider this example of
+   a type family calling itself:
+
+       type family F (a :: Nat) = (r :: Nat) | r -> a where
+            F Z     = Z
+            F (S Z) = F Z
+
+   Obviously it is not injective. But we won't discover this with check (1)
+   because the RHSs of these two equations don't unify and we will
+   incorrectly claim they don't violate injectivity annotation. Thus we rule
+   out type families in the RHS. There are other examples demonstrating that
+   checking injectivity in the presence of type families is non
+   trivial. Here's one more.  Let us assume that we have type families `X`
+   and `Y` that we already know are injective, and type constructors `Bar ::
+   * -> *` and `Baz :: * -> * -> *`.  Now we declare:
+
+       type family Foo a = r | r -> a where
+            Foo (Bar a)   = X a
+            Foo (Baz a b) = Y a b
+
+   Here we would need to check whether results of `X a` and `Y a b` can
+   overlap.  I [JS] am not aware of any good way of doing this.
+
+See also Note [Injective type families] in TyCon
+-}
 
 
 -- | Check whether an open type family equation can be added to already existing

@@ -404,10 +404,7 @@ checkForInjectivityConflicts instEnvs famInst
     { let -- see Note [Injectivity annotation check] in FamInstEnv
           errs = makeInjectivityErrors famInst inj fi_tys fi_rhs
                      (lookupFamInstEnvInjectivityConflicts inj instEnvs famInst)
-                     (conflictInjInstErr     makeFamInstsErr)
-                     (unusedInjectiveVarsErr makeFamInstsErr)
-                     (tfHeadedErr            makeFamInstsErr)
-                     (bareVariableInRHSErr   makeFamInstsErr)
+                     makeFamInstsErr
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)
     }
@@ -427,24 +424,20 @@ makeInjectivityErrors
    -> (a -> [Type])                      -- Accessing types in the LHS of thing
    -> (a ->  Type )                      -- Accessing the RHS of thing
    -> [a]                                -- List of injectivity conflicts
-   -> (a -> [a]      -> (SDoc, SrcSpan)) -- Generates errors for inj. conflicts
-   -> (a -> TyVarSet -> (SDoc, SrcSpan)) -- Ditto for unused injective vars
-   -> (a             -> (SDoc, SrcSpan)) -- Ditto for top-level type families
-   -> (a -> [Type]   -> (SDoc, SrcSpan)) -- Ditto for bare variable in RHS
+   -> InjErrorBuilder a
    -> [(SDoc, SrcSpan)]
-makeInjectivityErrors thing inj lhs rhs conflicts conflictErr unusedInjVarsErr
-    tfHeadedErr bareVarInRHSErr =
-  let are_conflicts  = not $ null conflicts
-      unused_inj_tvs = unusedInjTvsInRHS inj (lhs thing) (rhs thing)
-      inj_tvs_unused = not $ isEmptyVarSet unused_inj_tvs
-      tf_headed      = isTFHeaded (rhs thing)
-      bare_variables = bareTvInRHSViolated (lhs thing) (rhs thing)
-      wrong_bare_rhs = not $ null bare_variables
-      errorIf p f    = if p then [f] else []
-   in    errorIf are_conflicts  (conflictErr      thing conflicts     )
-      ++ errorIf inj_tvs_unused (unusedInjVarsErr thing unused_inj_tvs)
-      ++ errorIf tf_headed      (tfHeadedErr      thing               )
-      ++ errorIf wrong_bare_rhs (bareVarInRHSErr  thing bare_variables)
+makeInjectivityErrors thing inj lhs rhs conflicts err_builder
+  = let are_conflicts  = not $ null conflicts
+        unused_inj_tvs = unusedInjTvsInRHS inj (lhs thing) (rhs thing)
+        inj_tvs_unused = not $ isEmptyVarSet unused_inj_tvs
+        tf_headed      = isTFHeaded (rhs thing)
+        bare_variables = bareTvInRHSViolated (lhs thing) (rhs thing)
+        wrong_bare_rhs = not $ null bare_variables
+        errorIf p f    = if p then [f] else []
+     in    errorIf are_conflicts  (conflictInjInstErr     err_builder thing conflicts     )
+        ++ errorIf inj_tvs_unused (unusedInjectiveVarsErr err_builder thing unused_inj_tvs)
+        ++ errorIf tf_headed      (tfHeadedErr            err_builder thing               )
+        ++ errorIf wrong_bare_rhs (bareVariableInRHSErr   err_builder thing bare_variables)
 
 
 conflictInstErr :: FamInst -> [FamInstMatch] -> TcRn ()

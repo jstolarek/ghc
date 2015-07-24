@@ -1602,10 +1602,7 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
 
              errs = makeInjectivityErrors cur_branch inj
                       coAxBranchLHS coAxBranchRHS conflicts
-                      (conflictInjInstErr      (makeClosedFamInjErr tc))
-                      (unusedInjectiveVarsErr  (makeClosedFamInjErr tc))
-                      (tfHeadedErr             (makeClosedFamInjErr tc))
-                      (bareVariableInRHSErr    (makeClosedFamInjErr tc))
+                      (makeClosedFamInjErr tc)
          -- add found errors
        ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
        ; return (cur_branch : prev_branches) }
