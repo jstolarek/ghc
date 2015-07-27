@@ -401,10 +401,10 @@ checkForInjectivityConflicts instEnvs famInst
     | isTypeFamilyTyCon tycon
       -- type family is injective in at least one argument
     , Just inj <- familyTyConInjectivityInfo tycon = do
-    { let -- see Note [Injectivity annotation check] in FamInstEnv
-          errs = makeInjectivityErrors famInst inj fi_tys fi_rhs
-                     (lookupFamInstEnvInjectivityConflicts inj instEnvs famInst)
-                     makeFamInstsErr
+    { let axiom = brFromUnbranchedSingleton (co_ax_branches (fi_axiom famInst))
+          conflicts = lookupFamInstEnvInjectivityConflicts inj instEnvs famInst
+          -- see Note [Injectivity annotation check] in FamInstEnv
+          errs = makeInjectivityErrors tycon axiom inj conflicts
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)
     }
@@ -414,30 +414,31 @@ checkForInjectivityConflicts instEnvs famInst
     where tycon = famInstTyCon famInst
 
 -- | Builds a list of injectivity errors together with their source locations.
--- This combinator gathers common error-checking logic for open and closed type
--- families.
 makeInjectivityErrors
-   :: a                                  -- Thing for which we perform checks
-                                         -- and generate injectivity errors
-                                         -- (FamInst or CoAxBranch)
-   -> [Bool]                             -- Injectivity annotation
-   -> (a -> [Type])                      -- Accessing types in the LHS of thing
-   -> (a ->  Type )                      -- Accessing the RHS of thing
-   -> [a]                                -- List of injectivity conflicts
-   -> InjErrorBuilder a
+   :: TyCon        -- ^ Type family tycon for which we generate errors
+   -> CoAxBranch   -- ^ Currently checked equation (represented by axiom)
+   -> [Bool]       -- ^ Injectivity annotation
+   -> [CoAxBranch] -- ^ List of injectivity conflicts
    -> [(SDoc, SrcSpan)]
-makeInjectivityErrors thing inj lhs rhs conflicts err_builder
-  = let are_conflicts  = not $ null conflicts
-        unused_inj_tvs = unusedInjTvsInRHS inj (lhs thing) (rhs thing)
-        inj_tvs_unused = not $ isEmptyVarSet unused_inj_tvs
-        tf_headed      = isTFHeaded (rhs thing)
-        bare_variables = bareTvInRHSViolated (lhs thing) (rhs thing)
-        wrong_bare_rhs = not $ null bare_variables
-        errorIf p f    = if p then [f] else []
-     in    errorIf are_conflicts  (conflictInjInstErr     err_builder thing conflicts     )
-        ++ errorIf inj_tvs_unused (unusedInjectiveVarsErr err_builder thing unused_inj_tvs)
-        ++ errorIf tf_headed      (tfHeadedErr            err_builder thing               )
-        ++ errorIf wrong_bare_rhs (bareVariableInRHSErr   err_builder thing bare_variables)
+makeInjectivityErrors tycon axiom inj conflicts
+  = let lhs             = coAxBranchLHS axiom
+        rhs             = coAxBranchRHS axiom
+
+        are_conflicts   = not $ null conflicts
+        unused_inj_tvs  = unusedInjTvsInRHS inj lhs rhs
+        inj_tvs_unused  = not $ isEmptyVarSet unused_inj_tvs
+        tf_headed       = isTFHeaded rhs
+        bare_variables  = bareTvInRHSViolated lhs rhs
+        wrong_bare_rhs  = not $ null bare_variables
+
+        err_builder herald eqns
+                        = ( herald $$ vcat (map (pprCoAxBranch tycon) eqns)
+                          , coAxBranchSpan (head eqns) )
+        errorIf p f     = if p then [f err_builder axiom] else []
+     in    errorIf are_conflicts  (conflictInjInstErr     conflicts     )
+        ++ errorIf inj_tvs_unused (unusedInjectiveVarsErr unused_inj_tvs)
+        ++ errorIf tf_headed       tfHeadedErr
+        ++ errorIf wrong_bare_rhs (bareVariableInRHSErr   bare_variables)
 
 
 conflictInstErr :: FamInst -> [FamInstMatch] -> TcRn ()
@@ -453,7 +454,7 @@ conflictInstErr fam_inst conflictingMatch
 -- | Type of functions that use error message and a list of things (FamInst or
 -- CoAxiom) to build full error message (with a source location) for injective
 -- type families.
-type InjErrorBuilder a = SDoc -> [a] -> (SDoc, SrcSpan)
+type InjErrorBuilder = SDoc -> [CoAxBranch] -> (SDoc, SrcSpan)
 
 injectivityErrorHerald :: Bool -> SDoc
 injectivityErrorHerald isSingular =
@@ -470,8 +471,9 @@ injectivityErrorHerald isSingular =
       s True  = empty
 
 -- | Build error message for equations violating injectivity annotation.
-conflictInjInstErr :: InjErrorBuilder a -> a -> [a] -> (SDoc, SrcSpan)
-conflictInjInstErr errorBuilder tyfamEqn conflictingEqns
+conflictInjInstErr :: [CoAxBranch] -> InjErrorBuilder -> CoAxBranch
+                   -> (SDoc, SrcSpan)
+conflictInjInstErr conflictingEqns errorBuilder tyfamEqn
   | confEqn : _ <- conflictingEqns
   = errorBuilder (injectivityErrorHerald False) [confEqn, tyfamEqn]
   | otherwise
@@ -479,14 +481,16 @@ conflictInjInstErr errorBuilder tyfamEqn conflictingEqns
 
 -- | Build error message for equation with injective type variables unused in
 -- the RHS.
-unusedInjectiveVarsErr :: InjErrorBuilder a -> a -> TyVarSet -> (SDoc, SrcSpan)
-unusedInjectiveVarsErr errorBuilder tyfamEqn unused_tyvars
+unusedInjectiveVarsErr :: TyVarSet -> InjErrorBuilder -> CoAxBranch
+                       -> (SDoc, SrcSpan)
+unusedInjectiveVarsErr unused_tyvars errorBuilder tyfamEqn
   = errorBuilder (injectivityErrorHerald True $$
                   mkUnusedInjectiveVarsErr unused_tyvars) [tyfamEqn]
 
 -- | Build error message for equation that has a type family call at the top
 -- level of RHS
-tfHeadedErr :: InjErrorBuilder a -> a -> (SDoc, SrcSpan)
+tfHeadedErr :: InjErrorBuilder -> CoAxBranch
+            -> (SDoc, SrcSpan)
 tfHeadedErr errorBuilder famInst
   = errorBuilder (injectivityErrorHerald True $$
                   text "RHS of injective type family equation cannot" <+>
@@ -494,8 +498,9 @@ tfHeadedErr errorBuilder famInst
 
 -- | Build error message for equation that has a bare type variable in the RHS
 -- but LHS pattern is not a bare type variable.
-bareVariableInRHSErr :: InjErrorBuilder a -> a -> [Type] -> (SDoc, SrcSpan)
-bareVariableInRHSErr errorBuilder famInst tys
+bareVariableInRHSErr :: [Type] -> InjErrorBuilder -> CoAxBranch
+                     -> (SDoc, SrcSpan)
+bareVariableInRHSErr tys errorBuilder famInst
   = errorBuilder (injectivityErrorHerald True $$
                   text "RHS of injective type family equation is a bare" <+>
                   text "type variable" $$

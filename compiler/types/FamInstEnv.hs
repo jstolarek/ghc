@@ -823,7 +823,7 @@ lookupFamInstEnvInjectivityConflicts
                       -- INVARIANT: list contains at least one True value
     ->  FamInstEnvs   -- all type instances seens so far
     ->  FamInst       -- new type instance that we're checking
-    -> [FamInst]      -- conflicting instance delcarations
+    -> [CoAxBranch]   -- conflicting instance delcarations
 lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
                              fam_inst@(FamInst { fi_axiom = new_axiom })
   -- See Note [Injectivity annotation check]. This function implements first
@@ -843,7 +843,8 @@ lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
 
       lookup_inj_fam_conflicts ie
           | isOpenFamilyTyCon fam, Just (FamIE insts) <- lookupUFM ie fam
-          = filter isInjConflict insts
+          = map (brFromUnbranchedSingleton . co_ax_branches . fi_axiom) $
+            filter isInjConflict insts
           | otherwise = []
 
 

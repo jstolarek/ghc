@@ -10,6 +10,7 @@ module CoAxiom (
        AxiomBranched(..), BranchIndex, BranchList(..), Unbranched, Branched,
        toBranchList, fromBranchList,
        toBranchedList, toUnbranchedList,
+       brFromUnbranchedSingleton,
        brListLength, brListNth, brListMap, brListFoldr, brListMapM,
        brListFoldlM_, brListZipWith,
 
@@ -163,6 +164,10 @@ toBranchedList (NextBranch h t) = NextBranch h t
 toUnbranchedList :: BranchList a br -> BranchList a Unbranched
 toUnbranchedList (FirstBranch b) = FirstBranch b
 toUnbranchedList _ = pprPanic "toUnbranchedList" empty
+
+-- Extract a singleton axiom from Unbranched BranchList
+brFromUnbranchedSingleton :: BranchList a Unbranched -> a
+brFromUnbranchedSingleton (FirstBranch b) = b
 
 -- length
 brListLength :: BranchList a br -> Int

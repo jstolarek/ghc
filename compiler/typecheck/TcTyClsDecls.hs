@@ -37,7 +37,7 @@ import TcType
 import TysWiredIn( unitTy )
 import FamInst
 import FamInstEnv
-import Coercion( pprCoAxBranch, ltRole )
+import Coercion( ltRole )
 import Type
 import TypeRep   -- for checkValidRoles
 import Kind
@@ -1600,9 +1600,7 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
              replaceBranch :: [CoAxBranch] -> Int -> CoAxBranch -> [CoAxBranch]
              replaceBranch brs n br = take n brs ++ [br] ++ drop (n+1) brs
 
-             errs = makeInjectivityErrors cur_branch inj
-                      coAxBranchLHS coAxBranchRHS conflicts
-                      (makeClosedFamInjErr tc)
+             errs = makeInjectivityErrors tc cur_branch inj conflicts
          -- add found errors
        ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
        ; return (cur_branch : prev_branches) }
@@ -2331,12 +2329,6 @@ inaccessibleCoAxBranch name kind (CoAxBranch { cab_tvs = tvs
                pprPrefixApp TopPrec (ppr name)
                        (map (ppr_type TyConPrec)
                             (suppressKinds dflags kind lhs)))
-
-
-makeClosedFamInjErr :: TyCon -> SDoc -> [CoAxBranch] -> (SDoc, SrcSpan)
-makeClosedFamInjErr tc herald eqns =
-    ( herald $$ vcat (map (pprCoAxBranch tc) eqns)
-    , coAxBranchSpan (head eqns) )
 
 badRoleAnnot :: Name -> Role -> Role -> SDoc
 badRoleAnnot var annot inferred
