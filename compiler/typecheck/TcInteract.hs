@@ -876,7 +876,7 @@ improveLocalFunEqs loc inerts fam_tc args fsk
   | otherwise
   = return ()
   where
-    tv_eqs        = inert_eqs inerts
+    tv_eqs        = inert_model inerts
     funeqs        = inert_funeqs inerts
     funeqs_for_tc = findFunEqsByTyCon funeqs fam_tc
     rhs           = lookupFlattenTyVar tv_eqs fsk
@@ -911,13 +911,13 @@ improveLocalFunEqs loc inerts fam_tc args fsk
     do_one_injective _ _ = pprPanic "interactFunEq 2" (ppr fam_tc)
 
 -------------
-lookupFlattenTyVar :: TyVarEnv EqualCtList -> TcTyVar -> TcType
+lookupFlattenTyVar :: InertModel -> TcTyVar -> TcType
 -- ^ Look up a flatten-tyvar in the inert nominal TyVarEqs;
 -- this is used only when dealing with a CFunEqCan
-lookupFlattenTyVar inert_eqs ftv
-  = case lookupVarEnv inert_eqs ftv of
-      Just (CTyEqCan { cc_rhs = rhs, cc_eq_rel = NomEq } : _) -> rhs
-      _                                                       -> mkTyVarTy ftv
+lookupFlattenTyVar model ftv
+  = case lookupVarEnv model ftv of
+      Just (CTyEqCan { cc_rhs = rhs, cc_eq_rel = NomEq }) -> rhs
+      _                                                   -> mkTyVarTy ftv
 
 reactFunEq :: CtEvidence -> TcTyVar    -- From this  :: F tys ~ fsk1
            -> CtEvidence -> TcTyVar    -- Solve this :: F tys ~ fsk2
@@ -1418,9 +1418,9 @@ reduce_top_fun_eq old_ev fsk ax_co rhs_ty
 improveTopFunEqs :: CtLoc -> FamInstEnvs
                  -> TyCon -> [TcType] -> TcTyVar -> TcS ()
 improveTopFunEqs loc fam_envs fam_tc args fsk
-  = do { inert_eqs <- getInertEqs
+  = do { model <- getInertModel
        ; eqns <- improve_top_fun_eqs fam_envs fam_tc args
-                                    (lookupFlattenTyVar inert_eqs fsk)
+                                    (lookupFlattenTyVar model fsk)
        ; mapM_ (unifyDerived loc Nominal) eqns }
 
 improve_top_fun_eqs :: FamInstEnvs
