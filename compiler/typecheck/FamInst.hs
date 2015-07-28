@@ -392,14 +392,14 @@ checkForConflicts inst_envs fam_inst
        ; unless no_conflicts $ conflictInstErr fam_inst conflicts
        ; return no_conflicts }
 
--- | Checks whether a new open type family equation can be added without
+-- | Check whether a new open type family equation can be added without
 -- violating injectivity annotation supplied by the user. Returns True when
 -- this is possible and False if adding this equation would violate injectivity
 -- annotation.
 checkForInjectivityConflicts :: FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts instEnvs famInst
     | isTypeFamilyTyCon tycon
-      -- type family is injective in at least one argument
+    -- type family is injective in at least one argument
     , Just inj <- familyTyConInjectivityInfo tycon = do
     { let axiom = brFromUnbranchedSingleton (co_ax_branches (fi_axiom famInst))
           conflicts = lookupFamInstEnvInjectivityConflicts inj instEnvs famInst
@@ -408,12 +408,13 @@ checkForInjectivityConflicts instEnvs famInst
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)
     }
+
     -- if there was no injectivity annotation or tycon does not represent a
     -- type family we report no conflicts
     | otherwise = return True
     where tycon = famInstTyCon famInst
 
--- | Builds a list of injectivity errors together with their source locations.
+-- | Build a list of injectivity errors together with their source locations.
 makeInjectivityErrors
    :: TyCon        -- ^ Type family tycon for which we generate errors
    -> CoAxBranch   -- ^ Currently checked equation (represented by axiom)
@@ -451,11 +452,11 @@ conflictInstErr fam_inst conflictingMatch
   | otherwise
   = panic "conflictInstErr"
 
--- | Type of functions that use error message and a list of things (FamInst or
--- CoAxiom) to build full error message (with a source location) for injective
--- type families.
+-- | Type of functions that use error message and a list of axioms to build full
+-- error message (with a source location) for injective type families.
 type InjErrorBuilder = SDoc -> [CoAxBranch] -> (SDoc, SrcSpan)
 
+-- | Build injecivity error herald common to all injectivity errors.
 injectivityErrorHerald :: Bool -> SDoc
 injectivityErrorHerald isSingular =
   text "Type family equation" <> s isSingular <+> text "violate" <>
@@ -470,7 +471,8 @@ injectivityErrorHerald isSingular =
       s False = text "s"
       s True  = empty
 
--- | Build error message for equations violating injectivity annotation.
+-- | Build error message for a pair of equations violating an injectivity
+-- annotation.
 conflictInjInstErr :: [CoAxBranch] -> InjErrorBuilder -> CoAxBranch
                    -> (SDoc, SrcSpan)
 conflictInjInstErr conflictingEqns errorBuilder tyfamEqn
@@ -486,6 +488,25 @@ unusedInjectiveVarsErr :: TyVarSet -> InjErrorBuilder -> CoAxBranch
 unusedInjectiveVarsErr unused_tyvars errorBuilder tyfamEqn
   = errorBuilder (injectivityErrorHerald True $$
                   mkUnusedInjectiveVarsErr unused_tyvars) [tyfamEqn]
+    where
+      mkUnusedInjectiveVarsErr :: TyVarSet -> SDoc
+      mkUnusedInjectiveVarsErr unused_tyvars =
+          let tyVars = varSetElems $ filterVarSet isTypeVar unused_tyvars
+              kiVars = varSetElems $ filterVarSet isKindVar unused_tyvars
+              tyVarsSDoc
+                  = if not (null tyVars)
+                    then text "Injective type variable" <> plural tyVars <+>
+                         pprQuotedList tyVars <+> doOrDoes tyVars <+>
+                         text "not appear on injective position."
+                    else empty
+              kiVarsSDoc
+                  = if not (null kiVars)
+                    then text "Injective kind variable" <> plural kiVars <+>
+                         pprQuotedList kiVars <+> isOrAre kiVars <+>
+                         text "not inferable from the RHS type variables."
+                    else empty
+          in tyVarsSDoc $$ kiVarsSDoc $$
+             text "In the RHS of type family equation:"
 
 -- | Build error message for equation that has a type family call at the top
 -- level of RHS
@@ -507,25 +528,6 @@ bareVariableInRHSErr tys errorBuilder famInst
                   text "but these LHS type and kind patterns are not bare" <+>
                   text "variables:" <+> pprQuotedList tys) [famInst]
 
-
--- | Error message for injective type variables unused in the RHS.
-mkUnusedInjectiveVarsErr :: TyVarSet -> SDoc
-mkUnusedInjectiveVarsErr unused_tyvars =
-    let tyVars = varSetElems $ filterVarSet isTypeVar unused_tyvars
-        kiVars = varSetElems $ filterVarSet isKindVar unused_tyvars
-        tyVarsSDoc
-            = if not (null tyVars)
-              then text "Injective type variable" <> plural tyVars <+>
-                   pprQuotedList tyVars <+> doOrDoes tyVars <+>
-                   text "not appear on injective position."
-              else empty
-        kiVarsSDoc
-            = if not (null kiVars)
-              then text "Injective kind variable" <> plural kiVars <+>
-                   pprQuotedList kiVars <+> isOrAre kiVars <+>
-                   text "not inferable from the RHS type variables."
-              else empty
-    in tyVarsSDoc $$ kiVarsSDoc $$ text "In the RHS of type family equation:"
 
 makeFamInstsErr :: SDoc -> [FamInst] -> (SDoc, SrcSpan)
 makeFamInstsErr herald insts

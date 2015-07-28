@@ -117,8 +117,9 @@ data IfaceDecl
                                                    -- the tycon)
                    ifFamFlav :: IfaceFamTyConFlav,
                    ifFamInj  :: Maybe [Bool] }     -- injectivity information
-                -- INVARIANT if isJust ifFamInj then:
-                -- (length ifTyVars = length (fromJust ifFamInj))
+                -- INVARIANT:
+                --   if   (isJust ifFamInj)
+                --   then (length ifTyVars = length (fromJust ifFamInj))
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Superclasses
                  ifName    :: IfaceTopBndr,             -- Name of the class TyCon

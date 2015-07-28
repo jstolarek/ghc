@@ -460,10 +460,10 @@ closedTypeFamilyD tc tvs result injectivity eqns =
 --   1. remove deprecated functions
 --   2. remove CPP language extension from top of this module
 --   3. remove the FamFlavour data type from Syntax module
---   3. make sure that all references to FamFlavour are gone from DsMeta,
---      Convert, TcSplice (follows from 2)
+--   4. make sure that all references to FamFlavour are gone from DsMeta,
+--      Convert, TcSplice (follows from 3)
 #if __GLASGOW_HASKELL__ > 712
-#error Remove deprectaed familyNoKindD, familyKindD, closedTypeFamilyNoKindD and closedTypeFamilyKindD
+#error Remove deprecated familyNoKindD, familyKindD, closedTypeFamilyNoKindD and closedTypeFamilyKindD
 #endif
 
 {-# DEPRECATED familyNoKindD, familyKindD

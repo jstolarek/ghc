@@ -1230,7 +1230,7 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
                    --     bounds some type variables. Example of disallowed
                    --     declaration:
                    --         class C a b where
-                   --            type F b = a
+                   --            type F b = a | a -> b
                    --
                    -- Case a) is handled internally by bindHsTyVars. (Note that
                    -- we add the result type variable binding to the list of
@@ -1285,9 +1285,9 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
 -- During renaming of injectivity annotation we have to make several checks to
--- make sure that it is well-formed. At the moment injectivity annotation
+-- make sure that it is well-formed.  At the moment injectivity annotation
 -- consists of a single injectivity condition, so the terms "injectivity
--- annotation" and "injectivity condition" might be used interchangeably. See
+-- annotation" and "injectivity condition" might be used interchangeably.  See
 -- Note [Injectivity annotation] for a detailed discussion of currently allowed
 -- injectivity annotations.
 --
@@ -1337,8 +1337,7 @@ rnInjectivityAnn tvBndrs (TyVarSig resTv)
 
    -- if renaming of type variables ended with errors (eg. there were
    -- not-in-scope variables) don't check the validity of injectivity
-   -- annotation. This gives better error messages and saves us from
-   -- unnecessary computations if renaming of type variables fails.
+   -- annotation. This gives better error messages.
    ; when (noRnErrors && not lhsValid) $
         addErrAt (getLoc injFrom)
               ( vcat [ text $ "Incorrect type variable on the LHS of "

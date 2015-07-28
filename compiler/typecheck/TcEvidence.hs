@@ -1,6 +1,6 @@
 -- (c) The University of Glasgow 2006
 
-{-# LANGUAGE CPP, DeriveDataTypeable, DataKinds #-}
+{-# LANGUAGE CPP, DeriveDataTypeable #-}
 
 module TcEvidence (
 

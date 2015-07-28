@@ -554,8 +554,8 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 -- Note [FamilyResultSig]
 -- ~~~~~~~~~~~~~~~~~~~~~~
 --
--- This data type represent the return signature of a type family. Possible
--- values:
+-- This data type represents the return signature of a type family.  Possible
+-- values are:
 --
 --  * NoSig - the user supplied no return signature:
 --       type family Id a where ...
@@ -608,11 +608,8 @@ mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 --
 --    type family Plus a b = (r :: Nat) | r a -> b, r b -> a where ...
 --
--- Here injectivity annotation consists of two comma-separated injectivity
+-- Here injectivity annotation would consist of two comma-separated injectivity
 -- conditions.
---
--- Another possible extension to this syntax is admitting kind variables in
--- injectivity annotation.
 --
 -- See also Note [Injective type families] in TyCon
 
@@ -665,7 +662,7 @@ type LInjectivityAnn name = Located (InjectivityAnn name)
 -- | If the user supplied an injectivity annotation it is represented using
 -- InjectivityAnn. At the moment this is a single injectivity condition - see
 -- Note [Injectivity annotation]. `Located name` stores the LHS of injectivity
--- condition. [Located name] stores the RHS of injectivity condition. Example:
+-- condition. `[Located name]` stores the RHS of injectivity condition. Example:
 --
 --   type family Foo a b c = r | r -> a c where ...
 --
@@ -811,13 +808,15 @@ resultVariableName _              = Nothing
 -- N means that a function is injective in its Nth argument. False means it is
 -- not.
 getInjectivityList :: [TyVar] -> Maybe (LInjectivityAnn Name) -> Maybe [Bool]
+
   -- No injectivity information => type family is not injective in any
   -- of its arguments.
 getInjectivityList _ Nothing = Nothing
-  -- User provided an injectivity annotation => for each argument we check
-  -- whether a type family was declared injective in that argument. We return a
-  -- list of Bools, where True means that corresponding type variable was
-  -- mentioned in lInjNames (type family is injective in that argument) and
+
+  -- User provided an injectivity annotation, so for each tyvar argument we
+  -- check whether a type family was declared injective in that argument. We
+  -- return a list of Bools, where True means that corresponding type variable
+  -- was mentioned in lInjNames (type family is injective in that argument) and
   -- False means that it was not mentioned in lInjNames (type family is not
   -- injective in that type variable). We also extend injectivity information to
   -- kind variables, so if a user declares:
@@ -825,7 +824,7 @@ getInjectivityList _ Nothing = Nothing
   --   type family F (a :: k1) (b :: k2) = (r :: k3) | r -> a
   --
   -- then we mark both `a` and `k1` as injective.
-  -- NB: the return kind is considered to be input argument to a type family.
+  -- NB: the return kind is considered to be *input* argument to a type family.
   -- Since injectivity allows to infer input arguments from the result in theory
   -- we should always mark the result kind variable (`k3` in this example) as
   -- injective.  The reason is that result type has always an assigned kind and
