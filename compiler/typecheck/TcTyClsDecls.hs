@@ -1579,7 +1579,7 @@ checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
      -- in the TcM monad. Always returns a list of equations where the new
      -- CoAxBranch is placed in front of already checked branches, so that we
      -- can check remaining equations in a single fold.
-     -- See Note [Injectivity annotation check] in FamInstEnv
+     -- See Note [Verifying injectivity annotation] in FamInstEnv
      check_injectivity
          :: [Bool]           -- injectivity annotation
                              -- INVARIANT: at least one True

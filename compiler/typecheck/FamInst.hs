@@ -403,7 +403,7 @@ checkForInjectivityConflicts instEnvs famInst
     , Just inj <- familyTyConInjectivityInfo tycon = do
     { let axiom = brFromUnbranchedSingleton (co_ax_branches (fi_axiom famInst))
           conflicts = lookupFamInstEnvInjectivityConflicts inj instEnvs famInst
-          -- see Note [Injectivity annotation check] in FamInstEnv
+          -- see Note [Verifying injectivity annotation] in FamInstEnv
           errs = makeInjectivityErrors tycon axiom inj conflicts
     ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
     ; return (null errs)

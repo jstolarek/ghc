@@ -2,7 +2,7 @@
 --
 -- FamInstEnv: Type checked family instance declarations
 
-{-# LANGUAGE CPP, GADTs, ScopedTypeVariables, DataKinds #-}
+{-# LANGUAGE CPP, GADTs, ScopedTypeVariables #-}
 
 module FamInstEnv (
         FamInst(..), FamFlavor(..), famInstAxiom, famInstTyCon, famInstRHS,
@@ -497,24 +497,18 @@ data InjectivityCheckResult
     -- overlpapped (in which case it is OK if they don't unify).  Constructor
     -- stores axioms after unification.
 
--- JSTOLAREK: Update source code documentation
 -- | Check whether two type family axioms don't violate injectivity annotation.
--- Note that if any of the RHSs contains a type family this function will lie by
--- reporting InjectivityAccepted. See code comments for further details.
 injectiveBranches :: [Bool] -> CoAxBranch -> CoAxBranch
                   -> InjectivityCheckResult
 injectiveBranches injectivity
                   ax1@(CoAxBranch { cab_lhs = lhs1, cab_rhs = rhs1 })
                   ax2@(CoAxBranch { cab_lhs = lhs2, cab_rhs = rhs2 })
-  -- See Note [Injectivity annotation check]. This function implements first
+  -- See Note [Verifying injectivity annotation]. This function implements first
   -- check described there.
   = let getInjArgs  = filterByList injectivity
     in case tcUnifyTyWithTFs True rhs1 rhs2 of -- True = two-way pre-unification
        Nothing -> InjectivityAccepted -- RHS are different, so equations are
-                                      -- injective.  Note however that this
-                                      -- is not true in the presence of type
-                                      -- families.  See Note [Injectivity
-                                      -- annotation check]
+                                      -- injective.
        Just subst -> -- RHS unify under a substitution
         let lhs1Subst = Type.substTys subst (getInjArgs lhs1)
             lhs2Subst = Type.substTys subst (getInjArgs lhs2)
@@ -522,7 +516,7 @@ injectiveBranches injectivity
         -- of equations does not violate injectivity annotation. If LHSs are not
         -- equal under that substitution then this pair of equations violates
         -- injectivity annotation, but for closed type families it still might
-        -- be the case that the LHS after substitution is dominated.
+        -- be the case that one LHS after substitution is unreachable.
         in if eqTypes lhs1Subst lhs2Subst
            then InjectivityAccepted
            else InjectivityUnified ( ax1 { cab_lhs = Type.substTys subst lhs1
@@ -708,16 +702,19 @@ lookupFamInstEnvConflicts envs fam_inst@(FamInst { fi_axiom = new_axiom })
 --                 Type family injectivity checking bits                      --
 --------------------------------------------------------------------------------
 
-{- Note [Injectivity annotation check]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Injectivity means that the RHS of a type family uniquely determines the LHS
-(see Note [Type inference for type families with injectivity]). So when we
-check a new equation of a type family we need to make sure that adding this
-equation to already known equations of that type family does not violate
-injectivity annotation supplied by the user (see Note [Injectivity
-annotation]). Of course if the type family has no injectivity annotation then
-no check is required.  But if a type family has injectivity annotation we
-need to make sure that the following conditions hold:
+{- Note [Verifying injectivity annotation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Injectivity means that the RHS of a type family uniquely determines the LHS (see
+Note [Type inference for type families with injectivity]).  User informs about
+injectivity using an injectivity annotation and it is GHC's task to verify that
+that annotation is correct wrt. to type family equations. Whenever we see a new
+equation of a type family we need to make sure that adding this equation to
+already known equations of a type family does not violate injectivity annotation
+supplied by the user (see Note [Injectivity annotation]).  Of course if the type
+family has no injectivity annotation then no check is required.  But if a type
+family has injectivity annotation we need to make sure that the following
+conditions hold:
 
 1. For each pair of *different* equations of a type family, one of the following
    conditions holds:
@@ -765,51 +762,26 @@ need to make sure that the following conditions hold:
    Note that we only take into account these LHS patterns that were declared
    as injective.
 
-   In the presence of type families in the RHS the above check is not
-   reliable - see point (3).
+2. If a RHS of a type family equation is a bare type variable then
+   all LHS variables (including implicit kind variables) also have to be bare.
+   In other words, this has to be a sole equation of that type family and it has
+   to cover all possible patterns.  So for example this definition will be
+   rejected:
 
-2. Type variables mentioned in the LHS (ie. variables used in patterns) can
-   appear in the RHS if and only if type family is declared to be injective
-   in these variables. Here's a trivial example why this is necessary:
+      type family W1 a = r | r -> a
+      type instance W1 [a] = a
 
-       type family Foo a b = r | r -> a b
-       type instance Foo Int b = Int
+   If it were accepted we could call `W1 [W1 Int]`, which would reduce to
+   `W1 Int` and then by injectivity we could conclude that `[W1 Int] ~ Int`,
+   which is bogus.
 
-   `Foo` is not injective in its second parameter because both `Foo Int Int`
-   and `Foo Int Char` return the same result Int. Note however that if `Foo`
-   was not declared injective in its second argument the above instance
-   declaration would be entirely correct. Here's an example of converse
-   situation (non-injective type variable mentioned in the RHS):
+3. If a RHS of a type family equation is a type family application then the type
+   family is rejected as not injective.
 
-       type family F a b = r | r -> a
-       type instance F Int b = b
-
-   Here `b` appears in the RHS but the user does not claim injectivity in
-   this argument.
-
-3. RHS of a type instance is not allowed to call any type families. One
-   reason is that check outlined in (1) would fail. Consider this example of
-   a type family calling itself:
-
-       type family F (a :: Nat) = (r :: Nat) | r -> a where
-            F Z     = Z
-            F (S Z) = F Z
-
-   Obviously it is not injective. But we won't discover this with check (1)
-   because the RHSs of these two equations don't unify and we will
-   incorrectly claim they don't violate injectivity annotation. Thus we rule
-   out type families in the RHS. There are other examples demonstrating that
-   checking injectivity in the presence of type families is non
-   trivial. Here's one more.  Let us assume that we have type families `X`
-   and `Y` that we already know are injective, and type constructors `Bar ::
-   * -> *` and `Baz :: * -> * -> *`.  Now we declare:
-
-       type family Foo a = r | r -> a where
-            Foo (Bar a)   = X a
-            Foo (Baz a b) = Y a b
-
-   Here we would need to check whether results of `X a` and `Y a b` can
-   overlap.  I [JS] am not aware of any good way of doing this.
+4. If a LHS type variable that is declared as injective is not mentioned on
+   injective position in the RHS then the type family is rejected as not
+   injective.  "Injective position" means either an argument to a type
+   constructor or argument to a type family on injective position.
 
 See also Note [Injective type families] in TyCon
 -}
@@ -817,7 +789,8 @@ See also Note [Injective type families] in TyCon
 
 -- | Check whether an open type family equation can be added to already existing
 -- instance environment without causing conflicts with supplied injectivity
--- annotations. Returns list of conflicting type instance declarations.
+-- annotations.  Returns list of conflicting axioms (type instance
+-- declarations).
 lookupFamInstEnvInjectivityConflicts
     :: [Bool]         -- injectivity annotation for this type family instance
                       -- INVARIANT: list contains at least one True value
@@ -826,8 +799,8 @@ lookupFamInstEnvInjectivityConflicts
     -> [CoAxBranch]   -- conflicting instance delcarations
 lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
                              fam_inst@(FamInst { fi_axiom = new_axiom })
-  -- See Note [Injectivity annotation check]. This function implements first
-  -- check for open type families described there.
+  -- See Note [Verifying injectivity annotation]. This function implements
+  -- check (1.B1) for open type families described there.
   = lookup_inj_fam_conflicts home_ie ++ lookup_inj_fam_conflicts pkg_ie
     where
       fam        = famInstTyCon fam_inst
@@ -853,11 +826,13 @@ lookupFamInstEnvInjectivityConflicts injList (pkg_ie, home_ie)
 -- declaration.
 unusedInjTvsInRHS :: [Bool] -> [Type] -> Type -> TyVarSet
 -- INVARIANT: [Bool] list contains at least one True value
--- See Note [Injectivity annotation check]. This function implements second
+-- See Note [Verifying injectivity annotation]. This function implements fourth
 -- check described there.
+-- In theory, instead of implementing this whole check in this way, we could
+-- attempt to unify equation with itself.  We would reject exactly the same
+-- equations but this method gives us more precise error messages by returning
+-- precise names of variables that are not mentioned in the RHS.
 unusedInjTvsInRHS injList lhs rhs =
-  -- return all injective variables not mentioned on injective positions in the
-  -- RHS
   injLHSVars `minusVarSet` injRhsVars
     where
       -- set of type and kind variables in which type family is injective
@@ -868,9 +843,8 @@ unusedInjTvsInRHS injList lhs rhs =
       -- also appear in the RHS.
       injRhsVars = closeOverKinds $ collectInjVars rhs
 
-      -- JSTOLAREK: document this (mention that it could be achieved by
-      -- comparing equation with itself but we do it separately to get better
-      -- error messages).
+      -- Collect all type variables that are either arguments to a type
+      -- constructor or to injective type families.
       collectInjVars :: Type -> VarSet
       collectInjVars ty | Just (ty1, ty2) <- splitAppTy_maybe ty
         = collectInjVars ty1 `unionVarSet` collectInjVars ty2
@@ -896,6 +870,8 @@ unusedInjTvsInRHS injList lhs rhs =
 
 -- | Is type headed by a type family application?
 isTFHeaded :: Type -> Bool
+-- See Note [Verifying injectivity annotation]. This function implements third
+-- check described there.
 isTFHeaded ty | Just ty' <- tcView ty
               = isTFHeaded ty'
 isTFHeaded ty | (TyConApp tc args) <- ty
@@ -906,6 +882,8 @@ isTFHeaded _  = False
 -- | If a RHS is a bare type variable return a set of LHS patterns that are not
 -- bare type variables.
 bareTvInRHSViolated :: [Type] -> Type -> [Type]
+-- See Note [Verifying injectivity annotation]. This function implements second
+-- check described there.
 bareTvInRHSViolated pats rhs | isTyVarTy rhs
    = filter (not . isTyVarTy) pats
 bareTvInRHSViolated _ _ = []

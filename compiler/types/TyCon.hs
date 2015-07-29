@@ -6,7 +6,7 @@
 The @TyCon@ datatype
 -}
 
-{-# LANGUAGE CPP, DeriveDataTypeable, DataKinds #-}
+{-# LANGUAGE CPP, DeriveDataTypeable #-}
 
 module TyCon(
         -- * Main TyCon data types
@@ -311,17 +311,16 @@ We allow injectivity annotations for type families (both open and closed):
   type family G a b = res | res -> a b where ...
 
 Injectivity information is stored in the `famTcInj` field of `FamilyTyCon`.
-`famTcInj` maybe stores a list of Bools where each entry corresponds to a single
-element of `tyConTyVars` (both lists should have identical length). Note that
-while `tyConTyVars` stores both type and kind variables (also ones not mentioned
-explicitly in the source code) we only allow injectivity in types. If no
-injectivity annotation was provided `famTcInj` is Nothing. From this follows
-that if `famTcInj` is a Just then at least one element in the list must be True.
+`famTcInj` maybe stores a list of Bools, where each entry corresponds to a
+single element of `tyConTyVars` (both lists should have identical length). If no
+injectivity annotation was provided `famTcInj` is Nothing. From this follows an
+invariant that if `famTcInj` is a Just then at least one element in the list
+must be True.
 
 See also:
  * [Injectivity annotation] in HsDecls
  * [Renaming injectivity annotation] in RnSource
- * [Injectivity annotation check] in FamInstEnv
+ * [Verifying injectivity annotation] in FamInstEnv
  * [Type inference for type families with injectivity] in TcInteract
 
 
@@ -502,8 +501,9 @@ data TyCon
         famTcInj     :: Maybe [Bool]  -- ^ is this a type family injective in
                                       -- its type variables? Nothing if no
                                       -- injectivity annotation was given
-        -- INVARIANT: if (isJust famTcInj) then:
-        -- length tyConTyVars = length (fromJust famTcInj)
+        -- INVARIANT:
+        -- if   (isJust famTcInj)
+        -- then (length tyConTyVars) = (length (fromJust famTcInj))
     }
 
   -- | Primitive types; cannot be defined in Haskell. This includes

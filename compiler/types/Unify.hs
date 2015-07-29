@@ -387,21 +387,24 @@ tcUnifyTy ty1 ty2
       Unifiable subst -> Just subst
       _other          -> Nothing
 
--- JSTOLAREK: haddockify, make a note
+-- | Unify two types, treating type family applications as possibly unifying
+-- with anything and looking through injective type family applications.
 tcUnifyTyWithTFs :: Bool -> Type -> Type -> Maybe TvSubst
+-- This algorithm is a direct implementation of the "Algorithm U" presented in
+-- the paper "Injective type families for Haskell", Figures 2 and 3.  Equation
+-- numbers in the comments refer to equations from the paper.
 tcUnifyTyWithTFs twoWay t1 t2 = niFixTvSubst `fmap` go t1 t2 emptyTvSubstEnv
     where
       go :: Type -> Type -> TvSubstEnv -> Maybe TvSubstEnv
       -- look through type synonyms
       go t1 t2 theta | Just t1' <- tcView t1 = go t1' t2  theta
       go t1 t2 theta | Just t2' <- tcView t2 = go t1  t2' theta
-      -- proper
+      -- proper unification
       go (TyVarTy tv) t2 theta
           -- Equation (1)
           | Just t1' <- lookupVarEnv theta tv
           = go t1' t2 theta
-          | otherwise = -- JSTOLAREK: calling niFixTvSubst feels inefficient
-                        let t2' = Type.substTy (niFixTvSubst theta) t2
+          | otherwise = let t2' = Type.substTy (niFixTvSubst theta) t2
                         in if tv `elemVarEnv` tyVarsOfType t2'
                            -- Equation (2)
                            then Just theta

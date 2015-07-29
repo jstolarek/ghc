@@ -306,7 +306,7 @@ isKindVar v = isTKVar v && isSuperKind (varType v)
 
 tyVarsOfType :: Type -> VarSet
 -- ^ NB: for type synonyms tyVarsOfType does /not/ expand the synonym
--- tyVarsOfType returns free variables of a type including kind variables
+-- tyVarsOfType returns free variables of a type, including kind variables.
 tyVarsOfType (TyVarTy v)         = unitVarSet v
 tyVarsOfType (TyConApp _ tys)    = tyVarsOfTypes tys
 tyVarsOfType (LitTy {})          = emptyVarSet
