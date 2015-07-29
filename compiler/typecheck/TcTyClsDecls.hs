@@ -6,7 +6,7 @@
 TcTyClsDecls: Typecheck type and class declarations
 -}
 
-{-# LANGUAGE CPP, TupleSections, DataKinds #-}
+{-# LANGUAGE CPP, TupleSections #-}
 
 module TcTyClsDecls (
         tcTyAndClassDecls, tcAddImplicits,
