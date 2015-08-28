@@ -642,7 +642,7 @@ tcTyFamInstDecl mb_clsinfo (L loc decl@(TyFamInstDecl { tfid_eqn = eqn }))
        ; co_ax_branch <- tcTyFamInstEqn (famTyConShape fam_tc) eqn
 
          -- (2) check for validity
-       ; checkValidTyFamInst mb_clsinfo fam_tc co_ax_branch
+       ; checkValidCoAxBranch mb_clsinfo fam_tc co_ax_branch
 
          -- (3) construct coercion axiom
        ; rep_tc_name <- newFamInstAxiomName loc (unLoc fam_lname)

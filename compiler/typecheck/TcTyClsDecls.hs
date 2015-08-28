@@ -691,11 +691,11 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
 
 tcFamDecl1 parent
             (FamilyDecl { fdInfo = ClosedTypeFamily mb_eqns
-                        , fdLName = lname@(L _ tc_name), fdTyVars = tvs
+                        , fdLName = L _ tc_name, fdTyVars = tvs
                         , fdResultSig = L _ sig, fdInjectivityAnn = inj })
 -- Closed type families are a little tricky, because they contain the definition
 -- of both the type family and the equations for a CoAxiom.
-  = do { traceTc "closed type family:" (ppr tc_name)
+  = do { traceTc "Closed type family:" (ppr tc_name)
          -- the variables in the header scope only over the injectivity
          -- declaration but this is not involved here
        ; (tvs', kind) <- tcTyClTyVars tc_name tvs $ \ tvs' kind ->
@@ -717,12 +717,13 @@ tcFamDecl1 parent
        ; let fam_tc_shape = (tc_name, length (hsQTvBndrs tvs), tc_kind)
 
        ; branches <- mapM (tcTyFamInstEqn fam_tc_shape) eqns
+         -- Do not attempt to drop equations dominated by earlier
+         -- ones here; in the case of mutual recursion with a data
+         -- type, we get a knot-tying failure.  Instead we check
+         -- for this afterwards, in TcValidity.checkValidCoAxiom
+         -- Example: tc265
 
-         -- we need the tycon that we will be creating, but it's in scope.
-         -- just look it up.
-       ; fam_tc <- tcLookupLocatedTyCon lname
-
-         -- create a CoAxiom, with the correct src location. It is Vitally
+         -- Create a CoAxiom, with the correct src location. It is Vitally
          -- Important that we do not pass the branches into
          -- newFamInstAxiomName. They have types that have been zonked inside
          -- the knot and we will die if we look at them. This is OK here
@@ -732,19 +733,15 @@ tcFamDecl1 parent
        ; loc <- getSrcSpanM
        ; co_ax_name <- newFamInstAxiomName loc tc_name []
 
-         -- drop inaccessible type family equations and emit a warning
-       ; branches' <- dropDominatedAxioms tc_name kind branches
-
-         -- mkBranchedCoAxiom will fail on an empty list of branches
        ; let mb_co_ax
-              | null eqns = Nothing
-              | otherwise = Just $ mkBranchedCoAxiom co_ax_name fam_tc branches'
+              | null eqns = Nothing   -- mkBranchedCoAxiom fails on empty list
+              | otherwise = Just (mkBranchedCoAxiom co_ax_name fam_tc branches)
 
-         -- now, finally, build the TyCon
-       ; let tycon = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
+             fam_tc = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                       (ClosedSynFamilyTyCon mb_co_ax) kind parent
                       (getInjectivityList tvs' inj)
-       ; return $ ATyCon tycon : maybeToList (fmap ACoAxiom mb_co_ax) } }
+
+       ; return $ ATyCon fam_tc : maybeToList (fmap ACoAxiom mb_co_ax) } }
 
 -- We check for instance validity later, when doing validity checking for
 -- the tycon. Exception: checking equations overlap done by dropDominatedAxioms
@@ -1473,8 +1470,8 @@ checkValidTyCon tc
 
   | Just fam_flav <- famTyConFlav_maybe tc
   = case fam_flav of
-    { ClosedSynFamilyTyCon (Just ax) ->
-          checkValidClosedCoAxiom ax (familyTyConInjectivityInfo tc)
+    { ClosedSynFamilyTyCon (Just ax) -> tcAddClosedTypeFamilyDeclCtxt tc $
+                                        checkValidCoAxiom ax
     ; ClosedSynFamilyTyCon Nothing   -> return ()
     ; AbstractClosedSynFamilyTyCon ->
       do { hsBoot <- tcIsHsBootOrSig
@@ -1544,66 +1541,6 @@ checkValidTyCon tc
                 ts2 = mkVarSet tvs2
                 fty2 = dataConFieldType con2 label
     check_fields [] = panic "checkValidTyCon/check_fields []"
-
--- | Drop inaccessible closed type family equations and emit a warning
-dropDominatedAxioms :: Name -> Kind -> [CoAxBranch] -> TcM [CoAxBranch]
-dropDominatedAxioms tc_name kind branches =
-    reverse `liftM` foldM check_accessibility [] branches
-    -- reverse is necessary because foldM folds from the left and thus the
-    -- resulting list is reversed
-  where
-    -- Check whether the branch is dominated by earlier ones and hence is
-    -- inaccessible
-    check_accessibility :: [CoAxBranch]     -- prev branches (in reverse order)
-                        -> CoAxBranch       -- cur branch
-                        -> TcM [CoAxBranch] -- cur : prev
-    check_accessibility prev_branches cur_branch
-        = if cur_branch `isDominatedBy` prev_branches
-          then do { addWarnAt (coAxBranchSpan cur_branch) $
-                    inaccessibleCoAxBranch tc_name kind cur_branch
-                  ; return prev_branches }
-          else return (cur_branch : prev_branches)
-
-checkValidClosedCoAxiom :: CoAxiom Branched -> Maybe [Bool] -> TcM ()
-checkValidClosedCoAxiom (CoAxiom { co_ax_branches = branches, co_ax_tc = tc })
-                        injectivity
- = tcAddClosedTypeFamilyDeclCtxt tc $
-   do { case injectivity of
-           Nothing  -> return ()
-           Just inj -> brListFoldlM_ (check_injectivity inj) [] branches
-      ; void $ brListMapM (checkValidTyFamInst Nothing tc) branches }
-   where
-     -- Check whether a new closed type family equation (CoAxBranch) can be
-     -- added to already checked equations without violating injectivity
-     -- annotation supplied by the user. If it can't this function adds errors
-     -- in the TcM monad. Always returns a list of equations where the new
-     -- CoAxBranch is placed in front of already checked branches, so that we
-     -- can check remaining equations in a single fold.
-     -- See Note [Verifying injectivity annotation] in FamInstEnv
-     check_injectivity
-         :: [Bool]           -- injectivity annotation
-                             -- INVARIANT: at least one True
-         -> [CoAxBranch]     -- previous branches (in reverse order)
-         -> CoAxBranch       -- current branch
-         -> TcM [CoAxBranch] -- current branch : previous branches
-     check_injectivity inj prev_branches cur_branch = do
-       { let conflicts = fst $ foldl gather_conflicts ([], 0) prev_branches
-             gather_conflicts (acc, n) branch =
-               -- n is 0-based index of branch in prev_branches
-               case injectiveBranches inj cur_branch branch of
-                 InjectivityUnified ax1 ax2 ->
-                     if ax1 `isDominatedBy` (replaceBranch prev_branches n ax2)
-                     then (acc, n + 1) else (branch : acc, n + 1)
-                 InjectivityAccepted -> (acc, n + 1)
-
-             -- Replace n-th element in the list. Assumes 0-based indexing.
-             replaceBranch :: [CoAxBranch] -> Int -> CoAxBranch -> [CoAxBranch]
-             replaceBranch brs n br = take n brs ++ [br] ++ drop (n+1) brs
-
-             errs = makeInjectivityErrors tc cur_branch inj conflicts
-         -- add found errors
-       ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err) errs
-       ; return (cur_branch : prev_branches) }
 
 checkFieldCompat :: Name -> DataCon -> DataCon -> TyVarSet
                  -> Type -> Type -> Type -> Type -> TcM ()
@@ -2317,18 +2254,6 @@ wrongTyFamName fam_tc_name eqn_tc_name
   = hang (ptext (sLit "Mismatched type name in type family instance."))
        2 (vcat [ ptext (sLit "Expected:") <+> ppr fam_tc_name
                , ptext (sLit "  Actual:") <+> ppr eqn_tc_name ])
-
-inaccessibleCoAxBranch :: Name -> Kind -> CoAxBranch -> SDoc
-inaccessibleCoAxBranch name kind (CoAxBranch { cab_tvs = tvs
-                                             , cab_lhs = lhs
-                                             , cab_rhs = rhs })
-  = ptext (sLit "Dropping overlapped type family instance equation:") $$
-    hang (pprUserForAll tvs)
-       2 (hang pprLhs 2 (equals <+> (ppr rhs)))
-        where pprLhs = sdocWithDynFlags (\dflags ->
-               pprPrefixApp TopPrec (ppr name)
-                       (map (ppr_type TyConPrec)
-                            (suppressKinds dflags kind lhs)))
 
 badRoleAnnot :: Name -> Role -> Role -> SDoc
 badRoleAnnot var annot inferred
