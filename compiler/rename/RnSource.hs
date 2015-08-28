@@ -1265,7 +1265,7 @@ rnFamResultSig doc (TyVarSig tvbndr)
                           text "an already bound type variable")
 
        ; (tvbndr', fvs) <- rnLHsTyVarBndr doc Nothing rdr_env tvbndr
-       ; return ( TyVarSig tvbndr', fvs ) }
+       ; return (TyVarSig tvbndr', fvs) }
 
 -- Note [Renaming injectivity annotation]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1310,10 +1310,13 @@ rnInjectivityAnn tvBndrs (L _ (TyVarSig resTv))
                  (L srcSpan (InjectivityAnn injFrom injTo))
  = do
    { (injDecl'@(L _ (InjectivityAnn injFrom' injTo')), noRnErrors)
-          <- askNoErrs $ do
-               injFrom' <- rnLTyVar True injFrom
-               injTo'   <- mapM (rnLTyVar True) injTo
-               return $ L srcSpan (InjectivityAnn injFrom' injTo')
+          <- askNoErrs $
+             bindLocalNames [hsLTyVarName resTv] $
+                 -- The return type variable scopes over the injectivity annotation
+                 -- e.g.   type family F a = (r::*) | r -> a
+             do { injFrom' <- rnLTyVar True injFrom
+                ; injTo'   <- mapM (rnLTyVar True) injTo
+                ; return $ L srcSpan (InjectivityAnn injFrom' injTo') }
 
    ; let tvNames  = Set.fromList $ hsLKiTyVarNames tvBndrs
          resName  = hsLTyVarName resTv
