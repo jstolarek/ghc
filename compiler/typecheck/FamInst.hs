@@ -11,8 +11,7 @@ module FamInst (
         newFamInst,
 
         -- * Injectivity
-        makeInjectivityErrors, conflictInjInstErr, unusedInjectiveVarsErr,
-        injectivityErrorHerald,
+        makeInjectivityErrors,
 
         tfHeadedErr, bareVariableInRHSErr
     ) where
