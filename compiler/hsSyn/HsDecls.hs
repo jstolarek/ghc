@@ -551,6 +551,164 @@ tyClGroupConcat = concatMap group_tyclds
 mkTyClGroup :: [LTyClDecl name] -> TyClGroup name
 mkTyClGroup decls = TyClGroup { group_tyclds = decls, group_roles = [] }
 
+
+-- Simple classifiers for TyClDecl
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-- | @True@ <=> argument is a @data@\/@newtype@
+-- declaration.
+isDataDecl :: TyClDecl name -> Bool
+isDataDecl (DataDecl {}) = True
+isDataDecl _other        = False
+
+-- | type or type instance declaration
+isSynDecl :: TyClDecl name -> Bool
+isSynDecl (SynDecl {})   = True
+isSynDecl _other        = False
+
+-- | type class
+isClassDecl :: TyClDecl name -> Bool
+isClassDecl (ClassDecl {}) = True
+isClassDecl _              = False
+
+-- | type/data family declaration
+isFamilyDecl :: TyClDecl name -> Bool
+isFamilyDecl (FamDecl {})  = True
+isFamilyDecl _other        = False
+
+-- | type family declaration
+isTypeFamilyDecl :: TyClDecl name -> Bool
+isTypeFamilyDecl (FamDecl (FamilyDecl { fdInfo = info })) = case info of
+  OpenTypeFamily      -> True
+  ClosedTypeFamily {} -> True
+  _                   -> False
+isTypeFamilyDecl _ = False
+
+-- | open type family info
+isOpenTypeFamilyInfo :: FamilyInfo name -> Bool
+isOpenTypeFamilyInfo OpenTypeFamily = True
+isOpenTypeFamilyInfo _              = False
+
+-- | closed type family info
+isClosedTypeFamilyInfo :: FamilyInfo name -> Bool
+isClosedTypeFamilyInfo (ClosedTypeFamily {}) = True
+isClosedTypeFamilyInfo _                     = False
+
+-- | data family declaration
+isDataFamilyDecl :: TyClDecl name -> Bool
+isDataFamilyDecl (FamDecl (FamilyDecl { fdInfo = DataFamily })) = True
+isDataFamilyDecl _other      = False
+
+-- Dealing with names
+
+tyFamInstDeclName :: TyFamInstDecl name -> name
+tyFamInstDeclName = unLoc . tyFamInstDeclLName
+
+tyFamInstDeclLName :: TyFamInstDecl name -> Located name
+tyFamInstDeclLName (TyFamInstDecl { tfid_eqn =
+                     (L _ (TyFamEqn { tfe_tycon = ln })) })
+  = ln
+
+tyClDeclLName :: TyClDecl name -> Located name
+tyClDeclLName (FamDecl { tcdFam = FamilyDecl { fdLName = ln } }) = ln
+tyClDeclLName decl = tcdLName decl
+
+tcdName :: TyClDecl name -> name
+tcdName = unLoc . tyClDeclLName
+
+tyClDeclTyVars :: TyClDecl name -> LHsTyVarBndrs name
+tyClDeclTyVars (FamDecl { tcdFam = FamilyDecl { fdTyVars = tvs } }) = tvs
+tyClDeclTyVars d = tcdTyVars d
+
+countTyClDecls :: [TyClDecl name] -> (Int, Int, Int, Int, Int)
+        -- class, synonym decls, data, newtype, family decls
+countTyClDecls decls
+ = (count isClassDecl    decls,
+    count isSynDecl      decls,  -- excluding...
+    count isDataTy       decls,  -- ...family...
+    count isNewTy        decls,  -- ...instances
+    count isFamilyDecl   decls)
+ where
+   isDataTy DataDecl{ tcdDataDefn = HsDataDefn { dd_ND = DataType } } = True
+   isDataTy _                                                       = False
+
+   isNewTy DataDecl{ tcdDataDefn = HsDataDefn { dd_ND = NewType } } = True
+   isNewTy _                                                      = False
+
+-- | Does this declaration have a complete, user-supplied kind signature?
+-- See Note [Complete user-supplied kind signatures]
+hsDeclHasCusk :: TyClDecl name -> Bool
+hsDeclHasCusk (FamDecl { tcdFam = fam_decl }) = famDeclHasCusk fam_decl
+hsDeclHasCusk (SynDecl { tcdTyVars = tyvars, tcdRhs = rhs })
+  = hsTvbAllKinded tyvars && rhs_annotated rhs
+  where
+    rhs_annotated (L _ ty) = case ty of
+      HsParTy lty  -> rhs_annotated lty
+      HsKindSig {} -> True
+      _            -> False
+hsDeclHasCusk (DataDecl { tcdTyVars = tyvars })  = hsTvbAllKinded tyvars
+hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
+
+-- Pretty-printing TyClDecl
+-- ~~~~~~~~~~~~~~~~~~~~~~~~
+
+instance OutputableBndr name
+              => Outputable (TyClDecl name) where
+
+    ppr (FamDecl { tcdFam = decl }) = ppr decl
+    ppr (SynDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdRhs = rhs })
+      = hang (ptext (sLit "type") <+>
+              pp_vanilla_decl_head ltycon tyvars [] <+> equals)
+          4 (ppr rhs)
+
+    ppr (DataDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdDataDefn = defn })
+      = pp_data_defn (pp_vanilla_decl_head ltycon tyvars) defn
+
+    ppr (ClassDecl {tcdCtxt = context, tcdLName = lclas, tcdTyVars = tyvars,
+                    tcdFDs  = fds,
+                    tcdSigs = sigs, tcdMeths = methods,
+                    tcdATs = ats, tcdATDefs = at_defs})
+      | null sigs && isEmptyBag methods && null ats && null at_defs -- No "where" part
+      = top_matter
+
+      | otherwise       -- Laid out
+      = vcat [ top_matter <+> ptext (sLit "where")
+             , nest 2 $ pprDeclList (map ppr ats ++
+                                     map ppr_fam_deflt_eqn at_defs ++
+                                     pprLHsBindsForUser methods sigs) ]
+      where
+        top_matter = ptext (sLit "class")
+                     <+> pp_vanilla_decl_head lclas tyvars (unLoc context)
+                     <+> pprFundeps (map unLoc fds)
+
+instance OutputableBndr name => Outputable (TyClGroup name) where
+  ppr (TyClGroup { group_tyclds = tyclds, group_roles = roles })
+    = ppr tyclds $$
+      ppr roles
+
+pp_vanilla_decl_head :: OutputableBndr name
+   => Located name
+   -> LHsTyVarBndrs name
+   -> HsContext name
+   -> SDoc
+pp_vanilla_decl_head thing tyvars context
+ = hsep [pprHsContext context, pprPrefixOcc (unLoc thing), ppr tyvars]
+
+pprTyClDeclFlavour :: TyClDecl a -> SDoc
+pprTyClDeclFlavour (ClassDecl {})   = ptext (sLit "class")
+pprTyClDeclFlavour (SynDecl {})     = ptext (sLit "type")
+pprTyClDeclFlavour (FamDecl { tcdFam = FamilyDecl { fdInfo = info }})
+  = pprFlavour info
+pprTyClDeclFlavour (DataDecl { tcdDataDefn = HsDataDefn { dd_ND = nd } })
+  = ppr nd
+
+
+{- *********************************************************************
+*                                                                      *
+               Data and type family declarations
+*                                                                      *
+********************************************************************* -}
+
 -- Note [FamilyResultSig]
 -- ~~~~~~~~~~~~~~~~~~~~~~
 --
@@ -684,105 +842,6 @@ data FamilyInfo name
   deriving( Typeable )
 deriving instance (DataId name) => Data (FamilyInfo name)
 
-{-
-------------------------------
-Simple classifiers
--}
-
--- | @True@ <=> argument is a @data@\/@newtype@
--- declaration.
-isDataDecl :: TyClDecl name -> Bool
-isDataDecl (DataDecl {}) = True
-isDataDecl _other        = False
-
--- | type or type instance declaration
-isSynDecl :: TyClDecl name -> Bool
-isSynDecl (SynDecl {})   = True
-isSynDecl _other        = False
-
--- | type class
-isClassDecl :: TyClDecl name -> Bool
-isClassDecl (ClassDecl {}) = True
-isClassDecl _              = False
-
--- | type/data family declaration
-isFamilyDecl :: TyClDecl name -> Bool
-isFamilyDecl (FamDecl {})  = True
-isFamilyDecl _other        = False
-
--- | type family declaration
-isTypeFamilyDecl :: TyClDecl name -> Bool
-isTypeFamilyDecl (FamDecl (FamilyDecl { fdInfo = info })) = case info of
-  OpenTypeFamily      -> True
-  ClosedTypeFamily {} -> True
-  _                   -> False
-isTypeFamilyDecl _ = False
-
--- | open type family info
-isOpenTypeFamilyInfo :: FamilyInfo name -> Bool
-isOpenTypeFamilyInfo OpenTypeFamily = True
-isOpenTypeFamilyInfo _              = False
-
--- | closed type family info
-isClosedTypeFamilyInfo :: FamilyInfo name -> Bool
-isClosedTypeFamilyInfo (ClosedTypeFamily {}) = True
-isClosedTypeFamilyInfo _                     = False
-
--- | data family declaration
-isDataFamilyDecl :: TyClDecl name -> Bool
-isDataFamilyDecl (FamDecl (FamilyDecl { fdInfo = DataFamily })) = True
-isDataFamilyDecl _other      = False
-
--- Dealing with names
-
-tyFamInstDeclName :: TyFamInstDecl name -> name
-tyFamInstDeclName = unLoc . tyFamInstDeclLName
-
-tyFamInstDeclLName :: TyFamInstDecl name -> Located name
-tyFamInstDeclLName (TyFamInstDecl { tfid_eqn =
-                     (L _ (TyFamEqn { tfe_tycon = ln })) })
-  = ln
-
-tyClDeclLName :: TyClDecl name -> Located name
-tyClDeclLName (FamDecl { tcdFam = FamilyDecl { fdLName = ln } }) = ln
-tyClDeclLName decl = tcdLName decl
-
-tcdName :: TyClDecl name -> name
-tcdName = unLoc . tyClDeclLName
-
-tyClDeclTyVars :: TyClDecl name -> LHsTyVarBndrs name
-tyClDeclTyVars (FamDecl { tcdFam = FamilyDecl { fdTyVars = tvs } }) = tvs
-tyClDeclTyVars d = tcdTyVars d
-
-countTyClDecls :: [TyClDecl name] -> (Int, Int, Int, Int, Int)
-        -- class, synonym decls, data, newtype, family decls
-countTyClDecls decls
- = (count isClassDecl    decls,
-    count isSynDecl      decls,  -- excluding...
-    count isDataTy       decls,  -- ...family...
-    count isNewTy        decls,  -- ...instances
-    count isFamilyDecl   decls)
- where
-   isDataTy DataDecl{ tcdDataDefn = HsDataDefn { dd_ND = DataType } } = True
-   isDataTy _                                                       = False
-
-   isNewTy DataDecl{ tcdDataDefn = HsDataDefn { dd_ND = NewType } } = True
-   isNewTy _                                                      = False
-
--- | Does this declaration have a complete, user-supplied kind signature?
--- See Note [Complete user-supplied kind signatures]
-hsDeclHasCusk :: TyClDecl name -> Bool
-hsDeclHasCusk (FamDecl { tcdFam = fam_decl }) = famDeclHasCusk fam_decl
-hsDeclHasCusk (SynDecl { tcdTyVars = tyvars, tcdRhs = rhs })
-  = hsTvbAllKinded tyvars && rhs_annotated rhs
-  where
-    rhs_annotated (L _ ty) = case ty of
-      HsParTy lty  -> rhs_annotated lty
-      HsKindSig {} -> True
-      _            -> False
-hsDeclHasCusk (DataDecl { tcdTyVars = tyvars })  = hsTvbAllKinded tyvars
-hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
-
 -- | Does this family declaration have a complete, user-supplied kind signature?
 famDeclHasCusk :: FamilyDecl name -> Bool
 famDeclHasCusk (FamilyDecl { fdInfo      = ClosedTypeFamily _
@@ -862,40 +921,6 @@ variables and its return type are annotated.
  - An open type family always has a CUSK -- unannotated type variables (and return type) default to *.
 -}
 
-instance OutputableBndr name
-              => Outputable (TyClDecl name) where
-
-    ppr (FamDecl { tcdFam = decl }) = ppr decl
-    ppr (SynDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdRhs = rhs })
-      = hang (ptext (sLit "type") <+>
-              pp_vanilla_decl_head ltycon tyvars [] <+> equals)
-          4 (ppr rhs)
-
-    ppr (DataDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdDataDefn = defn })
-      = pp_data_defn (pp_vanilla_decl_head ltycon tyvars) defn
-
-    ppr (ClassDecl {tcdCtxt = context, tcdLName = lclas, tcdTyVars = tyvars,
-                    tcdFDs  = fds,
-                    tcdSigs = sigs, tcdMeths = methods,
-                    tcdATs = ats, tcdATDefs = at_defs})
-      | null sigs && isEmptyBag methods && null ats && null at_defs -- No "where" part
-      = top_matter
-
-      | otherwise       -- Laid out
-      = vcat [ top_matter <+> ptext (sLit "where")
-             , nest 2 $ pprDeclList (map ppr ats ++
-                                     map ppr_fam_deflt_eqn at_defs ++
-                                     pprLHsBindsForUser methods sigs) ]
-      where
-        top_matter = ptext (sLit "class")
-                     <+> pp_vanilla_decl_head lclas tyvars (unLoc context)
-                     <+> pprFundeps (map unLoc fds)
-
-instance OutputableBndr name => Outputable (TyClGroup name) where
-  ppr (TyClGroup { group_tyclds = tyclds, group_roles = roles })
-    = ppr tyclds $$
-      ppr roles
-
 instance (OutputableBndr name) => Outputable (FamilyDecl name) where
   ppr (FamilyDecl { fdInfo = info, fdLName = ltycon
                   , fdTyVars = tyvars, fdResultSig = L _ result
@@ -928,38 +953,13 @@ pprFlavour (ClosedTypeFamily {}) = ptext (sLit "type family")
 instance Outputable (FamilyInfo name) where
   ppr = pprFlavour
 
-pp_vanilla_decl_head :: OutputableBndr name
-   => Located name
-   -> LHsTyVarBndrs name
-   -> HsContext name
-   -> SDoc
-pp_vanilla_decl_head thing tyvars context
- = hsep [pprHsContext context, pprPrefixOcc (unLoc thing), ppr tyvars]
 
-pp_fam_inst_lhs :: OutputableBndr name
-   => Located name
-   -> HsTyPats name
-   -> HsContext name
-   -> SDoc
-pp_fam_inst_lhs thing (HsWB { hswb_cts = typats }) context -- explicit type patterns
-   = hsep [ pprHsContext context, pprPrefixOcc (unLoc thing)
-          , hsep (map (pprParendHsType.unLoc) typats)]
 
-pprTyClDeclFlavour :: TyClDecl a -> SDoc
-pprTyClDeclFlavour (ClassDecl {})   = ptext (sLit "class")
-pprTyClDeclFlavour (SynDecl {})     = ptext (sLit "type")
-pprTyClDeclFlavour (FamDecl { tcdFam = FamilyDecl { fdInfo = info }})
-  = pprFlavour info
-pprTyClDeclFlavour (DataDecl { tcdDataDefn = HsDataDefn { dd_ND = nd } })
-  = ppr nd
-
-{-
-************************************************************************
+{- *********************************************************************
 *                                                                      *
-\subsection[ConDecl]{A data-constructor declaration}
+               Data types and data constructors
 *                                                                      *
-************************************************************************
--}
+********************************************************************* -}
 
 data HsDataDefn name   -- The payload of a data type defn
                        -- Used *both* for vanilla data declarations,
@@ -1377,6 +1377,15 @@ pprDataFamInstDecl top_lvl (DataFamInstDecl { dfid_tycon = tycon
 pprDataFamInstFlavour :: DataFamInstDecl name -> SDoc
 pprDataFamInstFlavour (DataFamInstDecl { dfid_defn = (HsDataDefn { dd_ND = nd }) })
   = ppr nd
+
+pp_fam_inst_lhs :: OutputableBndr name
+   => Located name
+   -> HsTyPats name
+   -> HsContext name
+   -> SDoc
+pp_fam_inst_lhs thing (HsWB { hswb_cts = typats }) context -- explicit type patterns
+   = hsep [ pprHsContext context, pprPrefixOcc (unLoc thing)
+          , hsep (map (pprParendHsType.unLoc) typats)]
 
 instance (OutputableBndr name) => Outputable (ClsInstDecl name) where
     ppr (ClsInstDecl { cid_poly_ty = inst_ty, cid_binds = binds

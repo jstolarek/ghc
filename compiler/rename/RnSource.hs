@@ -1204,74 +1204,25 @@ rnFamDecl :: Maybe Name -- Just cls => this FamilyDecl is nested
           -> FamilyDecl RdrName
           -> RnM (FamilyDecl Name, FreeVars)
 rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
-                             , fdInfo = info, fdResultSig = L sigSpan resultSig
+                             , fdInfo = info, fdResultSig = res_sig
                              , fdInjectivityAnn = injectivity })
-  = do { rdr_env <- getLocalRdrEnv
-       ; ((tycon', tyvars', resultSig', injectivity'), fv1) <-
-           bindHsTyVars fmly_doc mb_cls kvs extTvs $ \rndTyvars ->
-           do { tycon' <- lookupLocatedTopBndrRn tycon
-              ; (resultSig', fv_kind, tyvars') <- case resultSig of
-                  NoSig -> return (NoSig, emptyFVs, rndTyvars)
-                  KindSig kind -> do
-                   (rndKind, ftvs) <- rnLHsKind fmly_doc kind
-                   return (KindSig rndKind, ftvs, rndTyvars)
-                  TyVarSig tvbndr -> do
-                   -- `TyVarSig` tells us that user named the result of a type
-                   -- family by writing `= tyvar` or `= (tyvar :: kind)`. In
-                   -- such case we want to be sure that the supplied result name
-                   -- is not identical to an already in-scope type variables:
-                   --
-                   --  a) one of already declared type family arguments. Example
-                    --    of disallowed declaration:
-                   --        type family F a = a
-                   --
-                   --  b) already in-scope type variable. This second case might
-                   --     happen for associated types, where type class head
-                   --     bounds some type variables. Example of disallowed
-                   --     declaration:
-                   --         class C a b where
-                   --            type F b = a | a -> b
-                   --
-                   -- Case a) is handled internally by bindHsTyVars. (Note that
-                   -- we add the result type variable binding to the list of
-                   -- type variable bindings). Case b is handled below.
-                   let -- if the user supplied a binding for result type
-                       -- variable we have to remove it from the front of the
-                       -- variable bindings list. See definition of extTyvars in
-                       -- the where clause below. Note that this pattern match
-                       -- is safe - when resultSig is TyVarSig the list of
-                       -- variable bindings is guaranteed to be non-empty.
-                       (rndKind : rndTvs) = hsq_tvs rndTyvars
-                       resName            = hsLTyVarName tvbndr
-                   when (resName `elemLocalRdrEnv` rdr_env) $
-                       addErrAt (getLoc tvbndr)
-                              (hsep [ text "Type variable"
-                                    , quotes . ppr $ resName
-                                    , text "naming a type family result shadows"
-                                    ] $$
-                               text "an already bound type variable.")
-                   return ( TyVarSig rndKind, emptyFVs
-                          , rndTyvars { hsq_tvs = rndTvs })
-
-              ; injectivity' <- traverse (rnInjectivityAnn tyvars' resultSig')
-                                          injectivity
-
-              ; return ( (tycon', tyvars', resultSig', injectivity')
-                       , fv_kind )  }
+  = do { tycon' <- lookupLocatedTopBndrRn tycon
+       ; ((tyvars', res_sig', injectivity'), fv1) <-
+             bindHsTyVars doc mb_cls kvs tyvars $ \ tyvars' ->
+             do { (res_sig', fv_kind) <- wrapLocFstM (rnFamResultSig doc) res_sig
+                ; injectivity' <- traverse (rnInjectivityAnn tyvars' res_sig')
+                                           injectivity
+                ; return ( (tyvars', res_sig', injectivity') , fv_kind )  }
        ; (info', fv2) <- rn_info info
        ; return (FamilyDecl { fdLName = tycon', fdTyVars = tyvars'
-                            , fdInfo = info', fdResultSig = L sigSpan resultSig'
+                            , fdInfo = info', fdResultSig = res_sig'
                             , fdInjectivityAnn = injectivity' }
                 , fv1 `plusFV` fv2) }
   where
-     fmly_doc = TyFamilyCtx tycon
-     kvs      = extractRdrKindSigVars resultSig
-     -- if the user supplied a binding for result type variable we add it to the
-     -- list of type variable bindings (extTvs = extended type variables)
-     extTvs   = case resultSig of
-                  TyVarSig bndr -> tyvars { hsq_tvs = bndr : hsq_tvs tyvars }
-                  _             -> tyvars
+     doc = TyFamilyCtx tycon
+     kvs = extractRdrKindSigVars res_sig
 
+     ----------------------
      rn_info (ClosedTypeFamily (Just eqns))
        = do { (eqns', fvs) <- rnList (rnTyFamInstEqn Nothing) eqns
                                                     -- no class context,
@@ -1280,6 +1231,41 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
        = return (ClosedTypeFamily Nothing, emptyFVs)
      rn_info OpenTypeFamily = return (OpenTypeFamily, emptyFVs)
      rn_info DataFamily     = return (DataFamily, emptyFVs)
+
+rnFamResultSig :: HsDocContext -> FamilyResultSig RdrName -> RnM (FamilyResultSig Name, FreeVars)
+rnFamResultSig _ NoSig
+   = return (NoSig, emptyFVs)
+rnFamResultSig doc (KindSig kind)
+   = do { (rndKind, ftvs) <- rnLHsKind doc kind
+        ;  return (KindSig rndKind, ftvs) }
+rnFamResultSig doc (TyVarSig tvbndr)
+   = do {     -- `TyVarSig` tells us that user named the result of a type
+              -- family by writing `= tyvar` or `= (tyvar :: kind)`. In
+              -- such case we want to be sure that the supplied result name
+              -- is not identical to an already in-scope type variables:
+              --
+              --  (a) one of already declared type family arguments. Example
+               --     of disallowed declaration:
+              --        type family F a = a
+              --
+              --  (b) already in-scope type variable. This second case might
+              --      happen for associated types, where type class head
+              --      bounds some type variables. Example of disallowed
+              --      declaration:
+              --         class C a b where
+              --            type F b = a | a -> b
+              -- Both are caught by the "in-scope" check that comes next
+          rdr_env <- getLocalRdrEnv
+       ;  let resName = hsLTyVarName tvbndr
+       ;  when (resName `elemLocalRdrEnv` rdr_env) $
+          addErrAt (getLoc tvbndr) $
+                         (hsep [ text "Type variable", quotes (ppr resName)
+                               , text "naming a type family result shadows"
+                               ] $$
+                          text "an already bound type variable")
+
+       ; (tvbndr', fvs) <- rnLHsTyVarBndr doc Nothing rdr_env tvbndr
+       ; return ( TyVarSig tvbndr', fvs ) }
 
 -- Note [Renaming injectivity annotation]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1317,10 +1303,10 @@ rnFamDecl mb_cls (FamilyDecl { fdLName = tycon, fdTyVars = tyvars
 -- rnFamDecl.
 rnInjectivityAnn :: LHsTyVarBndrs Name         -- ^ Type variables declared in
                                                --   type family head
-                 -> FamilyResultSig Name       -- ^ Result signature
+                 -> LFamilyResultSig Name      -- ^ Result signature
                  -> LInjectivityAnn RdrName    -- ^ Injectivity annotation
                  -> RnM (LInjectivityAnn Name)
-rnInjectivityAnn tvBndrs (TyVarSig resTv)
+rnInjectivityAnn tvBndrs (L _ (TyVarSig resTv))
                  (L srcSpan (InjectivityAnn injFrom injTo))
  = do
    { (injDecl'@(L _ (InjectivityAnn injFrom' injTo')), noRnErrors)
