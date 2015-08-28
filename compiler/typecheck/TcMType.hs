@@ -33,7 +33,7 @@ module TcMType (
 
   --------------------------------
   -- Instantiation
-  tcInstTyVars, tcInstTyVarX, newSigTyVar,
+  tcInstTyVars, tcInstTyVarX, newSigTyVar, newSigKindVar,
   tcInstType,
   tcInstSkolTyVars, tcInstSuperSkolTyVarsX,
   tcInstSigTyVarsLoc, tcInstSigTyVars,
@@ -301,10 +301,17 @@ newNamedMetaTyVar name meta_info kind
   = do { details <- newMetaDetails meta_info
        ; return (mkTcTyVar name kind details) }
 
+newSigKindVar :: Name -> TcM TcTyVar
+newSigKindVar name = newSigTyVar name superKind
+
 newSigTyVar :: Name -> Kind -> TcM TcTyVar
 newSigTyVar name kind
   = do { details <- newMetaDetails SigTv
-       ; return (mkTcTyVar name kind details) }
+       ; uniq    <- newUnique
+       ; let fresh_name = setNameUnique name uniq
+                 -- Use the same OccName so that the tidy-er
+                 -- doesn't gratuitously rename 'a' to 'a0' etc
+       ; return (mkTcTyVar fresh_name kind details) }
 
 newMetaDetails :: MetaInfo -> TcM TcTyVarDetails
 newMetaDetails info

@@ -937,7 +937,7 @@ kcScopedKindVars :: [Name] -> TcM a -> TcM a
 -- bind each scoped kind variable (k in this case) to a fresh
 -- kind skolem variable
 kcScopedKindVars kv_ns thing_inside
-  = do { kvs <- mapM (\n -> newSigTyVar n superKind) kv_ns
+  = do { kvs <- mapM newSigKindVar kv_ns
                      -- NB: use mutable signature variables
        ; tcExtendTyVarEnv2 (kv_ns `zip` kvs) thing_inside }
 
@@ -952,8 +952,8 @@ kcHsTyVarBndrs :: Bool    -- ^ True <=> the decl being checked has a CUSK
                                   -- with the other info
 kcHsTyVarBndrs cusk (HsQTvs { hsq_kvs = kv_ns, hsq_tvs = hs_tvs }) thing_inside
   = do { kvs <- if cusk
-                then mapM mkKindSigVar kv_ns
-                else mapM (\n -> newSigTyVar n superKind) kv_ns
+                then mapM mkKindSigVar  kv_ns
+                else mapM newSigKindVar kv_ns
        ; tcExtendTyVarEnv2 (kv_ns `zip` kvs) $
     do { nks <- mapM (kc_hs_tv . unLoc) hs_tvs
        ; (res_kind, stuff) <- tcExtendKindEnv nks thing_inside
