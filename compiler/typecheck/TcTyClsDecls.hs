@@ -634,6 +634,7 @@ tcTyClDecl1 _parent rec_info
                  -- This little knot is just so we can get
                  -- hold of the name of the class TyCon, which we
                  -- need to look up its recursiveness
+               ; traceTc "tcClassDecl 1" (ppr class_name $$ ppr tvs' $$ ppr kind)
                ; let tycon_name = tyConName (classTyCon clas)
                      tc_isrec = rti_is_rec rec_info tycon_name
                      roles = rti_roles rec_info tycon_name
@@ -665,14 +666,14 @@ tcTyClDecl1 _parent rec_info
          -- NB: Order is important due to the call to `mkGlobalThings' when
          --     tying the the type and class declaration type checking knot.
   where
-    tc_fundep (tvs1, tvs2) = do { tvs1' <- mapM (tc_fd_tyvar . unLoc) tvs1 ;
-                                ; tvs2' <- mapM (tc_fd_tyvar . unLoc) tvs2 ;
+    tc_fundep (tvs1, tvs2) = do { tvs1' <- mapM tc_fd_tyvar tvs1
+                                ; tvs2' <- mapM tc_fd_tyvar tvs2
                                 ; return (tvs1', tvs2') }
-    tc_fd_tyvar name   -- Scoped kind variables are bound to unification variables
-                       -- which are now fixed, so we can zonk
+
+    tc_fd_tyvar (L _ name)   -- Scoped kind variables are bound to SigTv unification
+                            -- variables, which are now fixed, so we can zonk
       = do { tv <- tcLookupTyVar name
            ; ty <- zonkTyVarOcc emptyZonkEnv tv
-                  -- Squeeze out any kind unification variables
            ; case getTyVar_maybe ty of
                Just tv' -> return tv'
                Nothing  -> pprPanic "tc_fd_tyvar" (ppr name $$ ppr tv $$ ppr ty) }

@@ -1142,7 +1142,8 @@ tcTyClTyVars tycon (HsQTvs { hsq_kvs = hs_kvs, hsq_tvs = hs_tvs }) thing_inside
                               -- There may be fewer of these than the kvs of
                               -- the type constructor, of course
     do { thing <- tcLookup tycon
-       ; let { kind = case thing of
+       ; let { kind = case thing of -- The kind of the tycon has been worked out
+                                    -- by the previous pass, and is fully zonked
                         AThing kind -> kind
                         _ -> panic "tcTyClTyVars"
                      -- We only call tcTyClTyVars during typechecking in
@@ -1158,11 +1159,12 @@ tcTyClTyVars tycon (HsQTvs { hsq_kvs = hs_kvs, hsq_tvs = hs_tvs }) thing_inside
     -- e.g.   class C a_29 where
     --           type T b_30 a_29 :: *
     -- Here the a_29 is shared
-    tc_hs_tv (L _ (UserTyVar n))        kind = return (mkTyVar n kind)
+    tc_hs_tv (L _ (UserTyVar n)) kind
+       = return (mkTyVar n kind)
     tc_hs_tv (L _ (KindedTyVar (L _ n) hs_k)) kind
-                                        = do { tc_kind <- tcLHsKind hs_k
-                                             ; checkKind kind tc_kind
-                                             ; return (mkTyVar n kind) }
+       = do { tc_kind <- tcLHsKind hs_k
+            ; checkKind kind tc_kind
+            ; return (mkTyVar n kind) }
 
 -----------------------------------
 tcDataKindSig :: Kind -> TcM [TyVar]
