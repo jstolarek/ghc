@@ -3,9 +3,9 @@
 [3 of 3] Compiling T6018            ( T6018.hs, T6018.o )
 
 T6018.hs:75:5: Warning:
-    Dropping overlapped type family instance equation:
+    Type family instance equation is overlapped:
        Foo Bool = Bool
 
 T6018.hs:82:5: Warning:
-    Dropping overlapped type family instance equation:
+    Type family instance equation is overlapped:
        Bar Bool = Char

@@ -14,34 +14,34 @@ T6018rnfail.hs:12:19:
          Expected : r
          Actual   : a
 
-T6018rnfail.hs:15:15:
-    Conflicting definitions for ‘a’
-    Bound at: T6018rnfail.hs:15:15
-              T6018rnfail.hs:15:19
+T6018rnfail.hs:15:19:
+    Type variable ‘a’ naming a type family result shadows
+    an already bound type variable
 
-T6018rnfail.hs:16:16:
-    Conflicting definitions for ‘a’
-    Bound at: T6018rnfail.hs:16:16
-              T6018rnfail.hs:16:20
+T6018rnfail.hs:16:20:
+    Type variable ‘a’ naming a type family result shadows
+    an already bound type variable
 
-T6018rnfail.hs:20:16:
-    Conflicting definitions for ‘a’
-    Bound at: T6018rnfail.hs:20:16
-              T6018rnfail.hs:20:20
+T6018rnfail.hs:20:20:
+    Type variable ‘a’ naming a type family result shadows
+    an already bound type variable
 
-T6018rnfail.hs:21:17:
-    Conflicting definitions for ‘a’
-    Bound at: T6018rnfail.hs:21:17
-              T6018rnfail.hs:21:21
+T6018rnfail.hs:20:24:
+    Unknown type variable on the RHS of injectivity condition: a
 
-T6018rnfail.hs:24:12:
-    Conflicting definitions for ‘a’
-    Bound at: T6018rnfail.hs:24:12
-              T6018rnfail.hs:24:16
+T6018rnfail.hs:21:21:
+    Type variable ‘a’ naming a type family result shadows
+    an already bound type variable
+
+T6018rnfail.hs:21:25:
+    Unknown type variable on the RHS of injectivity condition: a
 
 T6018rnfail.hs:24:16:
     Type variable ‘a’ naming a type family result shadows
-    an already bound type variable.
+    an already bound type variable
+
+T6018rnfail.hs:24:20:
+    Unknown type variable on the RHS of injectivity condition: a
 
 T6018rnfail.hs:27:1: Not in scope: type variable ‘c’
 
@@ -57,7 +57,7 @@ T6018rnfail.hs:38:3: Not in scope: type variable ‘c’
 
 T6018rnfail.hs:42:15:
     Type variable ‘a’ naming a type family result shadows
-    an already bound type variable.
+    an already bound type variable
 
 T6018rnfail.hs:46:19:
     Unknown type variable on the RHS of injectivity condition: b
