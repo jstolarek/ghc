@@ -74,7 +74,7 @@ module HsDecls (
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
   FamilyResultSig(..), LFamilyResultSig, InjectivityAnn(..), LInjectivityAnn,
-  getInjectivityList, resultVariableName,
+  resultVariableName,
 
   -- * Grouping
   HsGroup(..),  emptyRdrGroup, emptyRnGroup, appendGroups
@@ -90,15 +90,12 @@ import HsPat
 import HsTypes
 import HsDoc
 import TyCon
-import Var
-import VarSet
 import Name
 import BasicTypes
 import Coercion
 import ForeignCall
 import PlaceHolder ( PostTc,PostRn,PlaceHolder(..),DataId )
 import NameSet
-import TypeRep ( closeOverKinds )
 
 -- others:
 import InstEnv
@@ -860,41 +857,6 @@ hasReturnKindSignature _                              = True
 resultVariableName :: FamilyResultSig a -> Maybe a
 resultVariableName (TyVarSig sig) = Just $ hsLTyVarName sig
 resultVariableName _              = Nothing
-
--- | Maybe return a list of Bools that say whether a type family was declared
--- injective in the corresponding type arguments. Length of the list is equal to
--- the number of arguments (including implicit kind arguments). True on position
--- N means that a function is injective in its Nth argument. False means it is
--- not.
-getInjectivityList :: [TyVar] -> Maybe (LInjectivityAnn Name) -> Maybe [Bool]
-
-  -- No injectivity information => type family is not injective in any
-  -- of its arguments.
-getInjectivityList _ Nothing = Nothing
-
-  -- User provided an injectivity annotation, so for each tyvar argument we
-  -- check whether a type family was declared injective in that argument. We
-  -- return a list of Bools, where True means that corresponding type variable
-  -- was mentioned in lInjNames (type family is injective in that argument) and
-  -- False means that it was not mentioned in lInjNames (type family is not
-  -- injective in that type variable). We also extend injectivity information to
-  -- kind variables, so if a user declares:
-  --
-  --   type family F (a :: k1) (b :: k2) = (r :: k3) | r -> a
-  --
-  -- then we mark both `a` and `k1` as injective.
-  -- NB: the return kind is considered to be *input* argument to a type family.
-  -- Since injectivity allows to infer input arguments from the result in theory
-  -- we should always mark the result kind variable (`k3` in this example) as
-  -- injective.  The reason is that result type has always an assigned kind and
-  -- therefore we can always infer the result kind if we know the result type.
-  -- But this does not seem to be useful in any way so we don't do it.  (Another
-  -- reason is that the implementation would not be straightforward.)
-getInjectivityList tvs (Just (L _ (InjectivityAnn _ lInjNames))) =
-  let inj_tvs_names = mkNameSet (map unLoc lInjNames)
-      inj_tvs     = filter (\tv -> tyVarName tv `elemNameSet` inj_tvs_names) tvs
-      inj_kvs_tvs = closeOverKinds (mkVarSet inj_tvs)
-  in Just $ map (`elemVarSet` inj_kvs_tvs) tvs
 
 {-
 Note [Complete user-supplied kind signatures]

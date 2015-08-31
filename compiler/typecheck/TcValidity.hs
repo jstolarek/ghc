@@ -1218,7 +1218,7 @@ checkValidCoAxiom (CoAxiom { co_ax_tc = fam_tc, co_ax_branches = branches })
   = do { _ <- brListMapM (checkValidCoAxBranch Nothing fam_tc) branches
        ; brListFoldlM_ check_branch_compat [] branches }
   where
-    mb_injectivity = familyTyConInjectivityInfo fam_tc
+    injectivity = familyTyConInjectivityInfo fam_tc
 
     check_branch_compat :: [CoAxBranch]     -- previous branches (in reverse order)
                         -> CoAxBranch       -- current branch
@@ -1240,7 +1240,7 @@ checkValidCoAxiom (CoAxiom { co_ax_tc = fam_tc, co_ax_branches = branches })
      -- annotation supplied by the user.
      -- See Note [Verifying injectivity annotation] in FamInstEnv
     check_injectivity prev_branches cur_branch
-      | Just inj <- mb_injectivity
+      | Injective inj <- injectivity
       = do { let conflicts = fst $ foldl (gather_conflicts inj prev_branches cur_branch)
                                          ([], 0) prev_branches
            ; mapM_ (\(err, span) -> setSrcSpan span $ addErr err)

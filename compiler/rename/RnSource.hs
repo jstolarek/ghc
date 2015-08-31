@@ -1259,10 +1259,10 @@ rnFamResultSig doc (TyVarSig tvbndr)
        ;  let resName = hsLTyVarName tvbndr
        ;  when (resName `elemLocalRdrEnv` rdr_env) $
           addErrAt (getLoc tvbndr) $
-                         (hsep [ text "Type variable", quotes (ppr resName)
-                               , text "naming a type family result shadows"
+                         (hsep [ text "Type variable", quotes (ppr resName) <> comma
+                               , text "naming a type family result,"
                                ] $$
-                          text "an already bound type variable")
+                          text "shadows an already bound type variable")
 
        ; (tvbndr', fvs) <- rnLHsTyVarBndr doc Nothing rdr_env tvbndr
        ; return (TyVarSig tvbndr', fvs) }

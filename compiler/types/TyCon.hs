@@ -14,7 +14,7 @@ module TyCon(
 
         AlgTyConRhs(..), visibleDataCons,
         TyConParent(..), isNoParent,
-        FamTyConFlav(..), Role(..),
+        FamTyConFlav(..), Role(..), Injectivity(..),
 
         -- ** Constructing TyCons
         mkAlgTyCon,
@@ -74,7 +74,7 @@ module TyCon(
         tyConFamInst_maybe, tyConFamInstSig_maybe, tyConFamilyCoercion_maybe,
         tyConFamilyResVar_maybe,
         synTyConDefn_maybe, synTyConRhs_maybe,
-        famTyConFlav_maybe, famTcResVar, famTcInj,
+        famTyConFlav_maybe, famTcResVar,
         algTyConRhs,
         newTyConRhs, newTyConEtadArity, newTyConEtadRhs,
         unwrapNewTyCon_maybe, unwrapNewTyConEtad_maybe,
@@ -101,6 +101,7 @@ module TyCon(
 import {-# SOURCE #-} TypeRep ( Kind, Type, PredType )
 import {-# SOURCE #-} DataCon ( DataCon, dataConExTyVars )
 
+import Binary
 import Var
 import Class
 import BasicTypes
@@ -498,12 +499,9 @@ data TyCon
         famTcParent  :: TyConParent,  -- ^ TyCon of enclosing class for
                                       -- associated type families
 
-        famTcInj     :: Maybe [Bool]  -- ^ is this a type family injective in
+        famTcInj     :: Injectivity   -- ^ is this a type family injective in
                                       -- its type variables? Nothing if no
                                       -- injectivity annotation was given
-        -- INVARIANT:
-        -- if   (isJust famTcInj)
-        -- then (length tyConTyVars) = (length (fromJust famTcInj))
     }
 
   -- | Primitive types; cannot be defined in Haskell. This includes
@@ -729,6 +727,11 @@ isNoParent NoParentTyCon = True
 isNoParent _             = False
 
 --------------------
+
+data Injectivity
+  = NotInjective
+  | Injective [Bool]   -- Length is 1-1 with tyConTyVars (incl kind vars)
+  deriving( Eq )
 
 -- | Information pertaining to the expansion of a type synonym (@type@)
 data FamTyConFlav
@@ -1146,7 +1149,7 @@ mkSynonymTyCon name kind tyvars roles rhs
 
 -- | Create a type family 'TyCon'
 mkFamilyTyCon:: Name -> Kind -> [TyVar] -> Maybe Name -> FamTyConFlav
-             -> TyConParent -> Maybe [Bool] -> TyCon
+             -> TyConParent -> Injectivity -> TyCon
 mkFamilyTyCon name kind tyvars resVar flav parent inj
   = FamilyTyCon
       { tyConUnique = nameUnique name
@@ -1431,7 +1434,7 @@ isClosedSynFamilyTyConWithAxiom_maybe _               = Nothing
 
 -- | Try to read the injectivity information from a FamilyTyCon. Only
 -- FamilyTyCons can be injective so for every other TyCon this function panics.
-familyTyConInjectivityInfo :: TyCon -> Maybe [Bool]
+familyTyConInjectivityInfo :: TyCon -> Injectivity
 familyTyConInjectivityInfo (FamilyTyCon { famTcInj = inj }) = inj
 familyTyConInjectivityInfo _ = panic "familyTyConInjectivityInfo"
 
@@ -1850,6 +1853,16 @@ instance Data.Data TyCon where
     toConstr _   = abstractConstr "TyCon"
     gunfold _ _  = error "gunfold"
     dataTypeOf _ = mkNoRepType "TyCon"
+
+instance Binary Injectivity where
+    put_ bh NotInjective   = putByte bh 0
+    put_ bh (Injective xs) = putByte bh 1 >> put_ bh xs
+
+    get bh = do { h <- getByte bh
+                ; case h of
+                    0 -> return NotInjective
+                    _ -> do { xs <- get bh
+                            ; return (Injective xs) } }
 
 {-
 ************************************************************************

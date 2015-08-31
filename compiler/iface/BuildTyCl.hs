@@ -58,7 +58,7 @@ buildFamilyTyCon :: Name         -- ^ Type family name
                  -> FamTyConFlav -- ^ Open, closed or in a boot file?
                  -> Kind         -- ^ Kind of the RHS
                  -> TyConParent  -- ^ Parent, if exists
-                 -> Maybe [Bool] -- ^ Injectivity annotation
+                 -> Injectivity  -- ^ Injectivity annotation
                                  -- See [Injectivity annotation] in HsDecls
                  -> TyCon
 buildFamilyTyCon tc_name tvs res_tv rhs rhs_kind parent injectivity

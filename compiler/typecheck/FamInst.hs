@@ -399,7 +399,7 @@ checkForInjectivityConflicts :: FamInstEnvs -> FamInst -> TcM Bool
 checkForInjectivityConflicts instEnvs famInst
     | isTypeFamilyTyCon tycon
     -- type family is injective in at least one argument
-    , Just inj <- familyTyConInjectivityInfo tycon = do
+    , Injective inj <- familyTyConInjectivityInfo tycon = do
     { let axiom = brFromUnbranchedSingleton (co_ax_branches (fi_axiom famInst))
           conflicts = lookupFamInstEnvInjectivityConflicts inj instEnvs famInst
           -- see Note [Verifying injectivity annotation] in FamInstEnv

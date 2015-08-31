@@ -53,7 +53,7 @@ import Fingerprint
 import Binary
 import BooleanFormula ( BooleanFormula )
 import HsBinds
-import TyCon (Role (..))
+import TyCon ( Role (..), Injectivity(..) )
 import StaticFlags (opt_PprStyle_Debug)
 import Util( filterOut, filterByList )
 import InstEnv
@@ -116,10 +116,7 @@ data IfaceDecl
                    ifFamKind :: IfaceKind,         -- Kind of the *rhs* (not of
                                                    -- the tycon)
                    ifFamFlav :: IfaceFamTyConFlav,
-                   ifFamInj  :: Maybe [Bool] }     -- injectivity information
-                -- INVARIANT:
-                --   if   (isJust ifFamInj)
-                --   then (length ifTyVars = length (fromJust ifFamInj))
+                   ifFamInj  :: Injectivity }      -- injectivity information
 
   | IfaceClass { ifCtxt    :: IfaceContext,             -- Superclasses
                  ifName    :: IfaceTopBndr,             -- Name of the class TyCon
@@ -693,8 +690,8 @@ pprIfaceDecl ss (IfaceFamily { ifName = tycon, ifTyVars = tyvars
   where
     pp_inj Nothing    _   = dcolon <+> ppr kind
     pp_inj (Just res) inj
-        | Just injectivity <- inj = hsep [ equals, ppr res, dcolon, ppr kind
-                                         , pp_inj_cond res injectivity]
+        | Injective injectivity <- inj = hsep [ equals, ppr res, dcolon, ppr kind
+                                              , pp_inj_cond res injectivity]
         | otherwise = hsep [ equals, ppr res, dcolon, ppr kind ]
 
     pp_inj_cond res inj = case filterByList inj tyvars of

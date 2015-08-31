@@ -887,7 +887,7 @@ improveLocalFunEqs loc inerts fam_tc args fsk
       =    -- Try built-in families, notably for arithmethic
          concatMap (do_one_built_in ops) funeqs_for_tc
 
-      | Just injective_args <- familyTyConInjectivityInfo fam_tc
+      | Injective injective_args <- familyTyConInjectivityInfo fam_tc
       =    -- Try improvement from type families with injectivity annotations
          concatMap (do_one_injective injective_args) funeqs_for_tc
 
@@ -1432,7 +1432,7 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
 
   -- see Note [Type inference for type families with injectivity]
   | isOpenTypeFamilyTyCon fam_tc
-  , Just injective_args <- familyTyConInjectivityInfo fam_tc
+  , Injective injective_args <- familyTyConInjectivityInfo fam_tc
   = -- it is possible to have several compatible equations in an open type
     -- family but we only want to derive equalities from one such equation.
     concatMapM (injImproveEqns injective_args) (take 1 $
@@ -1440,7 +1440,7 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
                            fi_tys fi_rhs (const Nothing))
 
   | Just ax <- isClosedSynFamilyTyConWithAxiom_maybe fam_tc
-  , Just injective_args <- familyTyConInjectivityInfo fam_tc
+  , Injective injective_args <- familyTyConInjectivityInfo fam_tc
   = concatMapM (injImproveEqns injective_args) $
       buildImprovementData (fromBranchList (co_ax_branches ax))
                            cab_lhs cab_rhs Just

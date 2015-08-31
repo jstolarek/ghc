@@ -426,7 +426,7 @@ tcUnifyTyWithTFs twoWay t1 t2 = niFixTvSubst `fmap` go t1 t2 emptyTvSubstEnv
 
         -- Equation (7)
         | isTypeFamilyTyCon tc1 && isTypeFamilyTyCon tc2 && tc1 == tc2
-        , Just inj <- familyTyConInjectivityInfo tc1
+        , Injective inj <- familyTyConInjectivityInfo tc1
         = let tys1' = filterByList inj tys1
               tys2' = filterByList inj tys2
               injTys = zip tys1' tys2'

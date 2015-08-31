@@ -666,17 +666,22 @@ tcTyClDecl1 _parent rec_info
          -- NB: Order is important due to the call to `mkGlobalThings' when
          --     tying the the type and class declaration type checking knot.
   where
-    tc_fundep (tvs1, tvs2) = do { tvs1' <- mapM tc_fd_tyvar tvs1
-                                ; tvs2' <- mapM tc_fd_tyvar tvs2
+    tc_fundep (tvs1, tvs2) = do { tvs1' <- mapM tcFdTyVar tvs1
+                                ; tvs2' <- mapM tcFdTyVar tvs2
                                 ; return (tvs1', tvs2') }
 
-    tc_fd_tyvar (L _ name)   -- Scoped kind variables are bound to SigTv unification
-                            -- variables, which are now fixed, so we can zonk
-      = do { tv <- tcLookupTyVar name
-           ; ty <- zonkTyVarOcc emptyZonkEnv tv
-           ; case getTyVar_maybe ty of
-               Just tv' -> return tv'
-               Nothing  -> pprPanic "tc_fd_tyvar" (ppr name $$ ppr tv $$ ppr ty) }
+tcFdTyVar :: Located Name -> TcM TcTyVar
+-- Look up a type/kind variable in a functional dependency
+-- or injectivity annotation.  In the case of kind variables,
+-- the environment contains a binding of the kind var to a
+-- a SigTv unification variables, which has now fixed.
+-- So we must zonk to get the real thing.  Ugh!
+tcFdTyVar (L _ name)
+  = do { tv <- tcLookupTyVar name
+       ; ty <- zonkTyVarOcc emptyZonkEnv tv
+       ; case getTyVar_maybe ty of
+           Just tv' -> return tv'
+           Nothing  -> pprPanic "tcFdTyVar" (ppr name $$ ppr tv $$ ppr ty) }
 
 tcFamDecl1 :: TyConParent -> FamilyDecl Name -> TcM [TyThing]
 tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
@@ -685,9 +690,9 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
   = tcTyClTyVars tc_name tvs $ \ tvs' kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
+  ; inj' <- tcInjectivity tvs' inj
   ; let tycon = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
-                                 OpenSynFamilyTyCon kind parent
-                                 (getInjectivityList tvs' inj)
+                                 OpenSynFamilyTyCon kind parent inj'
   ; return [ATyCon tycon] }
 
 tcFamDecl1 parent
@@ -699,8 +704,9 @@ tcFamDecl1 parent
   = do { traceTc "Closed type family:" (ppr tc_name)
          -- the variables in the header scope only over the injectivity
          -- declaration but this is not involved here
-       ; (tvs', kind) <- tcTyClTyVars tc_name tvs $ \ tvs' kind ->
-                         return (tvs', kind)
+       ; (tvs', inj', kind) <- tcTyClTyVars tc_name tvs $ \ tvs' kind ->
+                               do { inj' <- tcInjectivity tvs' inj
+                                  ; return (tvs', inj', kind) }
 
        ; checkFamFlag tc_name -- make sure we have -XTypeFamilies
 
@@ -710,7 +716,7 @@ tcFamDecl1 parent
            Nothing   ->
                return [ATyCon $ buildFamilyTyCon tc_name tvs' Nothing
                                      AbstractClosedSynFamilyTyCon kind parent
-                                     Nothing ]
+                                     NotInjective ]
            Just eqns -> do {
 
          -- Process the equations, creating CoAxBranches
@@ -739,8 +745,7 @@ tcFamDecl1 parent
               | otherwise = Just (mkBranchedCoAxiom co_ax_name fam_tc branches)
 
              fam_tc = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
-                      (ClosedSynFamilyTyCon mb_co_ax) kind parent
-                      (getInjectivityList tvs' inj)
+                      (ClosedSynFamilyTyCon mb_co_ax) kind parent inj'
 
        ; return $ ATyCon fam_tc : maybeToList (fmap ACoAxiom mb_co_ax) } }
 
@@ -761,6 +766,43 @@ tcFamDecl1 parent
                               True    -- GADT syntax
                               parent
   ; return [ATyCon tycon] }
+
+-- | Maybe return a list of Bools that say whether a type family was declared
+-- injective in the corresponding type arguments. Length of the list is equal to
+-- the number of arguments (including implicit kind arguments). True on position
+-- N means that a function is injective in its Nth argument. False means it is
+-- not.
+tcInjectivity :: [TyVar] -> Maybe (LInjectivityAnn Name)
+              -> TcM Injectivity
+tcInjectivity _ Nothing
+  = return NotInjective
+
+  -- User provided an injectivity annotation, so for each tyvar argument we
+  -- check whether a type family was declared injective in that argument. We
+  -- return a list of Bools, where True means that corresponding type variable
+  -- was mentioned in lInjNames (type family is injective in that argument) and
+  -- False means that it was not mentioned in lInjNames (type family is not
+  -- injective in that type variable). We also extend injectivity information to
+  -- kind variables, so if a user declares:
+  --
+  --   type family F (a :: k1) (b :: k2) = (r :: k3) | r -> a
+  --
+  -- then we mark both `a` and `k1` as injective.
+  -- NB: the return kind is considered to be *input* argument to a type family.
+  -- Since injectivity allows to infer input arguments from the result in theory
+  -- we should always mark the result kind variable (`k3` in this example) as
+  -- injective.  The reason is that result type has always an assigned kind and
+  -- therefore we can always infer the result kind if we know the result type.
+  -- But this does not seem to be useful in any way so we don't do it.  (Another
+  -- reason is that the implementation would not be straightforward.)
+tcInjectivity tvs (Just (L loc (InjectivityAnn _ lInjNames)))
+  = setSrcSpan loc $
+    do { inj_tvs <- mapM tcFdTyVar lInjNames
+       ; let inj_ktvs = closeOverKinds (mkVarSet inj_tvs)
+       ; let inj_bools = map (`elemVarSet` inj_ktvs) tvs
+       ; traceTc "tcInjectivity" (vcat [ ppr tvs, ppr lInjNames, ppr inj_tvs
+                                       , ppr inj_ktvs, ppr inj_bools ])
+       ; return $ Injective inj_bools }
 
 tcTySynRhs :: RecTyInfo
            -> Name

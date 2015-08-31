@@ -1102,15 +1102,17 @@ reifyTyCon tc
        ; kind' <- reifyKind res_kind
        ; let (resultSig, injectivity) =
                  case resVar of
-                   Nothing   -> ( TH.KindSig kind', Nothing )
+                   Nothing   -> (TH.KindSig kind', Nothing)
                    Just name ->
                      let thName   = reifyName name
-                         injAnnot = famTcInj tc
+                         injAnnot = familyTyConInjectivityInfo tc
                          sig = TH.TyVarSig (TH.KindedTV thName kind')
-                         inj = do { injList <- injAnnot -- Maybe monad
-                                  ; let injRHS = map (reifyName . tyVarName)
-                                                     (filterByList injList tvs)
-                                  ; return $ TH.InjectivityAnn thName injRHS }
+                         inj = case injAnnot of
+                                 NotInjective -> Nothing
+                                 Injective ms -> Just (TH.InjectivityAnn thName injRHS)
+                                   where
+                                     injRHS = map (reifyName . tyVarName)
+                                                  (filterByList ms tvs)
                      in (sig, inj)
        ; tvs' <- reifyTyVars tvs
        ; if isOpenTypeFamilyTyCon tc

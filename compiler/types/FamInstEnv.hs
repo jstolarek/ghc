@@ -851,8 +851,7 @@ unusedInjTvsInRHS injList lhs rhs =
       collectInjVars (TyVarTy v)
         = unitVarSet v
       collectInjVars (TyConApp tc tys)
-        | isTypeFamilyTyCon tc = maybe emptyVarSet (collectInjTFVars tys)
-                                       (familyTyConInjectivityInfo tc)
+        | isTypeFamilyTyCon tc = collectInjTFVars tys (familyTyConInjectivityInfo tc)
         | otherwise            = mapUnionVarSet collectInjVars tys
       collectInjVars (LitTy {})
         = emptyVarSet
@@ -864,9 +863,11 @@ unusedInjTvsInRHS injList lhs rhs =
       collectInjVars (ForAllTy _ _)    =
           panic "unusedInjTvsInRHS.collectInjVars"
 
-      collectInjTFVars :: [Type] -> [Bool] -> VarSet
-      collectInjTFVars tys injList =
-          mapUnionVarSet collectInjVars (filterByList injList tys)
+      collectInjTFVars :: [Type] -> Injectivity -> VarSet
+      collectInjTFVars _ NotInjective
+          = emptyVarSet
+      collectInjTFVars tys (Injective injList)
+          = mapUnionVarSet collectInjVars (filterByList injList tys)
 
 -- | Is type headed by a type family application?
 isTFHeaded :: Type -> Bool
