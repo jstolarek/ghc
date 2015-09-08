@@ -1175,6 +1175,10 @@ repE (ArithSeq _ _ aseq) =
 
 repE (HsSpliceE splice)    = repSplice splice
 repE (HsStatic e)          = repLE e >>= rep2 staticEName . (:[]) . unC
+repE (HsUnboundVar name)   = do
+  MkC occ   <- coreStringLit (occNameString name)
+  MkC sname <- rep2 mkNameSName [occ]
+  rep2 unboundVarEName [sname]
 repE e@(PArrSeq {})        = notHandled "Parallel arrays" (ppr e)
 repE e@(HsCoreAnn {})      = notHandled "Core annotations" (ppr e)
 repE e@(HsSCC {})          = notHandled "Cost centres" (ppr e)

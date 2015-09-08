@@ -716,6 +716,7 @@ cvtl e = wrapL (cvt e)
                                           (HsRecFields flds' Nothing)
                                           PlaceHolder PlaceHolder PlaceHolder }
     cvt (StaticE e)      = fmap HsStatic $ cvtl e
+    cvt (UnboundVarE s)  = do { s' <- vName s; return $ HsVar s' }
 
 {- Note [Dropping constructors]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
