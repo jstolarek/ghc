@@ -182,7 +182,7 @@ rnSrcDecls group@(HsGroup { hs_valds   = val_decls,
       -- Haddock docs; no free vars
    rn_docs <- mapM (wrapLocM rnDocDecl) docs ;
 
-    last_tcg_env <- getGblEnv ;
+   last_tcg_env <- getGblEnv ;
    -- (I) Compute the results and return
    let {rn_group = HsGroup { hs_valds   = rn_val_decls,
                              hs_splcds  = rn_splice_decls,

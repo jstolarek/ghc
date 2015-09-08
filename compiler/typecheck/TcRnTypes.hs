@@ -731,7 +731,7 @@ instance Outputable TcIdBinder where
 ---------------------------
 
 data ThStage    -- See Note [Template Haskell state diagram] in TcSplice
-  = Splice      -- Inside a top-level splice splice
+  = Splice      -- Inside a top-level splice
                 -- This code will be run *at compile time*;
                 --   the result replaces the splice
                 -- Binding level = 0
