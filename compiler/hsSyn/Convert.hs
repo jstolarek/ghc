@@ -1238,6 +1238,7 @@ cvtName ctxt_ns (TH.Name occ flavour)
 
 okOcc :: OccName.NameSpace -> String -> Bool
 okOcc ns str
+  | startsWithUnderscore (OccName.mkOccName ns str) = True
   | OccName.isVarNameSpace ns     = okVarOcc str
   | OccName.isDataConNameSpace ns = okConOcc str
   | otherwise                     = okTcOcc  str
