@@ -74,6 +74,7 @@ module HsDecls (
   RoleAnnotDecl(..), LRoleAnnotDecl, roleAnnotDeclName,
   -- ** Injective type families
   FamilyResultSig(..), LFamilyResultSig, InjectivityAnn(..), LInjectivityAnn,
+  InjectivityCond(..), LInjectivityCond,
   resultVariableName,
 
   -- * Grouping
@@ -814,6 +815,14 @@ deriving instance (DataId id) => Data (FamilyDecl id)
 
 type LInjectivityAnn name = Located (InjectivityAnn name)
 
+-- JSTOLAREK: more documentation
+-- INVARIANT: list of injectivity conditions is not empty. Guaranteed by the
+-- parser
+newtype InjectivityAnn name = InjectivityAnn [LInjectivityCond name]
+  deriving ( Data, Typeable )
+
+type LInjectivityCond name = Located (InjectivityCond name)
+
 -- | If the user supplied an injectivity annotation it is represented using
 -- InjectivityAnn. At the moment this is a single injectivity condition - see
 -- Note [Injectivity annotation]. `Located name` stores the LHS of injectivity
@@ -822,8 +831,8 @@ type LInjectivityAnn name = Located (InjectivityAnn name)
 --   type family Foo a b c = r | r -> a c where ...
 --
 -- This will be represented as "InjectivityAnn `r` [`a`, `c`]"
-data InjectivityAnn name
-  = InjectivityAnn (Located name) [Located name]
+data InjectivityCond name
+  = InjectivityCond [Located name] [Located name]
   -- ^ - 'ApiAnnotation.AnnKeywordId' :
   --             'ApiAnnotation.AnnRarrow', 'ApiAnnotation.AnnVbar'
 
@@ -897,9 +906,12 @@ instance (OutputableBndr name) => Outputable (FamilyDecl name) where
                       KindSig  kind    -> dcolon <+> ppr kind
                       TyVarSig tv_bndr -> text "=" <+> ppr tv_bndr
           pp_inj = case mb_inj of
-                     Just (L _ (InjectivityAnn lhs rhs)) ->
-                       hsep [ text "|", ppr lhs, text "->", hsep (map ppr rhs) ]
+                     Just (L _ (InjectivityAnn injConds)) ->
+                       text "|" <+>
+                       hsep (punctuate (text ",") (map pp_inj_cond injConds))
                      Nothing -> empty
+          pp_inj_cond (L _ (InjectivityCond lhs rhs)) =
+              hsep (map ppr lhs) <+> text "->" <+> hsep (map ppr rhs)
           (pp_where, pp_eqns) = case info of
             ClosedTypeFamily mb_eqns ->
               ( ptext (sLit "where")
