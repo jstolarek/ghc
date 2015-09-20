@@ -72,7 +72,7 @@ module Language.Haskell.TH(
         Pat(..), FieldExp, FieldPat,
     -- ** Types
         Type(..), TyVarBndr(..), TyLit(..), Kind, Cxt, Pred, Syntax.Role(..),
-        FamilyResultSig(..), Syntax.InjectivityAnn(..),
+        FamilyResultSig(..), Syntax.InjectivityCond(..),
 
     -- * Library functions
     -- ** Abbreviations
@@ -136,7 +136,7 @@ module Language.Haskell.TH(
     dataFamilyD, openTypeFamilyD, closedTypeFamilyD, dataInstD,
     familyNoKindD, familyKindD, closedTypeFamilyNoKindD, closedTypeFamilyKindD,
     newtypeInstD, tySynInstD,
-    typeFam, dataFam, tySynEqn, injectivityAnn, noSig, kindSig, tyVarSig,
+    typeFam, dataFam, tySynEqn, injectivityCond, noSig, kindSig, tyVarSig,
     -- **** Foreign Function Interface (FFI)
     cCall, stdCall, cApi, prim, javaScript,
     unsafe, safe, forImpD,

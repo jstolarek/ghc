@@ -96,8 +96,8 @@ templateHaskellNames = [
     starKName, constraintKName,
     -- FamilyResultSig
     noSigName, kindSigName, tyVarSigName,
-    -- InjectivityAnn
-    injectivityAnnName,
+    -- InjectivityCond
+    injectivityCondName,
     -- Callconv
     cCallName, stdCallName, cApiCallName, primCallName, javaScriptCallName,
     -- Safety
@@ -134,7 +134,7 @@ templateHaskellNames = [
     typeTyConName, tyVarBndrTyConName, matchTyConName, clauseTyConName,
     patQTyConName, fieldPatQTyConName, fieldExpQTyConName, funDepTyConName,
     predQTyConName, decsQTyConName, ruleBndrQTyConName, tySynEqnQTyConName,
-    roleTyConName, tExpTyConName, injAnnTyConName, kindTyConName,
+    roleTyConName, tExpTyConName, injCondTyConName, kindTyConName,
 
     -- Quasiquoting
     quoteDecName, quoteTypeName, quoteExpName, quotePatName]
@@ -163,23 +163,23 @@ liftClassName = thCls (fsLit "Lift") liftClassKey
 qTyConName, nameTyConName, fieldExpTyConName, patTyConName,
     fieldPatTyConName, expTyConName, decTyConName, typeTyConName,
     tyVarBndrTyConName, matchTyConName, clauseTyConName, funDepTyConName,
-    predTyConName, tExpTyConName, injAnnTyConName, kindTyConName :: Name
-qTyConName        = thTc (fsLit "Q")              qTyConKey
-nameTyConName     = thTc (fsLit "Name")           nameTyConKey
-fieldExpTyConName = thTc (fsLit "FieldExp")       fieldExpTyConKey
-patTyConName      = thTc (fsLit "Pat")            patTyConKey
-fieldPatTyConName = thTc (fsLit "FieldPat")       fieldPatTyConKey
-expTyConName      = thTc (fsLit "Exp")            expTyConKey
-decTyConName      = thTc (fsLit "Dec")            decTyConKey
-typeTyConName     = thTc (fsLit "Type")           typeTyConKey
-tyVarBndrTyConName= thTc (fsLit "TyVarBndr")      tyVarBndrTyConKey
-matchTyConName    = thTc (fsLit "Match")          matchTyConKey
-clauseTyConName   = thTc (fsLit "Clause")         clauseTyConKey
-funDepTyConName   = thTc (fsLit "FunDep")         funDepTyConKey
-predTyConName     = thTc (fsLit "Pred")           predTyConKey
-tExpTyConName     = thTc (fsLit "TExp")           tExpTyConKey
-injAnnTyConName   = thTc (fsLit "InjectivityAnn") injAnnTyConKey
-kindTyConName     = thTc (fsLit "Kind")           kindTyConKey
+    predTyConName, tExpTyConName, injCondTyConName, kindTyConName :: Name
+qTyConName         = thTc (fsLit "Q")               qTyConKey
+nameTyConName      = thTc (fsLit "Name")            nameTyConKey
+fieldExpTyConName  = thTc (fsLit "FieldExp")        fieldExpTyConKey
+patTyConName       = thTc (fsLit "Pat")             patTyConKey
+fieldPatTyConName  = thTc (fsLit "FieldPat")        fieldPatTyConKey
+expTyConName       = thTc (fsLit "Exp")             expTyConKey
+decTyConName       = thTc (fsLit "Dec")             decTyConKey
+typeTyConName      = thTc (fsLit "Type")            typeTyConKey
+tyVarBndrTyConName = thTc (fsLit "TyVarBndr")       tyVarBndrTyConKey
+matchTyConName     = thTc (fsLit "Match")           matchTyConKey
+clauseTyConName    = thTc (fsLit "Clause")          clauseTyConKey
+funDepTyConName    = thTc (fsLit "FunDep")          funDepTyConKey
+predTyConName      = thTc (fsLit "Pred")            predTyConKey
+tExpTyConName      = thTc (fsLit "TExp")            tExpTyConKey
+injCondTyConName   = thTc (fsLit "InjectivityCond") injCondTyConKey
+kindTyConName      = thTc (fsLit "Kind")            kindTyConKey
 
 
 returnQName, bindQName, sequenceQName, newNameName, liftName,
@@ -428,8 +428,8 @@ kindSigName     = libFun (fsLit "kindSig")      kindSigIdKey
 tyVarSigName    = libFun (fsLit "tyVarSig")     tyVarSigIdKey
 
 -- data InjectivityAnn = ...
-injectivityAnnName :: Name
-injectivityAnnName = libFun (fsLit "injectivityAnn") injectivityAnnIdKey
+injectivityCondName :: Name
+injectivityCondName = libFun (fsLit "injectivityCond") injectivityCondIdKey
 
 -- data Callconv = ...
 cCallName, stdCallName, cApiCallName, primCallName, javaScriptCallName :: Name
@@ -536,7 +536,7 @@ expTyConKey, matchTyConKey, clauseTyConKey, qTyConKey, expQTyConKey,
     fieldExpTyConKey, fieldPatTyConKey, nameTyConKey, patQTyConKey,
     fieldPatQTyConKey, fieldExpQTyConKey, funDepTyConKey, predTyConKey,
     predQTyConKey, decsQTyConKey, ruleBndrQTyConKey, tySynEqnQTyConKey,
-    roleTyConKey, tExpTyConKey, injAnnTyConKey, kindTyConKey :: Unique
+    roleTyConKey, tExpTyConKey, injCondTyConKey, kindTyConKey :: Unique
 expTyConKey             = mkPreludeTyConUnique 200
 matchTyConKey           = mkPreludeTyConUnique 201
 clauseTyConKey          = mkPreludeTyConUnique 202
@@ -568,7 +568,7 @@ ruleBndrQTyConKey       = mkPreludeTyConUnique 227
 tySynEqnQTyConKey       = mkPreludeTyConUnique 228
 roleTyConKey            = mkPreludeTyConUnique 229
 tExpTyConKey            = mkPreludeTyConUnique 230
-injAnnTyConKey          = mkPreludeTyConUnique 231
+injCondTyConKey         = mkPreludeTyConUnique 231
 kindTyConKey            = mkPreludeTyConUnique 232
 
 -- IdUniques available: 200-499
@@ -817,9 +817,9 @@ noSigIdKey        = mkPreludeMiscIdUnique 416
 kindSigIdKey      = mkPreludeMiscIdUnique 417
 tyVarSigIdKey     = mkPreludeMiscIdUnique 418
 
--- data InjectivityAnn = ...
-injectivityAnnIdKey :: Unique
-injectivityAnnIdKey = mkPreludeMiscIdUnique 419
+-- data InjectivityCond = ...
+injectivityCondIdKey :: Unique
+injectivityCondIdKey = mkPreludeMiscIdUnique 419
 
 -- data Callconv = ...
 cCallIdKey, stdCallIdKey, cApiCallIdKey, primCallIdKey,

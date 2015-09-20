@@ -9,7 +9,7 @@ module Language.Haskell.TH.Lib where
     -- be "public" functions.  The main module TH
     -- re-exports them all.
 
-import Language.Haskell.TH.Syntax hiding (Role, InjectivityAnn)
+import Language.Haskell.TH.Syntax hiding (Role, InjectivityCond)
 import qualified Language.Haskell.TH.Syntax as TH
 import Control.Monad( liftM, liftM2 )
 import Data.Word( Word8 )
@@ -18,31 +18,31 @@ import Data.Word( Word8 )
 -- * Type synonyms
 ----------------------------------------------------------
 
-type InfoQ          = Q Info
-type PatQ           = Q Pat
-type FieldPatQ      = Q FieldPat
-type ExpQ           = Q Exp
-type TExpQ a        = Q (TExp a)
-type DecQ           = Q Dec
-type DecsQ          = Q [Dec]
-type ConQ           = Q Con
-type TypeQ          = Q Type
-type TyLitQ         = Q TyLit
-type CxtQ           = Q Cxt
-type PredQ          = Q Pred
-type MatchQ         = Q Match
-type ClauseQ        = Q Clause
-type BodyQ          = Q Body
-type GuardQ         = Q Guard
-type StmtQ          = Q Stmt
-type RangeQ         = Q Range
-type StrictTypeQ    = Q StrictType
-type VarStrictTypeQ = Q VarStrictType
-type FieldExpQ      = Q FieldExp
-type RuleBndrQ      = Q RuleBndr
-type TySynEqnQ      = Q TySynEqn
-type Role           = TH.Role       -- must be defined here for DsMeta to find it
-type InjectivityAnn = TH.InjectivityAnn
+type InfoQ           = Q Info
+type PatQ            = Q Pat
+type FieldPatQ       = Q FieldPat
+type ExpQ            = Q Exp
+type TExpQ a         = Q (TExp a)
+type DecQ            = Q Dec
+type DecsQ           = Q [Dec]
+type ConQ            = Q Con
+type TypeQ           = Q Type
+type TyLitQ          = Q TyLit
+type CxtQ            = Q Cxt
+type PredQ           = Q Pred
+type MatchQ          = Q Match
+type ClauseQ         = Q Clause
+type BodyQ           = Q Body
+type GuardQ          = Q Guard
+type StmtQ           = Q Stmt
+type RangeQ          = Q Range
+type StrictTypeQ     = Q StrictType
+type VarStrictTypeQ  = Q VarStrictType
+type FieldExpQ       = Q FieldExp
+type RuleBndrQ       = Q RuleBndr
+type TySynEqnQ       = Q TySynEqn
+type Role            = TH.Role       -- must be defined here for DsMeta to find it
+type InjectivityCond = TH.InjectivityCond
 
 ----------------------------------------------------------
 -- * Lowercase pattern syntax functions
@@ -699,8 +699,8 @@ tyVarSig = TyVarSig
 -------------------------------------------------------------------------------
 -- *   Injectivity annotation
 
-injectivityAnn :: Name -> [Name] -> InjectivityAnn
-injectivityAnn = TH.InjectivityAnn
+injectivityCond :: [Name] -> [Name] -> InjectivityCond
+injectivityCond = TH.InjectivityCond
 
 -------------------------------------------------------------------------------
 -- *   Role
