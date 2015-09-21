@@ -697,7 +697,7 @@ tyVarSig :: TyVarBndr -> FamilyResultSig
 tyVarSig = TyVarSig
 
 -------------------------------------------------------------------------------
--- *   Injectivity annotation
+-- *   Injectivity annotations
 
 injectivityCond :: [Name] -> [Name] -> InjectivityCond
 injectivityCond = TH.InjectivityCond

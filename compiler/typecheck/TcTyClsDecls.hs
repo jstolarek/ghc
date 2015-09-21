@@ -793,14 +793,26 @@ tcInjectivity _ Nothing
   -- therefore we can always infer the result kind if we know the result type.
   -- But this does not seem to be useful in any way so we don't do it.  (Another
   -- reason is that the implementation would not be straightforward.)
-tcInjectivity tvs (Just (L loc (InjectivityAnn _ lInjNames)))
+tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
   = setSrcSpan loc $
-    do { inj_tvs <- mapM tcFdTyVar lInjNames
-       ; let inj_ktvs = closeOverKinds (mkVarSet inj_tvs)
-       ; let inj_bools = map (`elemVarSet` inj_ktvs) tvs
-       ; traceTc "tcInjectivity" (vcat [ ppr tvs, ppr lInjNames, ppr inj_tvs
-                                       , ppr inj_ktvs, ppr inj_bools ])
-       ; return $ Injective inj_bools }
+    do { injConds' <- mapM tcInjectivityCond injConds
+       ; return $ Injective injConds' }
+
+tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
+                  -> TcM InjCondition
+tcInjectivityCond tvs (L loc (InjectivityCond rInjNames lInjNames))
+  = setSrcSpan loc $
+    do { inj_l_tvs <- mapM tcFdTyVar lInjNames
+       ; inj_r_tvs <- mapM tcFdTyVar rInjNames
+       ; let inj_l_ktvs  = closeOverKinds (mkVarSet inj_l_tvs)
+             inj_r_ktvs  = closeOverKinds (mkVarSet inj_r_tvs)
+             inj_l_bools = map (`elemVarSet` inj_l_ktvs) tvs
+             inj_r_bools = map (`elemVarSet` inj_r_ktvs) tvs
+       ; traceTc "tcInjectivityCond"
+           (vcat [ ppr tvs, ppr lInjNames, ppr rInjNames, ppr inj_l_ktvs,
+                 , ppr inj_r_ktvs, ppr inj_l_bools, ppr inj_r_bools ])
+       ; return (inj_l_bools, inj_r_bools) }
+
 
 tcTySynRhs :: RecTyInfo
            -> Name
