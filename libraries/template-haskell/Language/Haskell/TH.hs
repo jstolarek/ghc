@@ -72,7 +72,7 @@ module Language.Haskell.TH(
         Pat(..), FieldExp, FieldPat,
     -- ** Types
         Type(..), TyVarBndr(..), TyLit(..), Kind, Cxt, Pred, Syntax.Role(..),
-        FamilyResultSig(..), Syntax.InjectivityCond(..),
+        FamilyResultSig(..), Syntax.InjectivityAnn, Syntax.InjectivityCond(..),
 
     -- * Library functions
     -- ** Abbreviations

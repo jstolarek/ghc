@@ -724,9 +724,12 @@ isNoParent _             = False
 
 --------------------
 
+type InjCondition = ([Bool], [Bool]) -- Length of Bool lists is 1-1 with
+                                     -- tyConTyVars (incl kind vars)
+
 data Injectivity
   = NotInjective
-  | Injective [Bool]   -- Length is 1-1 with tyConTyVars (incl kind vars)
+  | Injective [InjCondition]
   deriving( Eq )
 
 -- | Information pertaining to the expansion of a type synonym (@type@)

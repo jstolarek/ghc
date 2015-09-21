@@ -134,7 +134,8 @@ templateHaskellNames = [
     typeTyConName, tyVarBndrTyConName, matchTyConName, clauseTyConName,
     patQTyConName, fieldPatQTyConName, fieldExpQTyConName, funDepTyConName,
     predQTyConName, decsQTyConName, ruleBndrQTyConName, tySynEqnQTyConName,
-    roleTyConName, tExpTyConName, injCondTyConName, kindTyConName,
+    roleTyConName, tExpTyConName, injCondTyConName, injAnnTyConName,
+    kindTyConName,
 
     -- Quasiquoting
     quoteDecName, quoteTypeName, quoteExpName, quotePatName]
@@ -163,7 +164,8 @@ liftClassName = thCls (fsLit "Lift") liftClassKey
 qTyConName, nameTyConName, fieldExpTyConName, patTyConName,
     fieldPatTyConName, expTyConName, decTyConName, typeTyConName,
     tyVarBndrTyConName, matchTyConName, clauseTyConName, funDepTyConName,
-    predTyConName, tExpTyConName, injCondTyConName, kindTyConName :: Name
+    predTyConName, tExpTyConName, injCondTyConName, injAnnTyConName,
+    kindTyConName :: Name
 qTyConName         = thTc (fsLit "Q")               qTyConKey
 nameTyConName      = thTc (fsLit "Name")            nameTyConKey
 fieldExpTyConName  = thTc (fsLit "FieldExp")        fieldExpTyConKey
@@ -179,6 +181,7 @@ funDepTyConName    = thTc (fsLit "FunDep")          funDepTyConKey
 predTyConName      = thTc (fsLit "Pred")            predTyConKey
 tExpTyConName      = thTc (fsLit "TExp")            tExpTyConKey
 injCondTyConName   = thTc (fsLit "InjectivityCond") injCondTyConKey
+injAnnTyConName    = thTc (fsLit "InjectivityAnn")  injAnnTyConKey
 kindTyConName      = thTc (fsLit "Kind")            kindTyConKey
 
 
@@ -536,7 +539,8 @@ expTyConKey, matchTyConKey, clauseTyConKey, qTyConKey, expQTyConKey,
     fieldExpTyConKey, fieldPatTyConKey, nameTyConKey, patQTyConKey,
     fieldPatQTyConKey, fieldExpQTyConKey, funDepTyConKey, predTyConKey,
     predQTyConKey, decsQTyConKey, ruleBndrQTyConKey, tySynEqnQTyConKey,
-    roleTyConKey, tExpTyConKey, injCondTyConKey, kindTyConKey :: Unique
+    roleTyConKey, tExpTyConKey, injCondTyConKey, injAnnTyConKey,
+    kindTyConKey :: Unique
 expTyConKey             = mkPreludeTyConUnique 200
 matchTyConKey           = mkPreludeTyConUnique 201
 clauseTyConKey          = mkPreludeTyConUnique 202
@@ -569,7 +573,8 @@ tySynEqnQTyConKey       = mkPreludeTyConUnique 228
 roleTyConKey            = mkPreludeTyConUnique 229
 tExpTyConKey            = mkPreludeTyConUnique 230
 injCondTyConKey         = mkPreludeTyConUnique 231
-kindTyConKey            = mkPreludeTyConUnique 232
+injAnnTyConKey          = mkPreludeTyConUnique 232
+kindTyConKey            = mkPreludeTyConUnique 233
 
 -- IdUniques available: 200-499
 -- If you want to change this, make sure you check in PrelNames
