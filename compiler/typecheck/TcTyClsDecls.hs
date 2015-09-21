@@ -800,7 +800,7 @@ tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
 
 tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
                   -> TcM InjCondition
-tcInjectivityCond tvs (L loc (InjectivityCond rInjNames lInjNames))
+tcInjectivityCond tvs (L loc (InjectivityCond lInjNames rInjNames))
   = setSrcSpan loc $
     do { inj_l_tvs <- mapM tcFdTyVar lInjNames
        ; inj_r_tvs <- mapM tcFdTyVar rInjNames

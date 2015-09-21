@@ -29,7 +29,6 @@ import Kind
 import Type
 import TyCon
 import TypeRep
-import Util ( filterByList )
 
 import Control.Monad (liftM, foldM, ap)
 #if __GLASGOW_HASKELL__ < 709
@@ -427,14 +426,6 @@ tcUnifyTyWithTFs twoWay t1 t2 = niFixTvSubst `fmap` go t1 t2 emptyTvSubstEnv
         | isAlgTyCon tc1 && isAlgTyCon tc2 && tc1 == tc2
         = let tys = zip tys1 tys2
           in foldM (\theta' (t1,t2) -> go t1 t2 theta') theta tys
-
-        -- Equation (7)
-        | isTypeFamilyTyCon tc1 && isTypeFamilyTyCon tc2 && tc1 == tc2
-        , Injective inj <- familyTyConInjectivityInfo tc1
-        = let tys1' = filterByList inj tys1
-              tys2' = filterByList inj tys2
-              injTys = zip tys1' tys2'
-          in foldM (\theta' (t1,t2) -> go t1 t2 theta') theta injTys
 
         -- Equations (8)
         | isTypeFamilyTyCon tc1
