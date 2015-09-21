@@ -726,12 +726,18 @@ pprIfaceDecl ss (IfaceFamily { ifName = tycon, ifTyVars = tyvars
     pp_inj Nothing    _   = dcolon <+> ppr kind
     pp_inj (Just res) inj
        | Injective injectivity <- inj = hsep [ equals, ppr res, dcolon, ppr kind
-                                             , pp_inj_cond res injectivity]
+                                             , pp_inj_conds res injectivity]
        | otherwise = hsep [ equals, ppr res, dcolon, ppr kind ]
 
-    pp_inj_cond res inj = case filterByList inj tyvars of
-       []  -> empty
-       tvs -> hsep [text "|", ppr res, text "->", interppSP (map fst tvs)]
+    pp_inj_conds res conds
+      = text "|" <+> hsep (punctuate (text ",") (map (ppr_inj_cond res) conds))
+    pp_inj_conds res []
+      = empty -- not possible (invariant from the parser)
+
+    ppr_inj_cond res (lhs, rhs)
+      = hsep [ ppr res, pp_inj_tvs lhs, text "->", pp_inj_tvs rhs]
+
+    pp_inj_tvs inj = interppSP (map fst (filterByList inj tyvars))
 
     pp_rhs IfaceOpenSynFamilyTyCon
       = ppShowIface ss (ptext (sLit "open"))
