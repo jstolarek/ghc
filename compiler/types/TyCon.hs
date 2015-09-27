@@ -14,7 +14,7 @@ module TyCon(
 
         AlgTyConRhs(..), visibleDataCons,
         TyConParent(..), isNoParent,
-        FamTyConFlav(..), Role(..), Injectivity(..),
+        FamTyConFlav(..), Role(..), Injectivity(..), InjCondition,
 
         -- ** Constructing TyCons
         mkAlgTyCon,
@@ -724,8 +724,9 @@ isNoParent _             = False
 
 --------------------
 
-type InjCondition = ([Bool], [Bool]) -- Length of Bool lists is 1-1 with
-                                     -- tyConTyVars (incl kind vars)
+-- Length of Bool lists is 1-1 with tyConTyVars (incl kind vars)
+-- INVARIANT: Second list contains at least one True
+type InjCondition = ([Bool], [Bool])
 
 data Injectivity
   = NotInjective

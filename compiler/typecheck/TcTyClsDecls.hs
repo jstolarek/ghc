@@ -795,7 +795,7 @@ tcInjectivity _ Nothing
   -- reason is that the implementation would not be straightforward.)
 tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
   = setSrcSpan loc $
-    do { injConds' <- mapM tcInjectivityCond injConds
+    do { injConds' <- mapM (tcInjectivityCond tvs) injConds
        ; return $ Injective injConds' }
 
 tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
@@ -809,7 +809,7 @@ tcInjectivityCond tvs (L loc (InjectivityCond lInjNames rInjNames))
              inj_l_bools = map (`elemVarSet` inj_l_ktvs) tvs
              inj_r_bools = map (`elemVarSet` inj_r_ktvs) tvs
        ; traceTc "tcInjectivityCond"
-           (vcat [ ppr tvs, ppr lInjNames, ppr rInjNames, ppr inj_l_ktvs,
+           (vcat [ ppr tvs, ppr lInjNames, ppr rInjNames, ppr inj_l_ktvs
                  , ppr inj_r_ktvs, ppr inj_l_bools, ppr inj_r_bools ])
        ; return (inj_l_bools, inj_r_bools) }
 
