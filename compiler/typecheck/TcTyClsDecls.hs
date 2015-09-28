@@ -798,11 +798,13 @@ tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
     do { injConds' <- mapM (tcInjectivityCond tvs) injConds
        ; return $ Injective injConds' }
 
+
 tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
                   -> TcM InjCondition
 tcInjectivityCond tvs (L loc (InjectivityCond lInjNames rInjNames))
   = setSrcSpan loc $
-    do { inj_l_tvs <- mapM tcFdTyVar lInjNames
+    do { inj_l_tvs <- mapM tcFdTyVar lInjNames -- JSTOLAREK: BUG HERE.
+         -- Result variable is in the list but is not in scope
        ; inj_r_tvs <- mapM tcFdTyVar rInjNames
        ; let inj_l_ktvs  = closeOverKinds (mkVarSet inj_l_tvs)
              inj_r_ktvs  = closeOverKinds (mkVarSet inj_r_tvs)
