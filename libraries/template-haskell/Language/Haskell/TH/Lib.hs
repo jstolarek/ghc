@@ -41,7 +41,7 @@ type VarStrictTypeQ  = Q VarStrictType
 type FieldExpQ       = Q FieldExp
 type RuleBndrQ       = Q RuleBndr
 type TySynEqnQ       = Q TySynEqn
-type Role            = TH.Role       -- must be defined here for DsMeta to find it
+type Role            = TH.Role     -- must be defined here for DsMeta to find it
 type InjectivityCond = TH.InjectivityCond
 
 ----------------------------------------------------------
