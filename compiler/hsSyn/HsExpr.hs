@@ -1668,7 +1668,7 @@ pprQuals quals = interpp'SP quals
 -}
 
 data HsSplice id
-   = HsTypedSplice       --  $z  or $(f 4)
+   = HsTypedSplice       --  $$z  or $$(f 4)
         id               -- A unique name to identify this splice point
         (LHsExpr id)     -- See Note [Pending Splices]
 
