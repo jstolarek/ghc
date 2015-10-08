@@ -82,11 +82,13 @@ rnBracket e br_body
        ; recordThUse
 
        ; case isTypedBracket br_body of
-            True  -> do { (body', fvs_e) <- setStage (Brack cur_stage RnPendingTyped) $
+            True  -> do { traceRn (text "Renaming typed TH bracket")
+                        ; (body', fvs_e) <- setStage (Brack cur_stage RnPendingTyped) $
                                             rn_bracket cur_stage br_body
                         ; return (HsBracket body', fvs_e) }
 
-            False -> do { ps_var <- newMutVar []
+            False -> do { traceRn (text "Renaming untyped TH bracket")
+                        ; ps_var <- newMutVar []
                         ; (body', fvs_e) <- setStage (Brack cur_stage (RnPendingUntyped ps_var)) $
                                             rn_bracket cur_stage br_body
                         ; pendings <- readMutVar ps_var
