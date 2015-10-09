@@ -166,10 +166,10 @@ illegalBracket :: SDoc
 illegalBracket = ptext (sLit "Template Haskell brackets cannot be nested (without intervening splices)")
 
 illegalTypedBracket :: SDoc
-illegalTypedBracket = ptext (sLit "Typed brackets may only appear in typed slices.")
+illegalTypedBracket = ptext (sLit "Typed brackets may only appear in typed splices.")
 
 illegalUntypedBracket :: SDoc
-illegalUntypedBracket = ptext (sLit "Untyped brackets may only appear in untyped slices.")
+illegalUntypedBracket = ptext (sLit "Untyped brackets may only appear in untyped splices.")
 
 quotedNameStageErr :: HsBracket RdrName -> SDoc
 quotedNameStageErr br
@@ -398,7 +398,8 @@ rnSpliceExpr splice
     run_expr_splice rn_splice
       | isTypedSplice rn_splice   -- Run it later, in the type checker
       = do {  -- Ugh!  See Note [Splices] above
-             lcl_rdr <- getLocalRdrEnv
+             traceRn (text "rnSpliceExpr: typed expression splice")
+           ; lcl_rdr <- getLocalRdrEnv
            ; gbl_rdr <- getGlobalRdrEnv
            ; let gbl_names = mkNameSet [gre_name gre | gre <- globalRdrEnvElts gbl_rdr
                                                      , isLocalGRE gre]
@@ -407,7 +408,8 @@ rnSpliceExpr splice
            ; return (HsSpliceE rn_splice, lcl_names `plusFV` gbl_names) }
 
       | otherwise  -- Run it here
-      = do { rn_expr <- runRnSplice UntypedExpSplice runMetaE ppr rn_splice
+      = do { traceRn (text "rnSpliceExpr: untyped expression splice")
+           ; rn_expr <- runRnSplice UntypedExpSplice runMetaE ppr rn_splice
            ; (lexpr3, fvs) <- checkNoErrs (rnLExpr rn_expr)
            ; return (HsPar lexpr3, fvs)  }
 
@@ -421,7 +423,8 @@ rnSpliceType splice k
        = (makePending UntypedTypeSplice rn_splice, HsSpliceTy rn_splice k)
 
     run_type_splice rn_splice
-      = do { hs_ty2 <- runRnSplice UntypedTypeSplice runMetaT ppr rn_splice
+      = do { traceRn (text "rnSpliceType: untyped type splice")
+           ; hs_ty2 <- runRnSplice UntypedTypeSplice runMetaT ppr rn_splice
            ; (hs_ty3, fvs) <- do { let doc = SpliceTypeCtx hs_ty2
                                  ; checkValidPartialTypeSplice doc hs_ty2
                                     -- See Note [Partial Type Splices]
@@ -499,7 +502,8 @@ rnSplicePat splice
       = (makePending UntypedPatSplice rn_splice, Right (SplicePat rn_splice))
 
     run_pat_splice rn_splice
-      = do { pat <- runRnSplice UntypedPatSplice runMetaP ppr rn_splice
+      = do { traceRn (text "rnSplicePat: untyped pattern splice")
+           ; pat <- runRnSplice UntypedPatSplice runMetaP ppr rn_splice
            ; return (Left (ParPat pat), emptyFVs) }
               -- Wrap the result of the quasi-quoter in parens so that we don't
               -- lose the outermost location set by runQuasiQuote (#7918)
@@ -519,6 +523,7 @@ rnTopSpliceDecls :: HsSplice RdrName -> RnM ([LHsDecl RdrName], FreeVars)
 rnTopSpliceDecls splice
    = do  { (rn_splice, fvs) <- setStage (Splice False) $
                                rnSplice splice
+         ; traceRn (text "rnTopSpliceDecls: untyped declaration splice")
          ; decls <- runRnSplice UntypedDeclSplice runMetaD ppr_decls rn_splice
          ; return (decls,fvs) }
    where
