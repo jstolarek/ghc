@@ -83,14 +83,16 @@ rnBracket e br_body
 
        ; case isTypedBracket br_body of
             True  -> do { traceRn (text "Renaming typed TH bracket")
-                        ; (body', fvs_e) <- setStage (Brack cur_stage RnPendingTyped) $
-                                            rn_bracket cur_stage br_body
+                        ; (body', fvs_e) <-
+                          setStage (Brack cur_stage RnPendingTyped) $
+                                   rn_bracket cur_stage br_body
                         ; return (HsBracket body', fvs_e) }
 
             False -> do { traceRn (text "Renaming untyped TH bracket")
                         ; ps_var <- newMutVar []
-                        ; (body', fvs_e) <- setStage (Brack cur_stage (RnPendingUntyped ps_var)) $
-                                            rn_bracket cur_stage br_body
+                        ; (body', fvs_e) <-
+                          setStage (Brack cur_stage (RnPendingUntyped ps_var)) $
+                                   rn_bracket cur_stage br_body
                         ; pendings <- readMutVar ps_var
                         ; return (HsRnBracketOut body' pendings, fvs_e) }
        }
@@ -159,22 +161,26 @@ rn_bracket _ (TExpBr e) = do { (e', fvs) <- rnLExpr e
 
 quotationCtxtDoc :: HsBracket RdrName -> SDoc
 quotationCtxtDoc br_body
-  = hang (ptext (sLit "In the Template Haskell quotation"))
+  = hang (text "In the Template Haskell quotation")
          2 (ppr br_body)
 
 illegalBracket :: SDoc
-illegalBracket = ptext (sLit "Template Haskell brackets cannot be nested (without intervening splices)")
+illegalBracket =
+    text "Template Haskell brackets cannot be nested" <+>
+    text "(without intervening splices)"
 
 illegalTypedBracket :: SDoc
-illegalTypedBracket = ptext (sLit "Typed brackets may only appear in typed splices.")
+illegalTypedBracket =
+    text "Typed brackets may only appear in typed splices."
 
 illegalUntypedBracket :: SDoc
-illegalUntypedBracket = ptext (sLit "Untyped brackets may only appear in untyped splices.")
+illegalUntypedBracket =
+    text "Untyped brackets may only appear in untyped splices."
 
 quotedNameStageErr :: HsBracket RdrName -> SDoc
 quotedNameStageErr br
-  = sep [ ptext (sLit "Stage error: the non-top-level quoted name") <+> ppr br
-        , ptext (sLit "must be used at the same stage at which is is bound")]
+  = sep [ text "Stage error: the non-top-level quoted name" <+> ppr br
+        , text "must be used at the same stage at which is is bound" ]
 
 #ifndef GHCI
 rnTopSpliceDecls :: HsSplice RdrName -> RnM ([LHsDecl RdrName], FreeVars)
