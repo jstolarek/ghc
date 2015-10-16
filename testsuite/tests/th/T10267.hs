@@ -3,6 +3,7 @@
 module T10267 where
 
 import Language.Haskell.TH
+import T10267a
 
 [d| i :: a -> a
     i = _foo
@@ -27,3 +28,6 @@ $(return [
  , FunD (mkName "l")
         [Clause [VarP (mkName "x")] (NormalB (UnboundVarE (mkName "_"))) []]
  ])
+
+foo :: a -> a
+foo x = $varX
