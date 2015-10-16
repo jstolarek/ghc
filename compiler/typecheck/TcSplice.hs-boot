@@ -4,13 +4,14 @@ module TcSplice where
 import HsSyn    ( HsSplice, HsBracket, HsExpr, LHsExpr )
 import HsExpr   ( PendingRnSplice )
 import Name     ( Name )
-import TcRnTypes( TcM, TcId, SpliceType )
+import TcRnTypes( TcM, TcId )
 import TcType   ( TcRhoType )
 import Annotations ( Annotation, CoreAnnTarget )
 
 #ifdef GHCI
 import HsSyn      ( LHsType, LPat, LHsDecl )
 import RdrName    ( RdrName )
+import TcRnTypes  ( SpliceType )
 import qualified Language.Haskell.TH as TH
 #endif
 

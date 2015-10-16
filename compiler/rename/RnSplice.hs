@@ -27,7 +27,6 @@ import Outputable
 import Module
 import SrcLoc
 import DynFlags
-import FastString
 import RnTypes          ( rnLHsType )
 
 import Control.Monad    ( unless, when )
@@ -39,6 +38,7 @@ import TcEnv            ( checkWellStaged )
 import THNames          ( liftName )
 
 #ifdef GHCI
+import FastString
 import ErrUtils         ( dumpIfSet_dyn_printer )
 import TcEnv            ( tcMetaTy )
 import Hooks
