@@ -362,7 +362,7 @@ rnAnnDecl :: AnnDecl RdrName -> RnM (AnnDecl Name, FreeVars)
 rnAnnDecl ann@(HsAnnotation s provenance expr)
   = addErrCtxt (annCtxt ann) $
     do { (provenance', provenance_fvs) <- rnAnnProvenance provenance
-       ; (expr', expr_fvs) <- setStage (Splice False) $
+       ; (expr', expr_fvs) <- setStage (Splice Untyped) $
                               rnLExpr expr
        ; return (HsAnnotation s provenance' expr',
                  provenance_fvs `plusFV` expr_fvs) }

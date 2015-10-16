@@ -4,7 +4,7 @@ module TcSplice where
 import HsSyn    ( HsSplice, HsBracket, HsExpr, LHsExpr )
 import HsExpr   ( PendingRnSplice )
 import Name     ( Name )
-import TcRnTypes( TcM, TcId )
+import TcRnTypes( TcM, TcId, SpliceType )
 import TcType   ( TcRhoType )
 import Annotations ( Annotation, CoreAnnTarget )
 
@@ -29,7 +29,7 @@ tcTypedBracket :: HsBracket Name
 runAnnotation     :: CoreAnnTarget -> LHsExpr Name -> TcM Annotation
 
 #ifdef GHCI
-tcTopSpliceExpr :: Bool -> TcM (LHsExpr TcId) -> TcM (LHsExpr TcId)
+tcTopSpliceExpr :: SpliceType -> TcM (LHsExpr TcId) -> TcM (LHsExpr TcId)
 
 runMetaE :: LHsExpr TcId -> TcM (LHsExpr RdrName)
 runMetaP :: LHsExpr TcId -> TcM (LPat RdrName)

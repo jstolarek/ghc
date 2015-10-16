@@ -66,16 +66,19 @@ rnBracket e br_body
     do { -- Check that Template Haskell is enabled and available
          thEnabled <- xoptM Opt_TemplateHaskell
        ; unless thEnabled $
-           failWith ( vcat [ ptext (sLit "Syntax error on") <+> ppr e
-                           , ptext (sLit "Perhaps you intended to use TemplateHaskell") ] )
+           failWith ( vcat
+                      [ text "Syntax error on" <+> ppr e
+                      , text "Perhaps you intended to use TemplateHaskell" ] )
 
          -- Check for nested brackets
        ; cur_stage <- getStage
        ; case cur_stage of
-           { Splice True  -> checkTc (isTypedBracket br_body) illegalUntypedBracket
-           ; Splice False -> checkTc (not (isTypedBracket br_body)) illegalTypedBracket
-           ; Comp         -> return ()
-           ; Brack {}     -> failWithTc illegalBracket
+           { Splice Typed   -> checkTc (isTypedBracket br_body)
+                                       illegalUntypedBracket
+           ; Splice Untyped -> checkTc (not (isTypedBracket br_body))
+                                       illegalTypedBracket
+           ; Comp           -> return ()
+           ; Brack {}       -> failWithTc illegalBracket
            }
 
          -- Brackets are desugared to code that mentions the TH package
@@ -261,7 +264,7 @@ rnSpliceGen run_splice pend_splice splice
                 ; return (result, fvs) }
 
         _ ->  do { (splice', fvs1) <- checkNoErrs $
-                                      setStage (Splice is_typed_splice) $
+                                      setStage (Splice splice_type) $
                                       rnSplice splice
                    -- checkNoErrs: don't attempt to run the splice if
                    -- renaming it failed; otherwise we get a cascade of
@@ -270,6 +273,9 @@ rnSpliceGen run_splice pend_splice splice
                  ; return (result, fvs1 `plusFV` fvs2) } }
    where
      is_typed_splice = isTypedSplice splice
+     splice_type = if is_typed_splice
+                   then Typed
+                   else Untyped
 
 ------------------
 runRnSplice :: UntypedSpliceFlavour
@@ -288,7 +294,7 @@ runRnSplice flavour run_meta ppr_res splice
 
              -- Typecheck the expression
        ; meta_exp_ty   <- tcMetaTy meta_ty_name
-       ; zonked_q_expr <- tcTopSpliceExpr False $
+       ; zonked_q_expr <- tcTopSpliceExpr Untyped $
                           tcMonoExpr the_expr meta_exp_ty
 
              -- Run the expression
@@ -527,7 +533,7 @@ rnSpliceDecl (SpliceDecl (L loc splice) flg)
 rnTopSpliceDecls :: HsSplice RdrName -> RnM ([LHsDecl RdrName], FreeVars)
 -- Declaration splice at the very top level of the module
 rnTopSpliceDecls splice
-   = do  { (rn_splice, fvs) <- setStage (Splice False) $
+   = do  { (rn_splice, fvs) <- setStage (Splice Untyped) $
                                rnSplice splice
          ; traceRn (text "rnTopSpliceDecls: untyped declaration splice")
          ; decls <- runRnSplice UntypedDeclSplice runMetaD ppr_decls rn_splice
