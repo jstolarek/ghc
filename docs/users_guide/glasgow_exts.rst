@@ -9280,8 +9280,8 @@ on.
 
 -  Pattern splices introduce variable binders but scoping of variables in
    expressions inside the pattern's scope is only checked when a splice is
-   run.  Note that pattern splices that occurs outside of any quotation
-   brackets are run at compile time.  Pattern splices occuring inside a
+   run.  Note that pattern splices that occur outside of any quotation
+   brackets are run at compile time.  Pattern splices occurring inside a
    quotation bracket are *not* run at compile time; they are run when the
    bracket is spliced in, sometime later.  For example,
 
@@ -9299,7 +9299,7 @@ on.
 
    will fail with ``z`` being out of scope in the definition of ``foo`` but it
    will *not* fail with ``w`` being out of scope in the definition of ``bar``.
-   That will only happen when ``bar`` is splied.
+   That will only happen when ``bar`` is spliced.
 
 -  A pattern quasiquoter *may* generate binders that scope over the
    right-hand side of a definition because these binders are in scope
