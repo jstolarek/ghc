@@ -1,0 +1,39 @@
+data T10828.T (a_0 :: *) where
+    T10828.MkT :: a_1 -> a_1 -> T10828.T a_1
+    T10828.MkC :: forall (a_2 :: *) (b_3 :: *) . a_2 ~
+                                                 GHC.Types.Int => {T10828.foo :: a_2,
+                                                                   T10828.bar :: b_3} -> T10828.T GHC.Types.Int
+
+data T'_0 a_1 :: * where
+    MkT'_2 :: forall a_3 . a_3 -> a_3 -> T'_0 a_3
+    MkC'_4 :: forall a_5 b_6 . a_5 ~ GHC.Types.Int => {foo_7 :: a_5,
+                                                       bar_8 :: b_6} -> T'_0 GHC.Types.Int
+
+
+TYPE SIGNATURES
+TYPE CONSTRUCTORS
+  type role T nominal
+  data T a where
+    MkT :: a -> a -> T a
+    MkC :: a1 ~ Int => a1 -> b -> T Int
+COERCION AXIOMS
+Dependent modules: []
+Dependent packages: [array-<VERSION>, base-<VERSION>, deepseq-<VERSION>,
+                     ghc-boot-0.0.0.0, ghc-prim-<VERSION>, integer-<IMPL>-<VERSION>,
+                     pretty-<VERSION>, template-haskell-<VERSION>]
+
+==================== Typechecker ====================
+T10828.$tcT = TyCon 0## 0## T10828.$trModule (TrNameS "T"#)
+AbsBinds [] []
+  {Exports: [bar <= bar
+               <>]
+   Exported types: bar :: ()
+                   [LclIdX[[RecSel(naughty)]], Str=DmdType]
+   Binds: bar = ()}
+AbsBinds [] []
+  {Exports: [foo <= foo
+               <>]
+   Exported types: foo :: ()
+                   [LclIdX[[RecSel(naughty)]], Str=DmdType]
+   Binds: foo = ()}
+T10828.$trModule = Module (TrNameS "main"#) (TrNameS "T10828"#)

@@ -283,8 +283,8 @@ ppr_dec _ (ValD p r ds) = ppr p <+> pprBody True r
                           $$ where_clause ds
 ppr_dec _ (TySynD t xs rhs)
   = ppr_tySyn empty t (hsep (map ppr xs)) rhs
-ppr_dec _ (DataD ctxt t xs cs decs)
-  = ppr_data empty ctxt t (hsep (map ppr xs)) cs decs
+ppr_dec _ (DataD ctxt t xs ksig cs decs)
+  = ppr_data empty ctxt t (hsep (map ppr xs)) ksig cs decs
 ppr_dec _ (NewtypeD ctxt t xs c decs)
   = ppr_newtype empty ctxt t (sep (map ppr xs)) c decs
 ppr_dec _  (ClassD ctxt c xs fds ds)
@@ -303,8 +303,8 @@ ppr_dec isTop (DataFamilyD tc tvs kind)
                 | otherwise = empty
     maybeKind | (Just k') <- kind = dcolon <+> ppr k'
               | otherwise = empty
-ppr_dec isTop (DataInstD ctxt tc tys cs decs)
-  = ppr_data maybeInst ctxt tc (sep (map pprParendType tys)) cs decs
+ppr_dec isTop (DataInstD ctxt tc tys ksig cs decs)
+  = ppr_data maybeInst ctxt tc (sep (map pprParendType tys)) ksig cs decs
   where
     maybeInst | isTop     = text "instance"
               | otherwise = empty
@@ -339,11 +339,11 @@ ppr_dec _ (StandaloneDerivD cxt ty)
 ppr_dec _ (DefaultSigD n ty)
   = hsep [ text "default", pprPrefixOcc n, dcolon, ppr ty ]
 
-ppr_data :: Doc -> Cxt -> Name -> Doc -> [Con] -> Cxt -> Doc
-ppr_data maybeInst ctxt t argsDoc cs decs
+ppr_data :: Doc -> Cxt -> Name -> Doc -> Maybe Kind -> [Con] -> Cxt -> Doc
+ppr_data maybeInst ctxt t argsDoc ksig cs decs
   = sep [text "data" <+> maybeInst
             <+> pprCxt ctxt
-            <+> ppr t <+> argsDoc,
+            <+> ppr t <+> argsDoc <+> ksigDoc <+> maybeWhere,
          nest nestDepth (sep (pref $ map ppr cs)),
          if null decs
            then empty
@@ -351,8 +351,24 @@ ppr_data maybeInst ctxt t argsDoc cs decs
               $ text "deriving" <+> ppr_cxt_preds decs]
   where
     pref :: [Doc] -> [Doc]
-    pref []     = []      -- No constructors; can't happen in H98
-    pref (d:ds) = (char '=' <+> d):map (char '|' <+>) ds
+    pref xs | isGadtDecl = xs
+    pref []              = []      -- No constructors; can't happen in H98
+    pref (d:ds)          = (char '=' <+> d):map (char '|' <+>) ds
+
+    maybeWhere :: Doc
+    maybeWhere | isGadtDecl = text "where"
+               | otherwise  = empty
+
+    isGadtDecl :: Bool
+    isGadtDecl = all isGadtCon cs
+        where isGadtCon (GadtC _ _ _ _   ) = True
+              isGadtCon (RecGadtC _ _ _ _) = True
+              isGadtCon (ForallC _ _ x   ) = isGadtCon x
+              isGadtCon  _                 = False
+
+    ksigDoc = case ksig of
+                Nothing -> empty
+                Just k  -> dcolon <+> ppr k
 
 ppr_newtype :: Doc -> Cxt -> Name -> Doc -> Con -> Cxt -> Doc
 ppr_newtype maybeInst ctxt t argsDoc c decs
@@ -478,13 +494,45 @@ instance Ppr Clause where
 ------------------------------
 instance Ppr Con where
     ppr (NormalC c sts) = ppr c <+> sep (map pprStrictType sts)
+
     ppr (RecC c vsts)
         = ppr c <+> braces (sep (punctuate comma $ map pprVarStrictType vsts))
+
     ppr (InfixC st1 c st2) = pprStrictType st1
                          <+> pprName' Infix c
                          <+> pprStrictType st2
-    ppr (ForallC ns ctxt con) = text "forall" <+> hsep (map ppr ns)
-                            <+> char '.' <+> sep [pprCxt ctxt, ppr con]
+
+    ppr (ForallC ns ctxt (GadtC c sts ty idx))
+        = ppr c <+> dcolon <+> pprForall ns ctxt <+> pprGadtRHS sts ty idx
+
+    ppr (ForallC ns ctxt (RecGadtC c vsts ty idx))
+        = ppr c <+> dcolon <+> pprForall ns ctxt <+> pprRecFields vsts ty idx
+
+    ppr (ForallC ns ctxt con)
+        = pprForall ns ctxt <+> ppr con
+
+    ppr (GadtC c sts ty idx)
+        = ppr c <+> dcolon <+> pprGadtRHS sts ty idx
+
+    ppr (RecGadtC c vsts ty idx)
+        = ppr c <+> dcolon <+> pprRecFields vsts ty idx
+
+pprForall :: [TyVarBndr] -> Cxt -> Doc
+pprForall ns ctxt
+    = text "forall" <+> hsep (map ppr ns)
+  <+> char '.' <+> pprCxt ctxt
+
+pprRecFields :: [(Name, Strict, Type)] -> Name -> [Type] -> Doc
+pprRecFields vsts ty idx
+    = braces (sep (punctuate comma $ map pprVarStrictType vsts))
+  <+> arrow <+> ppr ty <+> sep (map ppr idx)
+
+pprGadtRHS :: [(Strict, Type)] -> Name -> [Type] -> Doc
+pprGadtRHS [] ty idx
+    = ppr ty <+> sep (map ppr idx)
+pprGadtRHS sts ty idx
+    = sep (punctuate (space <> arrow) (map pprStrictType sts))
+  <+> arrow <+> ppr ty <+> sep (map ppr idx)
 
 ------------------------------
 pprVarStrictType :: (Name, Strict, Type) -> Doc

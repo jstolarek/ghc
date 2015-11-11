@@ -11,7 +11,7 @@ module Language.Haskell.TH.Lib where
 
 import Language.Haskell.TH.Syntax hiding (Role, InjectivityAnn)
 import qualified Language.Haskell.TH.Syntax as TH
-import Control.Monad( liftM, liftM2 )
+import Control.Monad( liftM, liftM2, liftM3 )
 import Data.Word( Word8 )
 
 ----------------------------------------------------------
@@ -338,13 +338,13 @@ funD nm cs =
 tySynD :: Name -> [TyVarBndr] -> TypeQ -> DecQ
 tySynD tc tvs rhs = do { rhs1 <- rhs; return (TySynD tc tvs rhs1) }
 
-dataD :: CxtQ -> Name -> [TyVarBndr] -> [ConQ] -> CxtQ -> DecQ
-dataD ctxt tc tvs cons derivs =
+dataD :: CxtQ -> Name -> [TyVarBndr] -> Maybe Kind -> [ConQ] -> CxtQ -> DecQ
+dataD ctxt tc tvs ksig cons derivs =
   do
     ctxt1 <- ctxt
     cons1 <- sequence cons
     derivs1 <- derivs
-    return (DataD ctxt1 tc tvs cons1 derivs1)
+    return (DataD ctxt1 tc tvs ksig cons1 derivs1)
 
 newtypeD :: CxtQ -> Name -> [TyVarBndr] -> ConQ -> CxtQ -> DecQ
 newtypeD ctxt tc tvs con derivs =
@@ -425,14 +425,14 @@ pragAnnD target expr
 pragLineD :: Int -> String -> DecQ
 pragLineD line file = return $ PragmaD $ LineP line file
 
-dataInstD :: CxtQ -> Name -> [TypeQ] -> [ConQ] -> CxtQ -> DecQ
-dataInstD ctxt tc tys cons derivs =
+dataInstD :: CxtQ -> Name -> [TypeQ] -> Maybe Kind -> [ConQ] -> CxtQ -> DecQ
+dataInstD ctxt tc tys ksig cons derivs =
   do
     ctxt1 <- ctxt
     tys1  <- sequence tys
     cons1 <- sequence cons
     derivs1 <- derivs
-    return (DataInstD ctxt1 tc tys1 cons1 derivs1)
+    return (DataInstD ctxt1 tc tys1 ksig cons1 derivs1)
 
 newtypeInstD :: CxtQ -> Name -> [TypeQ] -> ConQ -> CxtQ -> DecQ
 newtypeInstD ctxt tc tys con derivs =
@@ -543,6 +543,13 @@ infixC st1 con st2 = do st1' <- st1
 forallC :: [TyVarBndr] -> CxtQ -> ConQ -> ConQ
 forallC ns ctxt con = liftM2 (ForallC ns) ctxt con
 
+gadtC :: Name -> [StrictTypeQ] -> Name -> [TypeQ] -> ConQ
+gadtC con strtys ty idx = liftM3 (GadtC con) (sequence strtys)
+                                 (return ty) (sequence idx)
+
+recGadtC :: Name -> [VarStrictTypeQ] -> Name -> [TypeQ] -> ConQ
+recGadtC con varstrtys ty idx = liftM3 (RecGadtC con) (sequence varstrtys)
+                                       (return ty)    (sequence idx)
 
 -------------------------------------------------------------------------------
 -- *   Type

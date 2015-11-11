@@ -35,7 +35,7 @@ import Lexeme
 import Util
 import FastString
 import Outputable
---import TcEvidence
+import MonadUtils ( foldrM )
 
 import qualified Data.ByteString as BS
 import Control.Monad( unless, liftM, ap )
@@ -45,7 +45,7 @@ import Control.Applicative (Applicative(..))
 
 import Data.Char ( chr )
 import Data.Word ( Word8 )
-import Data.Maybe( catMaybes, fromMaybe )
+import Data.Maybe( catMaybes, fromMaybe, isNothing )
 import Language.Haskell.TH as TH hiding (sigP)
 import Language.Haskell.TH.Syntax as TH
 
@@ -193,13 +193,25 @@ cvtDec (TySynD tc tvs rhs)
                   , tcdTyVars = tvs', tcdFVs = placeHolderNames
                   , tcdRhs = rhs' } }
 
-cvtDec (DataD ctxt tc tvs constrs derivs)
-  = do  { (ctxt', tc', tvs') <- cvt_tycl_hdr ctxt tc tvs
+cvtDec (DataD ctxt tc tvs ksig constrs derivs)
+  = do  { let isGadtCon (GadtC    _ _ _ _) = True
+              isGadtCon (RecGadtC _ _ _ _) = True
+              isGadtCon (ForallC  _ _ c  ) = isGadtCon c
+              isGadtCon _                  = False
+              isGadtDecl  = all isGadtCon constrs
+              isH98Decl   = all (not . isGadtCon) constrs
+        ; unless (isGadtDecl || isH98Decl)
+                 (failWith (text "Cannot mix GADT constructors with Haskell 98"
+                        <+> text "constructors"))
+        ; unless (isNothing ksig || isGadtDecl)
+                 (failWith (text "Kind signatures are only allowed on GADTs"))
+        ; (ctxt', tc', tvs') <- cvt_tycl_hdr ctxt tc tvs
+        ; ksig' <- cvtKind `traverse` ksig
         ; cons' <- mapM cvtConstr constrs
         ; derivs' <- cvtDerivs derivs
         ; let defn = HsDataDefn { dd_ND = DataType, dd_cType = Nothing
                                 , dd_ctxt = ctxt'
-                                , dd_kindSig = Nothing
+                                , dd_kindSig = ksig'
                                 , dd_cons = cons', dd_derivs = derivs' }
         ; returnJustL $ TyClD (DataDecl { tcdLName = tc', tcdTyVars = tvs'
                                         , tcdDataDefn = defn
@@ -223,7 +235,8 @@ cvtDec (ClassD ctxt cl tvs fds decs)
         ; fds'  <- mapM cvt_fundep fds
         ; (binds', sigs', fams', ats', adts') <- cvt_ci_decs (ptext (sLit "a class declaration")) decs
         ; unless (null adts')
-            (failWith $ (ptext (sLit "Default data instance declarations are not allowed:"))
+            (failWith $ (text "Default data instance declarations"
+                     <+> text "are not allowed:")
                    $$ (Outputable.ppr adts'))
         ; at_defs <- mapM cvt_at_def ats'
         ; returnJustL $ TyClD $
@@ -265,13 +278,14 @@ cvtDec (DataFamilyD tc tvs kind)
        ; returnJustL $ TyClD $ FamDecl $
          FamilyDecl DataFamily tc' tvs' result Nothing }
 
-cvtDec (DataInstD ctxt tc tys constrs derivs)
+cvtDec (DataInstD ctxt tc tys ksig constrs derivs)
   = do { (ctxt', tc', typats') <- cvt_tyinst_hdr ctxt tc tys
+       ; ksig' <- cvtKind `traverse` ksig
        ; cons' <- mapM cvtConstr constrs
        ; derivs' <- cvtDerivs derivs
        ; let defn = HsDataDefn { dd_ND = DataType, dd_cType = Nothing
                                , dd_ctxt = ctxt'
-                               , dd_kindSig = Nothing
+                               , dd_kindSig = ksig'
                                , dd_cons = cons', dd_derivs = derivs' }
 
        ; returnJustL $ InstD $ DataFamInstD
@@ -423,7 +437,6 @@ mkBadDecMsg doc bads
 
 ---------------------------------------------------
 --      Data types
--- Can't handle GADTs yet
 ---------------------------------------------------
 
 cvtConstr :: TH.Con -> CvtM (LConDecl RdrName)
@@ -463,6 +476,26 @@ cvtConstr (ForallC tvs ctxt con)
                                      L loc (ctxt' ++
                                             unLoc (fromMaybe (noLoc [])
                                                    (con_cxt con'))) } }
+
+cvtConstr (GadtC c strtys ty idx)
+  = do  { c'   <- cNameL c
+        ; args <- mapM cvt_arg strtys
+        ; idx' <- mapM cvtType idx
+        ; ty'  <- tconName ty
+        ; L _ ret_ty <- mk_apps (HsTyVar ty') idx'
+        ; c_ty       <- mk_arr_apps args ret_ty
+        ; let hsForAllTy = mkHsForAllTy Implicit [] emptyLHsContext c_ty
+        ; returnL $ snd $ mkGadtDecl [c'] (noLoc hsForAllTy) }
+
+cvtConstr (RecGadtC c varstrtys ty idx)
+  = do  { c'       <- cNameL c
+        ; ty'      <- tconName ty
+        ; rec_flds <- mapM cvt_id_arg varstrtys
+        ; idx'     <- mapM cvtType idx
+        ; ret_ty   <- mk_apps (HsTyVar ty') idx'
+        ; let rec_ty     = noLoc (HsFunTy (noLoc $ HsRecTy rec_flds) ret_ty)
+              hsForAllTy = mkHsForAllTy Implicit [] emptyLHsContext rec_ty
+        ; returnL $ snd $ mkGadtDecl [c'] (noLoc hsForAllTy) }
 
 cvt_arg :: (TH.Strict, TH.Type) -> CvtM (LHsType RdrName)
 cvt_arg (NotStrict, ty) = cvtType ty
@@ -1154,10 +1187,18 @@ cvtTypeKind ty_str ty
            _ -> failWith (ptext (sLit ("Malformed " ++ ty_str)) <+> text (show ty))
     }
 
+-- | Constructs an application of a type to arguments passed in a list.
 mk_apps :: HsType RdrName -> [LHsType RdrName] -> CvtM (LHsType RdrName)
 mk_apps head_ty []       = returnL head_ty
 mk_apps head_ty (ty:tys) = do { head_ty' <- returnL head_ty
                               ; mk_apps (HsAppTy head_ty' ty) tys }
+
+-- | Constructs an arrow type with a specified return type
+mk_arr_apps :: [LHsType RdrName] -> HsType RdrName -> CvtM (LHsType RdrName)
+mk_arr_apps tys return_ty = foldrM go return_ty tys >>= returnL
+    where go :: LHsType RdrName -> HsType RdrName -> CvtM (HsType RdrName)
+          go arg ret_ty = do { ret_ty_l <- returnL ret_ty
+                             ; return (HsFunTy arg ret_ty_l) }
 
 split_ty_app :: TH.Type -> CvtM (TH.Type, [LHsType RdrName])
 split_ty_app ty = go ty []

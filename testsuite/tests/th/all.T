@@ -361,6 +361,11 @@ test('T10796a', normal, compile, ['-v0'])
 test('T10796b', normal, compile_fail, ['-v0'])
 test('T10811', normal, compile, ['-v0'])
 test('T10810', normal, compile, ['-v0'])
+test('T10828', normalise_version('array', 'base', 'deepseq', 'ghc-prim',
+                                 'integer-gmp', 'pretty', 'template-haskell'
+                              ), compile, ['-v0 -ddump-tc -dsuppress-uniques'])
+test('T10828a', normal, compile_fail, ['-v0'])
+test('T10828b', normal, compile_fail, ['-v0'])
 test('T10891', normal, compile, ['-v0'])
 test('T10945', normal, compile_fail, ['-v0'])
 test('T10946', expect_broken(10946), compile, ['-v0'])
