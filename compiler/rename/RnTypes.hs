@@ -144,9 +144,16 @@ rnHsTyKi :: Bool -> HsDocContext -> HsType RdrName -> RnM (HsType Name, FreeVars
 rnHsTyKi isType doc ty@HsForAllTy{}
   = rnHsTyKiForAll isType doc (flattenTopLevelHsForAllTy ty)
 
-rnHsTyKi isType _ (HsTyVar rdr_name)
-  = do { name <- rnTyVar isType rdr_name
-       ; return (HsTyVar name, unitFV name) }
+rnHsTyKi isType doc (HsTyVar rdr_name)
+  = do { dflags <- getDynFlags
+       ; let is_wild_card_name  = startsWithUnderscore (rdrNameOcc rdr_name)
+             wild_cards_enabled = xopt Opt_NamedWildCards dflags
+       ; is_in_scope <- isJust `fmap` lookupOccRn_maybe rdr_name
+       ; if is_wild_card_name && not is_in_scope && wild_cards_enabled
+         then rnHsTyKi isType doc (HsWildCardTy (NamedWildCard rdr_name))
+         else do { name <- rnTyVar isType rdr_name
+                 ; return (HsTyVar name, unitFV name) }
+       }
 
 -- If we see (forall a . ty), without foralls on, the forall will give
 -- a sensible error message, but we don't want to complain about the dot too

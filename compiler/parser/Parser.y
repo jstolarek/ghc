@@ -51,7 +51,7 @@ import Outputable
 
 -- compiler/basicTypes
 import RdrName
-import OccName          ( varName, dataName, tcClsName, tvName, startsWithUnderscore )
+import OccName          ( varName, dataName, tcClsName, tvName )
 import DataCon          ( DataCon, dataConName )
 import SrcLoc
 import Module
@@ -1642,11 +1642,8 @@ btype :: { LHsType RdrName }
 
 atype :: { LHsType RdrName }
         : ntgtycon                       { sL1 $1 (HsTyVar (unLoc $1)) }      -- Not including unit tuples
-        | tyvar                          {% do { nwc <- namedWildCardsEnabled -- (See Note [Unit tuples])
-                                               ; let tv@(Unqual name) = unLoc $1
-                                               ; return $ if (startsWithUnderscore name && nwc)
-                                                          then (sL1 $1 (mkNamedWildCardTy tv))
-                                                          else (sL1 $1 (HsTyVar tv)) } }
+        | tyvar                          {% do { let { tv@(Unqual name) = unLoc $1 }
+                                               ; return (sL1 $1 (HsTyVar tv)) } }
 
         | strict_mark atype              {% ams (sLL $1 $> (HsBangTy (snd $ unLoc $1) $2))
                                                 (fst $ unLoc $1) }  -- Constructor sigs only
@@ -3326,9 +3323,6 @@ hintExplicitForall span = do
       , text "Perhaps you intended to use RankNTypes or a similar language"
       , text "extension to enable explicit-forall syntax: \x2200 <tvs>. <type>"
       ]
-
-namedWildCardsEnabled :: P Bool
-namedWildCardsEnabled = liftM ((Opt_NamedWildCards `xopt`) . dflags) getPState
 
 {-
 %************************************************************************
