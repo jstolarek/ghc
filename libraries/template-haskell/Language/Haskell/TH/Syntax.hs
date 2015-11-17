@@ -1215,8 +1215,17 @@ data Info
 -- | Obtained from 'reifyModule' in the 'Q' Monad.
 data ModuleInfo =
   -- | Contains the import list of the module.
-  ModuleInfo [Module]
+  ModuleInfo [ModuleImport]
   deriving( Show, Eq, Ord, Data, Typeable, Generic )
+
+data ImportType = Qualified | Unqualified
+  deriving( Show, Eq, Ord, Data, Typeable, Generic )
+
+data ModuleImport = ModuleImport Module         -- ^ Imported module
+                                 ImportType     -- ^ qualified?
+                                 (Maybe String) -- ^ synonym
+                                 [Name]         -- ^ imported names
+                    deriving( Show, Eq, Ord, Data, Typeable, Generic )
 
 {- |
 In 'ClassOpI' and 'DataConI', name of the parent class or type

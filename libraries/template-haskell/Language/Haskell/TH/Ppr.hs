@@ -81,7 +81,8 @@ instance Ppr Module where
   ppr (Module pkg m) = text (pkgString pkg) <+> text (modString m)
 
 instance Ppr ModuleInfo where
-  ppr (ModuleInfo imps) = text "Module" <+> vcat (map ppr imps)
+ -- JSTOLAREK: implement this
+  ppr (ModuleInfo imps) = text "Module" -- <+> vcat (map ppr imps)
 
 ------------------------------
 instance Ppr Exp where

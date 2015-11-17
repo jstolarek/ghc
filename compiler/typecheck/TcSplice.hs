@@ -1561,6 +1561,18 @@ modToTHMod :: Module -> TH.Module
 modToTHMod m = TH.Module (TH.PkgName $ unitIdString  $ moduleUnitId m)
                          (TH.ModName $ moduleNameString $ moduleName m)
 
+foo :: (Module, [ImportedModsVal]) -> TH.ModuleImport
+foo (mod, imports) =
+  trace ("imps: " ++ showSDocUnsafe (sep (map (ppr . imv_name) imports))) $
+  trace ("mod: " ++ show (modToTHMod mod)) $
+  trace ("names: " ++ showSDocUnsafe (sep (concatMap ((map (ppr . gre_name)) . (concat . occEnvElts) . imv_all_exports) imports))) $
+  -- imv_all_exports :: ImportedModsVal -> OccEnv [GlobalRdrElt]
+  -- occEnvElts :: 
+  TH.ModuleImport (modToTHMod mod)
+                   TH.Unqualified -- JSTOLAREK: temporary
+                   undefined
+                   undefined
+
 reifyModule :: TH.Module -> TcM TH.ModuleInfo
 reifyModule (TH.Module (TH.PkgName pkgString) (TH.ModName mString)) = do
   this_mod <- getModule
@@ -1568,14 +1580,16 @@ reifyModule (TH.Module (TH.PkgName pkgString) (TH.ModName mString)) = do
   if (reifMod == this_mod) then reifyThisModule else reifyFromIface reifMod
     where
       reifyThisModule = do
-        usages <- fmap (map modToTHMod . moduleEnvKeys . imp_mods) getImports
+--        usages <- fmap (map modToTHMod . moduleEnvKeys . imp_mods) getImports
+        usages <- (map foo . moduleEnvToList . imp_mods) `fmap` getImports
         return $ TH.ModuleInfo usages
 
       reifyFromIface reifMod = do
         iface <- loadInterfaceForModule (ptext (sLit "reifying module from TH for") <+> ppr reifMod) reifMod
         let usages = [modToTHMod m | usage <- mi_usages iface,
                                      Just m <- [usageToModule (moduleUnitId reifMod) usage] ]
-        return $ TH.ModuleInfo usages
+        -- JSTOLAREK: implement this
+        return $ TH.ModuleInfo undefined
 
       usageToModule :: UnitId -> Usage -> Maybe Module
       usageToModule _ (UsageFile {}) = Nothing
