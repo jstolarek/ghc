@@ -148,8 +148,8 @@ rnHsTyKi isType doc (HsTyVar rdr_name)
   = do { dflags <- getDynFlags
        ; let is_wild_card_name  = startsWithUnderscore (rdrNameOcc rdr_name)
              wild_cards_enabled = xopt Opt_NamedWildCards dflags
-       ; is_in_scope <- isJust `fmap` lookupOccRn_maybe rdr_name
-       ; if is_wild_card_name && not is_in_scope && wild_cards_enabled
+       ; not_in_scope <- isNothing `fmap` lookupOccRn_maybe rdr_name
+       ; if is_wild_card_name && not_in_scope && wild_cards_enabled
          then rnHsTyKi isType doc (HsWildCardTy (NamedWildCard rdr_name))
          else do { name <- rnTyVar isType rdr_name
                  ; return (HsTyVar name, unitFV name) }
