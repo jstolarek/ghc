@@ -689,6 +689,8 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = OpenTypeFamily, fdLName = L _ tc_name
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
   ; inj' <- tcInjectivity tvs' inj
+    -- JSTOLAREK: bind signature here like this:
+    -- tcExtendTyVarEnv [mkTcTyVar result_tv_name kind vanillaSkolemTv] $
   ; let tycon = buildFamilyTyCon tc_name tvs' (resultVariableName sig)
                                  OpenSynFamilyTyCon kind parent inj'
   ; return [ATyCon tycon] }

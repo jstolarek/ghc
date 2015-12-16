@@ -834,6 +834,8 @@ data InjectivityCond name
   = InjectivityCond [Located name] [Located name]
   -- ^ - 'ApiAnnotation.AnnKeywordId' :
   --             'ApiAnnotation.AnnRarrow', 'ApiAnnotation.AnnVbar'
+    -- JSTOLAREK: that Vbars should go to InjectivityAnn, think about handling
+    -- commas
 
   -- For details on above see note [Api annotations] in ApiAnnotation
   deriving ( Data, Typeable )
