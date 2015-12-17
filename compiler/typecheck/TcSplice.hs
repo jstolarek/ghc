@@ -1189,7 +1189,7 @@ reifyDataCon isGadtDataCon tys dc
              name      = reifyName dc
              r_ty_name = reifyName (dataConTyCon dc) -- return type for GADTs
              -- return type indices
-             subst     = mkTopTvSubst g_eq_spec
+             subst     = mkTopTCvSubst (map eqSpecPair g_eq_spec)
              idx       = substTyVars subst g_univ_tvs
 
        ; r_arg_tys <- reifyTypes (if isGadtDataCon then g_arg_tys else arg_tys)
@@ -1381,8 +1381,9 @@ reifyFamilyInstance is_poly_tvs inst@(FamInst { fi_flavor = flavor
            ; th_tys <- reifyTypes types_only
            ; annot_th_tys <- zipWith3M annotThType is_poly_tvs types_only th_tys
            ; return (if isNewTyCon rep_tc
-                     then TH.NewtypeInstD [] fam' annot_th_tys (head cons) []
-                     else TH.DataInstD    [] fam' annot_th_tys cons        []) }
+                     then TH.NewtypeInstD [] fam' annot_th_tys (head cons)  []
+                     else TH.DataInstD    [] fam' annot_th_tys Nothing cons [] )
+           }
   where
     fam_tc = famInstTyCon inst
 

@@ -258,7 +258,7 @@ repTyClD (L loc (DataDecl { tcdLName = tc, tcdTyVars = tvs, tcdDataDefn = defn }
          -- data instance D Int :: * -> * where ...
        ; tc_tvs <- mk_extra_tvs tc tvs defn
        ; dec <- addTyClTyVarBinds tc_tvs $ \bndrs ->
-       ; dec <- repDataDefn tc1 bndrs Nothing defn
+                repDataDefn tc1 bndrs Nothing defn
        ; return (Just (loc, dec)) }
 
 repTyClD (L loc (ClassDecl { tcdCtxt = cxt, tcdLName = cls,
@@ -655,37 +655,13 @@ repC (L _ (ConDeclGADT { con_names = cons
                              , hsq_explicit = map (noLoc . UserTyVar . noLoc)
                                                    con_vars }
        ; b <- addTyVarBinds ex_tvs $ \ ex_bndrs ->
-    do { (hs_details, gadt_res_ty) <- update_con_result doc details res_ty'
+    do { (hs_details, gadt_res_ty) <-
+           updateGadtResult failWithDs doc details res_ty'
        ; c'        <- repCons cons hs_details (Just gadt_res_ty)
        ; ctxt'     <- repContext (unLoc ctxt)
        ; rep2 forallCName ([unC ex_bndrs, unC ctxt'] ++ (map unC c')) }
     ; return [b]
     }
-
-update_con_result :: SDoc
-            -> HsConDetails (LHsType Name) (Located [LConDeclField Name])
-                    -- Original details
-            -> LHsType Name -- The original result type
-            -> DsM (HsConDetails (LHsType Name) (Located [LConDeclField Name]),
-                    LHsType Name)
-update_con_result doc details ty
-  = do {  let (arg_tys, res_ty) = splitHsFunType ty
-                -- We can finally split it up,
-                -- now the renamer has dealt with fixities
-                -- See Note [Sorting out the result type] in RdrHsSyn
-
-       ; case details of
-           InfixCon {}  -> pprPanic "update_con_result" (ppr ty)
-           -- See Note [Sorting out the result type] in RdrHsSyn
-
-           RecCon {}    -> do { unless (null arg_tys)
-                                       (failWithDs (doc <+> badConSig))
-                              ; return (details, res_ty) }
-
-           PrefixCon {} -> return (PrefixCon arg_tys, res_ty)}
-    where
-        badConSig = ptext (sLit "Malformed constructor signature")
-
 
 repBangTy :: LBangType Name -> DsM (Core (TH.StrictTypeQ))
 repBangTy ty = do

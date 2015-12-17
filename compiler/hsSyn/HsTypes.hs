@@ -34,7 +34,9 @@ module HsTypes (
         SrcStrictness(..), SrcUnpackedness(..),
         getBangType, getBangStrictness,
 
-        ConDeclField(..), LConDeclField, pprConDeclFields,
+        ConDeclField(..), LConDeclField, pprConDeclFields, updateGadtResult,
+
+        HsConDetails(..),
 
         FieldOcc(..), LFieldOcc, mkFieldOcc,
         AmbiguousFieldOcc(..), mkAmbiguousFieldOcc,
@@ -85,6 +87,7 @@ import Maybes( isJust )
 
 import Data.Data hiding ( Fixity )
 import Data.Maybe ( fromMaybe )
+import Control.Monad ( unless )
 #if __GLASGOW_HASKELL > 710
 import Data.Semigroup   ( Semigroup )
 import qualified Data.Semigroup as Semigroup
@@ -669,6 +672,18 @@ data ConDeclField name  -- Record fields have Haddoc docs on them
   deriving (Typeable)
 deriving instance (DataId name) => Data (ConDeclField name)
 
+-- HsConDetails is use for patterns/expressions *and* for data type declarations
+data HsConDetails arg rec
+  = PrefixCon [arg]             -- C p1 p2 p3
+  | RecCon    rec               -- C { x = p1, y = p2 }
+  | InfixCon  arg arg           -- p1 `C` p2
+  deriving (Data, Typeable)
+
+instance (Outputable arg, Outputable rec)
+         => Outputable (HsConDetails arg rec) where
+  ppr (PrefixCon args) = text "PrefixCon" <+> ppr args
+  ppr (RecCon rec)     = text "RecCon:" <+> ppr rec
+  ppr (InfixCon l r)   = text "InfixCon:" <+> ppr [l, r]
 
 type LFieldOcc name = Located (FieldOcc name)
 
@@ -732,6 +747,33 @@ unambiguousFieldOcc (Ambiguous   rdr sel) = FieldOcc rdr sel
 
 ambiguousFieldOcc :: FieldOcc name -> AmbiguousFieldOcc name
 ambiguousFieldOcc (FieldOcc rdr sel) = Unambiguous rdr sel
+
+updateGadtResult
+  :: (Monad m)
+     => (SDoc -> m ())
+     -> SDoc
+     -> HsConDetails (LHsType Name) (Located [LConDeclField Name])
+                     -- ^ Original details
+     -> LHsType Name -- ^ Original result type
+     -> m (HsConDetails (LHsType Name) (Located [LConDeclField Name]),
+           LHsType Name)
+updateGadtResult failWith doc details ty
+  = do {  let (arg_tys, res_ty) = splitHsFunType ty
+                -- We can finally split it up,
+                -- now the renamer has dealt with fixities
+                -- See Note [Sorting out the result type] in RdrHsSyn
+
+       ; case details of
+           InfixCon {}  -> pprPanic "updateGadtResult" (ppr ty)
+           -- See Note [Sorting out the result type] in RdrHsSyn
+
+           RecCon {}    -> do { unless (null arg_tys)
+                                       (failWith (doc <+> badConSig))
+                              ; return (details, res_ty) }
+
+           PrefixCon {} -> return (PrefixCon arg_tys, res_ty)}
+    where
+        badConSig = ptext (sLit "Malformed constructor signature")
 
 {-
 Note [ConDeclField names]

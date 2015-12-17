@@ -89,7 +89,6 @@ import {-# SOURCE #-}   HsExpr( LHsExpr, HsExpr, HsSplice, pprExpr, pprSplice )
         -- Because Expr imports Decls via HsBracket
 
 import HsBinds
-import HsPat
 import HsTypes
 import HsDoc
 import TyCon
