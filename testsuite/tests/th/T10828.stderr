@@ -1,8 +1,11 @@
+data family D_0 a_1 :: * -> *
+data instance D_0 GHC.Types.Int GHC.Types.Bool :: * where
+    DInt_2 :: D_0 GHC.Types.Int GHC.Types.Bool
 data T10828.T (a_0 :: *) where
     T10828.MkT :: a_1 -> a_1 -> T10828.T a_1
-    T10828.MkC :: forall (a_2 :: *) (b_3 :: *) . a_2 ~
-                                                 GHC.Types.Int => {T10828.foo :: a_2,
-                                                                   T10828.bar :: b_3} -> T10828.T GHC.Types.Int
+    T10828.MkC :: forall (a_2 :: *) (b_3 :: *) . Data.Type.Equality.~ a_2
+                                                                      GHC.Types.Int => {T10828.foo :: a_2,
+                                                                                        T10828.bar :: b_3} -> T10828.T GHC.Types.Int
 
 data T'_0 a_1 :: * where
     MkT'_2 :: forall a_3 . a_3 -> a_3 -> T'_0 a_3

@@ -1,13 +1,21 @@
-{-# LANGUAGE TemplateHaskell, GADTs, ExplicitForAll, KindSignatures #-}
+{-# LANGUAGE TemplateHaskell, GADTs, ExplicitForAll, KindSignatures,
+             TypeFamilies #-}
 
 module T10828 where
 
 import Language.Haskell.TH
 import System.IO
 
--- data T a where
+$( do { decl <- [d| data family D a :: * -> *
+                    data instance D Int Bool :: * where
+                         DInt :: D Int Bool |]
+      ; runIO $ putStrLn (pprint decl) >> hFlush stdout
+      ; return decl }
+ )
+
+-- data T a :: * where
 --    MkT :: a -> a -> T a
---    MkC :: forall a. (a ~ Int) => { foo :: a, bar :: b } -> T Int
+--    MkC :: forall a b. (a ~ Int) => { foo :: a, bar :: b } -> T Int
 
 $( return
    [ DataD [] (mkName "T")
@@ -18,7 +26,7 @@ $( return
                    , (NotStrict, VarT (mkName "a"))]
                    ( mkName "T" )
                    [ VarT (mkName "a") ]
-           , ForallC [PlainTV (mkName "a")]
+           , ForallC [PlainTV (mkName "a"), PlainTV (mkName "b")]
                      [AppT (AppT EqualityT (VarT $ mkName "a"  ) )
                                            (ConT $ mkName "Int") ] $
              RecGadtC (mkName "MkC")

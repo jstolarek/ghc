@@ -49,7 +49,8 @@ module HsTypes (
 
         mkHsImplicitBndrs, mkHsWildCardBndrs, hsImplicitBody,
         mkEmptyImplicitBndrs, mkEmptyWildCardBndrs,
-        mkHsQTvs, hsQTvExplicit, isHsKindedTyVar, hsTvbAllKinded,
+        mkHsQTvs, hsQTvExplicit, emptyLHsQTvs, isEmptyLHsQTvs,
+        isHsKindedTyVar, hsTvbAllKinded,
         hsScopedTvs, hsWcScopedTvs, dropWildCards,
         hsTyVarName, hsAllLTyVarNames, hsLTyVarLocNames,
         hsLTyVarName, hsLTyVarLocName, hsExplicitLTyVarNames,
@@ -218,6 +219,13 @@ mkHsQTvs tvs = HsQTvs { hsq_implicit = PlaceHolder, hsq_explicit = tvs }
 
 hsQTvExplicit :: LHsQTyVars name -> [LHsTyVarBndr name]
 hsQTvExplicit = hsq_explicit
+
+emptyLHsQTvs :: LHsQTyVars Name
+emptyLHsQTvs = HsQTvs [] []
+
+isEmptyLHsQTvs :: LHsQTyVars Name -> Bool
+isEmptyLHsQTvs (HsQTvs [] []) = True
+isEmptyLHsQTvs _              = False
 
 ------------------------------------------------
 --            HsImplicitBndrs
@@ -748,6 +756,9 @@ unambiguousFieldOcc (Ambiguous   rdr sel) = FieldOcc rdr sel
 ambiguousFieldOcc :: FieldOcc name -> AmbiguousFieldOcc name
 ambiguousFieldOcc (FieldOcc rdr sel) = Unambiguous rdr sel
 
+-- Takes details and result type of a GADT data constructor as created by the
+-- parser and rejigs them using information about fixities from the renamer.
+-- See Note [Sorting out the result type] in RdrHsSyn
 updateGadtResult
   :: (Monad m)
      => (SDoc -> m ())
@@ -758,22 +769,16 @@ updateGadtResult
      -> m (HsConDetails (LHsType Name) (Located [LConDeclField Name]),
            LHsType Name)
 updateGadtResult failWith doc details ty
-  = do {  let (arg_tys, res_ty) = splitHsFunType ty
-                -- We can finally split it up,
-                -- now the renamer has dealt with fixities
-                -- See Note [Sorting out the result type] in RdrHsSyn
-
+  = do { let (arg_tys, res_ty) = splitHsFunType ty
+             badConSig         = text "Malformed constructor signature"
        ; case details of
            InfixCon {}  -> pprPanic "updateGadtResult" (ppr ty)
-           -- See Note [Sorting out the result type] in RdrHsSyn
 
            RecCon {}    -> do { unless (null arg_tys)
                                        (failWith (doc <+> badConSig))
                               ; return (details, res_ty) }
 
            PrefixCon {} -> return (PrefixCon arg_tys, res_ty)}
-    where
-        badConSig = ptext (sLit "Malformed constructor signature")
 
 {-
 Note [ConDeclField names]

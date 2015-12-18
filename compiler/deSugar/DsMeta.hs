@@ -252,12 +252,7 @@ repTyClD (L loc (SynDecl { tcdLName = tc, tcdTyVars = tvs, tcdRhs = rhs }))
 
 repTyClD (L loc (DataDecl { tcdLName = tc, tcdTyVars = tvs, tcdDataDefn = defn }))
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
-         -- JSTOLAREK: this goes away. TEST this by doing associated GADT? Quote
-         -- associated type with kind signature
-         -- data family D a :: * -> *
-         -- data instance D Int :: * -> * where ...
-       ; tc_tvs <- mk_extra_tvs tc tvs defn
-       ; dec <- addTyClTyVarBinds tc_tvs $ \bndrs ->
+       ; dec <- addTyClTyVarBinds tvs $ \bndrs ->
                 repDataDefn tc1 bndrs Nothing defn
        ; return (Just (loc, dec)) }
 
@@ -278,35 +273,6 @@ repTyClD (L loc (ClassDecl { tcdCtxt = cxt, tcdLName = cls,
               }
        ; return $ Just (loc, dec)
        }
-
--- JSTOLAREK: remove this
--------------------------
-mk_extra_tvs :: Located Name -> LHsQTyVars Name
-             -> HsDataDefn Name -> DsM (LHsQTyVars Name)
--- If there is a kind signature it must be of form
---    k1 -> .. -> kn -> *
--- Return type variables [tv1:k1, tv2:k2, .., tvn:kn]
-mk_extra_tvs tc tvs defn
-  | HsDataDefn { dd_kindSig = Just hs_kind } <- defn
-  = do { extra_tvs <- go hs_kind
-       ; return (tvs { hsq_explicit = hsq_explicit tvs ++ extra_tvs }) }
-  | otherwise
-  = return tvs
-  where
-    go :: LHsKind Name -> DsM [LHsTyVarBndr Name]
-    go (L loc (HsFunTy kind rest))
-      = do { uniq <- newUnique
-           ; let { occ = mkTyVarOccFS (fsLit "t")
-                 ; nm = mkInternalName uniq occ loc
-                 ; hs_tv = L loc (KindedTyVar (noLoc nm) kind) }
-           ; hs_tvs <- go rest
-           ; return (hs_tv : hs_tvs) }
-
-    go (L _ (HsTyVar (L _ n)))
-      |  isLiftedTypeKindTyConName n
-      = return []
-
-    go _ = failWithDs (ptext (sLit "Malformed kind signature for") <+> ppr tc)
 
 -------------------------
 repRoleD :: LRoleAnnotDecl Name -> DsM (SrcSpan, Core TH.DecQ)
@@ -636,32 +602,38 @@ repC (L _ (ConDeclH98 { con_name = con
 repC (L _ (ConDeclH98 { con_name = con
                         , con_qvars = mcon_tvs, con_cxt = mcxt
                         , con_details = details }))
-  = do { let con_tvs = fromMaybe (HsQTvs [] []) mcon_tvs
+  = do { let con_tvs = fromMaybe emptyLHsQTvs mcon_tvs
              ctxt    = unLoc $ fromMaybe (noLoc []) mcxt
        ; b <- addTyVarBinds con_tvs $ \ ex_bndrs ->
          do { [c']      <- repCons [con] details Nothing
             ; ctxt'     <- repContext ctxt
-            ; if (null (hsq_implicit con_tvs) && null (hsq_explicit con_tvs)
-                  && null ctxt)
+            ; if isEmptyLHsQTvs con_tvs && null ctxt
               then return c'
-              else rep2 forallCName ([unC ex_bndrs, unC ctxt'] ++ [unC c']) }
+              else rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c']) }
        ; return [b] }
 
 repC (L _ (ConDeclGADT { con_names = cons
-                       , con_type = res_ty@(HsIB { hsib_vars = con_vars })}))
-  = do { let (details,res_ty',ctxt,_) = gadtDeclDetails res_ty
-             doc = ptext (sLit "In the constructor for ") <+> ppr (head cons)
-             ex_tvs = HsQTvs { hsq_implicit = []
-                             , hsq_explicit = map (noLoc . UserTyVar . noLoc)
-                                                   con_vars }
-       ; b <- addTyVarBinds ex_tvs $ \ ex_bndrs ->
-    do { (hs_details, gadt_res_ty) <-
+                       , con_type = res_ty@(HsIB { hsib_vars = [] })}))
+  | (details,res_ty',L _ [] ,[]) <- gadtDeclDetails res_ty
+    -- no implicit or explicit variables, no context = no need for a forall
+  = do { let doc = text "In the constructor for " <+> ppr (head cons)
+       ; (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
-       ; c'        <- repCons cons hs_details (Just gadt_res_ty)
-       ; ctxt'     <- repContext (unLoc ctxt)
+       ; repCons cons hs_details (Just gadt_res_ty) }
+
+repC (L _ (ConDeclGADT { con_names = cons
+                       , con_type = res_ty@(HsIB { hsib_vars = con_vars })}))
+  = do { let (details,res_ty',ctxt,tvs) = gadtDeclDetails res_ty
+             doc = text "In the constructor for " <+> ppr (head cons)
+             con_tvs = HsQTvs { hsq_implicit = con_vars
+                              , hsq_explicit = tvs }
+       ; b <- addTyVarBinds con_tvs $ \ ex_bndrs -> do
+       { (hs_details, gadt_res_ty) <-
+           updateGadtResult failWithDs doc details res_ty'
+       ; c' <- repCons cons hs_details (Just gadt_res_ty)
+       ; ctxt' <- repContext (unLoc ctxt)
        ; rep2 forallCName ([unC ex_bndrs, unC ctxt'] ++ (map unC c')) }
-    ; return [b]
-    }
+       ; return [b] }
 
 repBangTy :: LBangType Name -> DsM (Core (TH.StrictTypeQ))
 repBangTy ty = do
@@ -1992,11 +1964,12 @@ repConstr (RecCon (L _ ips)) resTy con
                           ; MkC ty <- repBangTy  t
                           ; rep2 varStrictTypeName [v,ty] }
 
-repConstr (InfixCon st1 st2) _ con
+repConstr (InfixCon st1 st2) Nothing con
     = do arg1 <- repBangTy st1
          arg2 <- repBangTy st2
          rep2 infixCName [unC arg1, unC con, unC arg2]
 
+repConstr (InfixCon {}) (Just _) _ = panic "repConstr: infix GADT constructor?"
 
 repGadtReturnTy :: LHsType Name -> DsM (Core TH.Name, Core [TH.TypeQ])
 repGadtReturnTy res_ty | Just (n, tys) <- hsTyGetAppHead_maybe res_ty

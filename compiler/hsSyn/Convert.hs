@@ -455,7 +455,7 @@ cvtConstr (RecC c varstrtys)
                                    (RecCon (noLoc args')) }
 
 cvtConstr (InfixC st1 c st2)
-  = do  { c' <- cNameL c
+  = do  { c'   <- cNameL c
         ; cxt' <- returnL []
         ; st1' <- cvt_arg st1
         ; st2' <- cvt_arg st2
@@ -465,42 +465,39 @@ cvtConstr (ForallC tvs ctxt con)
   = do  { tvs'        <- cvtTvs tvs
         ; L loc ctxt' <- cvtContext ctxt
         ; L _ con'    <- cvtConstr con
-        ; let -- H98 constructors only
-              qvars = case (tvs, con_qvars con') of
-                ([], Nothing) -> Nothing
-                _             -> Just $
-                  mkHsQTvs (hsQTvExplicit tvs' ++
-                            hsQTvExplicit (fromMaybe (HsQTvs PlaceHolder [])
-                                           (con_qvars con')))
-              -- GADT constructors only
-              conT = con_type con'
         ; returnL $ case con' of
-                ConDeclGADT {} ->
-                  con' { con_type = HsIB (hsib_vars conT)
-                                         (noLoc $ HsForAllTy (hsq_explicit tvs')
-                                                             (hsib_body conT)) }
+                ConDeclGADT { con_type = conT } ->
+                  con' { con_type =
+                         HsIB PlaceHolder
+                         (noLoc $ HsForAllTy (hsq_explicit tvs') $
+                          (noLoc $ HsQualTy (L loc ctxt') (hsib_body conT))) }
                 ConDeclH98  {} ->
-                  con' { con_qvars = qvars
-                       , con_cxt = Just $
-                         L loc (ctxt' ++
-                                unLoc (fromMaybe (noLoc [])
-                                       (con_cxt con'))) } }
+                  let qvars = case (tvs, con_qvars con') of
+                        ([], Nothing) -> Nothing
+                        (_ , m_qvs  ) -> Just $
+                          mkHsQTvs (hsQTvExplicit tvs' ++
+                                    maybe [] hsQTvExplicit m_qvs)
+                  in con' { con_qvars = qvars
+                          , con_cxt = Just $
+                            L loc (ctxt' ++
+                                   unLoc (fromMaybe (noLoc [])
+                                          (con_cxt con'))) } }
 
 cvtConstr (GadtC c strtys ty idx)
   = do  { c'   <- cNameL c
         ; args <- mapM cvt_arg strtys
         ; idx' <- mapM cvtType idx
-        ; ty'  <- tconName ty
-        ; L _ ret_ty <- mk_apps (HsTyVar (noLoc ty')) idx'
+        ; ty'  <- tconNameL ty
+        ; L _ ret_ty <- mk_apps (HsTyVar ty') idx'
         ; c_ty       <- mk_arr_apps args ret_ty
-        ; returnL $ mkGadtDecl [c'] (mkLHsSigType c_ty) }
+        ; returnL $ mkGadtDecl [c'] (mkLHsSigType c_ty)}
 
 cvtConstr (RecGadtC c varstrtys ty idx)
   = do  { c'       <- cNameL c
-        ; ty'      <- tconName ty
+        ; ty'      <- tconNameL ty
         ; rec_flds <- mapM cvt_id_arg varstrtys
         ; idx'     <- mapM cvtType idx
-        ; ret_ty   <- mk_apps (HsTyVar (noLoc ty')) idx'
+        ; ret_ty   <- mk_apps (HsTyVar ty') idx'
         ; let rec_ty = noLoc (HsFunTy (noLoc $ HsRecTy rec_flds) ret_ty)
         ; returnL $ mkGadtDecl [c'] (mkLHsSigType rec_ty) }
 
