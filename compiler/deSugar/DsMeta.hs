@@ -252,8 +252,7 @@ repTyClD (L loc (SynDecl { tcdLName = tc, tcdTyVars = tvs, tcdRhs = rhs }))
 
 repTyClD (L loc (DataDecl { tcdLName = tc, tcdTyVars = tvs, tcdDataDefn = defn }))
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
-       ; tc_tvs <- mk_extra_tvs tc tvs defn
-       ; dec <- addTyClTyVarBinds tc_tvs $ \bndrs ->
+       ; dec <- addTyClTyVarBinds tvs $ \bndrs ->
                 repDataDefn tc1 bndrs Nothing defn
        ; return (Just (loc, dec)) }
 
@@ -401,34 +400,6 @@ repAssocTyFamDefaults = mapM rep_deflt
            ; rhs1 <- repLTy rhs
            ; eqn1 <- repTySynEqn tys2 rhs1
            ; repTySynInst tc1 eqn1 }
-
--------------------------
-mk_extra_tvs :: Located Name -> LHsQTyVars Name
-             -> HsDataDefn Name -> DsM (LHsQTyVars Name)
--- If there is a kind signature it must be of form
---    k1 -> .. -> kn -> *
--- Return type variables [tv1:k1, tv2:k2, .., tvn:kn]
-mk_extra_tvs tc tvs defn
-  | HsDataDefn { dd_kindSig = Just hs_kind } <- defn
-  = do { extra_tvs <- go hs_kind
-       ; return (tvs { hsq_explicit = hsq_explicit tvs ++ extra_tvs }) }
-  | otherwise
-  = return tvs
-  where
-    go :: LHsKind Name -> DsM [LHsTyVarBndr Name]
-    go (L loc (HsFunTy kind rest))
-      = do { uniq <- newUnique
-           ; let { occ = mkTyVarOccFS (fsLit "t")
-                 ; nm = mkInternalName uniq occ loc
-                 ; hs_tv = L loc (KindedTyVar (noLoc nm) kind) }
-           ; hs_tvs <- go rest
-           ; return (hs_tv : hs_tvs) }
-
-    go (L _ (HsTyVar (L _ n)))
-      |  isLiftedTypeKindTyConName n
-      = return []
-
-    go _ = failWithDs (ptext (sLit "Malformed kind signature for") <+> ppr tc)
 
 -------------------------
 -- represent fundeps
