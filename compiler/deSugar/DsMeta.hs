@@ -797,12 +797,14 @@ addTyVarBinds :: LHsQTyVars Name                            -- the binders to be
 -- the computations passed as the second argument is executed in that extended
 -- meta environment and gets the *new* names on Core-level as an argument
 
-addTyVarBinds (HsQTvs { hsq_implicit = kvs, hsq_explicit = tvs }) m
-  = do { fresh_kv_names <- mkGenSyms kvs
-       ; fresh_tv_names <- mkGenSyms (map hsLTyVarName tvs)
-       ; let fresh_names = fresh_kv_names ++ fresh_tv_names
+addTyVarBinds (HsQTvs { hsq_implicit = imp_tvs, hsq_explicit = exp_tvs }) m
+  = do { fresh_imp_names <- mkGenSyms imp_tvs
+       ; fresh_exp_names <- mkGenSyms (map hsLTyVarName exp_tvs)
+       ; let fresh_names = fresh_imp_names ++ fresh_exp_names
+             imp_bndrs   = map (\itv -> noLoc $ UserTyVar (noLoc itv)) imp_tvs
        ; term <- addBinds fresh_names $
-                 do { kbs <- repList tyVarBndrTyConName mk_tv_bndr (tvs `zip` fresh_tv_names)
+                 do { kbs <- repList tyVarBndrTyConName mk_tv_bndr
+                                     ((imp_bndrs ++ exp_tvs) `zip` fresh_names)
                     ; m kbs }
        ; wrapGenSyms fresh_names term }
   where
