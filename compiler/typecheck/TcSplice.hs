@@ -1212,7 +1212,7 @@ reifyDataCon isGadtDataCon tys dc
                       = TH.NormalC name (stricts `zip` r_arg_tys)
              [r_a1, r_a2] = r_arg_tys
              [s1,   s2]   = stricts
-             (ex_tvs', theta') | isGadtDataCon = ( g_ex_tvs ++ g_univ_tvs
+             (ex_tvs', theta') | isGadtDataCon = ( g_univ_tvs ++ g_ex_tvs
                                                  , g_theta )
                                | otherwise     = ( ex_tvs, theta )
              ret_con | null ex_tvs' && null theta' = return main_con

@@ -615,18 +615,17 @@ repC (L _ (ConDeclH98 { con_name = con
        ; return [b] }
 
 repC (L _ (ConDeclGADT { con_names = cons
-                       , con_type = res_ty@(HsIB { hsib_vars = [] })}))
-  | (details, res_ty', L _ [] , []) <- gadtDeclDetails res_ty
+                       , con_type = res_ty@(HsIB { hsib_vars = con_vars })}))
+  | (details, res_ty', L _ [] , []) <- gadtDetails
+  , [] <- con_vars
     -- no implicit or explicit variables, no context = no need for a forall
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
        ; (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
        ; repCons cons hs_details (Just gadt_res_ty) }
 
-repC (L _ (ConDeclGADT { con_names = cons
-                       , con_type = res_ty@(HsIB { hsib_vars = con_vars })}))
-  = do { let (details,res_ty',ctxt,tvs) = gadtDeclDetails res_ty
-             doc = text "In the constructor for " <+> ppr (head cons)
+  | (details,res_ty',ctxt,tvs) <- gadtDetails
+  = do { let doc = text "In the constructor for " <+> ppr (head cons)
              con_tvs = HsQTvs { hsq_implicit = con_vars
                               , hsq_explicit = tvs }
        ; b <- addTyVarBinds con_tvs $ \ ex_bndrs -> do
@@ -634,8 +633,12 @@ repC (L _ (ConDeclGADT { con_names = cons
            updateGadtResult failWithDs doc details res_ty'
        ; c' <- repCons cons hs_details (Just gadt_res_ty)
        ; ctxt' <- repContext (unLoc ctxt)
+         -- JSTOLAREK: I think this line is broken and will not work if there
+         -- are many contructors:
        ; rep2 forallCName ([unC ex_bndrs, unC ctxt'] ++ (map unC c')) }
        ; return [b] }
+  where
+     gadtDetails = gadtDeclDetails res_ty
 
 repBangTy :: LBangType Name -> DsM (Core (TH.StrictTypeQ))
 repBangTy ty = do
