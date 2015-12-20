@@ -8,7 +8,18 @@ import System.IO
 
 $( do { decl <- [d| data family D a :: * -> *
                     data instance D Int Bool :: * where
-                         DInt :: D Int Bool |]
+                         DInt :: D Int Bool
+
+                    data E where
+                      MkE :: a -> E
+
+                    data Foo a b where
+                      MkFoo :: a -> Foo a b
+
+                    newtype Bar :: * -> Bool -> * where
+                      MkBar :: a -> Bar a b
+                 |]
+
       ; runIO $ putStrLn (pprint decl) >> hFlush stdout
       ; return decl }
  )
