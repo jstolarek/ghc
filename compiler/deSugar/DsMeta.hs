@@ -299,8 +299,8 @@ repDataDefn tc bndrs opt_tys
                           ; case con1 of
                              [c] -> repNewtype cxt1 tc bndrs opt_tys ksig' c
                                                derivs1
-                             _cs -> failWithDs (ptext
-                                     (sLit "Multiple constructors for newtype:")
+                             _cs -> failWithDs (
+                                     text "Multiple constructors for newtype:"
                                       <+> pprQuotedList
                                               (getConNames $ unLoc $ head cons))
                           }
@@ -597,13 +597,13 @@ repAnnProv ModuleAnnProvenance
 
 repC :: LConDecl Name -> DsM [Core TH.ConQ]
 repC (L _ (ConDeclH98 { con_name = con
-                        , con_qvars = Nothing, con_cxt = Nothing
-                        , con_details = details }))
+                      , con_qvars = Nothing, con_cxt = Nothing
+                      , con_details = details }))
   = repCons [con] details Nothing
 
 repC (L _ (ConDeclH98 { con_name = con
-                        , con_qvars = mcon_tvs, con_cxt = mcxt
-                        , con_details = details }))
+                      , con_qvars = mcon_tvs, con_cxt = mcxt
+                      , con_details = details }))
   = do { let con_tvs = fromMaybe emptyLHsQTvs mcon_tvs
              ctxt    = unLoc $ fromMaybe (noLoc []) mcxt
        ; b <- addTyVarBinds con_tvs $ \ ex_bndrs ->
@@ -616,7 +616,7 @@ repC (L _ (ConDeclH98 { con_name = con
 
 repC (L _ (ConDeclGADT { con_names = cons
                        , con_type = res_ty@(HsIB { hsib_vars = [] })}))
-  | (details,res_ty',L _ [] ,[]) <- gadtDeclDetails res_ty
+  | (details, res_ty', L _ [] , []) <- gadtDeclDetails res_ty
     -- no implicit or explicit variables, no context = no need for a forall
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
        ; (hs_details, gadt_res_ty) <-
