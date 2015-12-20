@@ -1601,14 +1601,25 @@ data Con = NormalC Name [StrictType]         -- ^ @C Int a@
          | InfixC StrictType Name StrictType -- ^ @Int :+ a@
          | ForallC [TyVarBndr] Cxt Con       -- ^ @forall a. Eq a => C [a]@
          | GadtC Name [StrictType]
-                 Name                        -- Type constructor
+                 Name                        -- See Note [GADT return type]
                  [Type]                      -- Indices of the type constructor
                                              -- ^ @C :: a -> b -> T b Int@
          | RecGadtC Name [VarStrictType]
-                    Name                     -- Type constructor
+                    Name                     -- See Note [GADT return type]
                     [Type]                   -- Indices of the type constructor
                                              -- ^ @C :: { v :: Int } -> T b Int@
          deriving( Show, Eq, Ord, Data, Typeable, Generic )
+
+-- Note [GADT return type]
+-- ~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- The name of the return type stored by a GADT constructor does not necessarily
+-- match the name of the data type:
+--
+-- type S = T
+--
+-- data T a where
+--     MkT :: S Int
 
 type StrictType = (Strict, Type)
 type VarStrictType = (Name, Strict, Type)
