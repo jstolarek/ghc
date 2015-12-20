@@ -1478,7 +1478,8 @@ data Dec
                                   -- ^ @{ data Cxt x => T x = A x | B (T x)
                                   --       deriving (Z,W)}@
   | NewtypeD Cxt Name [TyVarBndr]
-         Con Cxt                  -- ^ @{ newtype Cxt x => T x = A (B x)
+             (Maybe Kind)         -- Kind signature
+             Con Cxt              -- ^ @{ newtype Cxt x => T x = A (B x)
                                   --       deriving (Z,W Q)}@
   | TySynD Name [TyVarBndr] Type  -- ^ @{ type T x = (x,x) }@
   | ClassD Cxt Name [TyVarBndr]
@@ -1505,8 +1506,9 @@ data Dec
                                   --       = A x | B (T x) deriving (Z,W)}@
 
   | NewtypeInstD Cxt Name [Type]
-         Con Cxt                  -- ^ @{ newtype instance Cxt x => T [x] = A (B x)
-                                  --       deriving (Z,W)}@
+                 (Maybe Kind)     -- Kind signature
+                 Con Cxt          -- ^ @{ newtype instance Cxt x => T [x]
+                                  --        = A (B x) deriving (Z,W)}@
   | TySynInstD Name TySynEqn      -- ^ @{ type instance ... }@
 
   -- | open type families (may also appear in [Dec] of 'ClassD' and 'InstanceD')

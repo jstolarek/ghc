@@ -346,13 +346,13 @@ dataD ctxt tc tvs ksig cons derivs =
     derivs1 <- derivs
     return (DataD ctxt1 tc tvs ksig cons1 derivs1)
 
-newtypeD :: CxtQ -> Name -> [TyVarBndr] -> ConQ -> CxtQ -> DecQ
-newtypeD ctxt tc tvs con derivs =
+newtypeD :: CxtQ -> Name -> [TyVarBndr] -> Maybe Kind -> ConQ -> CxtQ -> DecQ
+newtypeD ctxt tc tvs ksig con derivs =
   do
     ctxt1 <- ctxt
     con1 <- con
     derivs1 <- derivs
-    return (NewtypeD ctxt1 tc tvs con1 derivs1)
+    return (NewtypeD ctxt1 tc tvs ksig con1 derivs1)
 
 classD :: CxtQ -> Name -> [TyVarBndr] -> [FunDep] -> [DecQ] -> DecQ
 classD ctxt cls tvs fds decs =
@@ -434,14 +434,14 @@ dataInstD ctxt tc tys ksig cons derivs =
     derivs1 <- derivs
     return (DataInstD ctxt1 tc tys1 ksig cons1 derivs1)
 
-newtypeInstD :: CxtQ -> Name -> [TypeQ] -> ConQ -> CxtQ -> DecQ
-newtypeInstD ctxt tc tys con derivs =
+newtypeInstD :: CxtQ -> Name -> [TypeQ] -> Maybe Kind -> ConQ -> CxtQ -> DecQ
+newtypeInstD ctxt tc tys ksig con derivs =
   do
     ctxt1 <- ctxt
     tys1  <- sequence tys
     con1  <- con
     derivs1 <- derivs
-    return (NewtypeInstD ctxt1 tc tys1 con1 derivs1)
+    return (NewtypeInstD ctxt1 tc tys1 ksig con1 derivs1)
 
 tySynInstD :: Name -> TySynEqnQ -> DecQ
 tySynInstD tc eqn =

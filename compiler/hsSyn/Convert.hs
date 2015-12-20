@@ -217,13 +217,14 @@ cvtDec (DataD ctxt tc tvs ksig constrs derivs)
                                         , tcdDataDefn = defn
                                         , tcdFVs = placeHolderNames }) }
 
-cvtDec (NewtypeD ctxt tc tvs constr derivs)
+cvtDec (NewtypeD ctxt tc tvs ksig constr derivs)
   = do  { (ctxt', tc', tvs') <- cvt_tycl_hdr ctxt tc tvs
+        ; ksig' <- cvtKind `traverse` ksig
         ; con' <- cvtConstr constr
         ; derivs' <- cvtDerivs derivs
         ; let defn = HsDataDefn { dd_ND = NewType, dd_cType = Nothing
                                 , dd_ctxt = ctxt'
-                                , dd_kindSig = Nothing
+                                , dd_kindSig = ksig'
                                 , dd_cons = [con']
                                 , dd_derivs = derivs' }
         ; returnJustL $ TyClD (DataDecl { tcdLName = tc', tcdTyVars = tvs'
@@ -293,13 +294,14 @@ cvtDec (DataInstD ctxt tc tys ksig constrs derivs)
                                          , dfid_defn = defn
                                          , dfid_fvs = placeHolderNames } }}
 
-cvtDec (NewtypeInstD ctxt tc tys constr derivs)
+cvtDec (NewtypeInstD ctxt tc tys ksig constr derivs)
   = do { (ctxt', tc', typats') <- cvt_tyinst_hdr ctxt tc tys
+       ; ksig' <- cvtKind `traverse` ksig
        ; con' <- cvtConstr constr
        ; derivs' <- cvtDerivs derivs
        ; let defn = HsDataDefn { dd_ND = NewType, dd_cType = Nothing
                                , dd_ctxt = ctxt'
-                               , dd_kindSig = Nothing
+                               , dd_kindSig = ksig'
                                , dd_cons = [con'], dd_derivs = derivs' }
        ; returnJustL $ InstD $ DataFamInstD
            { dfid_inst = DataFamInstDecl { dfid_tycon = tc', dfid_pats = typats'

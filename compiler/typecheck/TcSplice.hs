@@ -1170,9 +1170,9 @@ reifyTyCon tc
         ; let name = reifyName tc
               deriv = []        -- Don't know about deriving
               decl | isNewTyCon tc =
-                       TH.NewtypeD cxt name r_tvs (head cons) deriv
+                       TH.NewtypeD cxt name r_tvs Nothing (head cons) deriv
                    | otherwise     =
-                       TH.DataD    cxt name r_tvs Nothing cons deriv
+                       TH.DataD    cxt name r_tvs Nothing       cons  deriv
         ; return (TH.TyConI decl) }
 
 reifyDataCon :: Bool -> [Type] -> DataCon -> TcM TH.Con
@@ -1381,9 +1381,10 @@ reifyFamilyInstance is_poly_tvs inst@(FamInst { fi_flavor = flavor
            ; let types_only = filterOutInvisibleTypes fam_tc eta_expanded_lhs
            ; th_tys <- reifyTypes types_only
            ; annot_th_tys <- zipWith3M annotThType is_poly_tvs types_only th_tys
-           ; return (if isNewTyCon rep_tc
-                     then TH.NewtypeInstD [] fam' annot_th_tys (head cons)  []
-                     else TH.DataInstD    [] fam' annot_th_tys Nothing cons [] )
+           ; return $
+               if isNewTyCon rep_tc
+               then TH.NewtypeInstD [] fam' annot_th_tys Nothing (head cons) []
+               else TH.DataInstD    [] fam' annot_th_tys Nothing       cons  []
            }
   where
     fam_tc = famInstTyCon inst

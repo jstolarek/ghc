@@ -285,8 +285,8 @@ ppr_dec _ (TySynD t xs rhs)
   = ppr_tySyn empty t (hsep (map ppr xs)) rhs
 ppr_dec _ (DataD ctxt t xs ksig cs decs)
   = ppr_data empty ctxt t (hsep (map ppr xs)) ksig cs decs
-ppr_dec _ (NewtypeD ctxt t xs c decs)
-  = ppr_newtype empty ctxt t (sep (map ppr xs)) c decs
+ppr_dec _ (NewtypeD ctxt t xs ksig c decs)
+  = ppr_newtype empty ctxt t (sep (map ppr xs)) ksig c decs
 ppr_dec _  (ClassD ctxt c xs fds ds)
   = text "class" <+> pprCxt ctxt <+> ppr c <+> hsep (map ppr xs) <+> ppr fds
     $$ where_clause ds
@@ -308,8 +308,8 @@ ppr_dec isTop (DataInstD ctxt tc tys ksig cs decs)
   where
     maybeInst | isTop     = text "instance"
               | otherwise = empty
-ppr_dec isTop (NewtypeInstD ctxt tc tys c decs)
-  = ppr_newtype maybeInst ctxt tc (sep (map pprParendType tys)) c decs
+ppr_dec isTop (NewtypeInstD ctxt tc tys ksig c decs)
+  = ppr_newtype maybeInst ctxt tc (sep (map pprParendType tys)) ksig c decs
   where
     maybeInst | isTop     = text "instance"
               | otherwise = empty
@@ -370,16 +370,20 @@ ppr_data maybeInst ctxt t argsDoc ksig cs decs
                 Nothing -> empty
                 Just k  -> dcolon <+> ppr k
 
-ppr_newtype :: Doc -> Cxt -> Name -> Doc -> Con -> Cxt -> Doc
-ppr_newtype maybeInst ctxt t argsDoc c decs
+ppr_newtype :: Doc -> Cxt -> Name -> Doc -> Maybe Kind -> Con -> Cxt -> Doc
+ppr_newtype maybeInst ctxt t argsDoc ksig c decs
   = sep [text "newtype" <+> maybeInst
             <+> pprCxt ctxt
-            <+> ppr t <+> argsDoc,
+            <+> ppr t <+> argsDoc <+> ksigDoc,
          nest 2 (char '=' <+> ppr c),
          if null decs
            then empty
            else nest nestDepth
                 $ text "deriving" <+> ppr_cxt_preds decs]
+  where
+    ksigDoc = case ksig of
+                Nothing -> empty
+                Just k  -> dcolon <+> ppr k
 
 ppr_tySyn :: Doc -> Name -> Doc -> Type -> Doc
 ppr_tySyn maybeInst t argsDoc rhs

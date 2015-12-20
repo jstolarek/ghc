@@ -252,7 +252,8 @@ repTyClD (L loc (SynDecl { tcdLName = tc, tcdTyVars = tvs, tcdRhs = rhs }))
 
 repTyClD (L loc (DataDecl { tcdLName = tc, tcdTyVars = tvs, tcdDataDefn = defn }))
   = do { tc1 <- lookupLOcc tc           -- See note [Binders and occurrences]
-       ; dec <- addTyClTyVarBinds tvs $ \bndrs ->
+       ; tc_tvs <- mk_extra_tvs tc tvs defn
+       ; dec <- addTyClTyVarBinds tc_tvs $ \bndrs ->
                 repDataDefn tc1 bndrs Nothing defn
        ; return (Just (loc, dec)) }
 
@@ -294,9 +295,11 @@ repDataDefn tc bndrs opt_tys
   = do { cxt1     <- repLContext cxt
        ; derivs1  <- repDerivs mb_derivs
        ; case new_or_data of
-           NewType  -> do { con1 <- repC (head cons)
+           NewType  -> do { con1  <- repC (head cons)
+                          ; ksig' <- repMaybeLKind ksig
                           ; case con1 of
-                             [c] -> repNewtype cxt1 tc bndrs opt_tys c derivs1
+                             [c] -> repNewtype cxt1 tc bndrs opt_tys ksig' c
+                                               derivs1
                              _cs -> failWithDs (ptext
                                      (sLit "Multiple constructors for newtype:")
                                       <+> pprQuotedList
@@ -398,6 +401,34 @@ repAssocTyFamDefaults = mapM rep_deflt
            ; rhs1 <- repLTy rhs
            ; eqn1 <- repTySynEqn tys2 rhs1
            ; repTySynInst tc1 eqn1 }
+
+-------------------------
+mk_extra_tvs :: Located Name -> LHsQTyVars Name
+             -> HsDataDefn Name -> DsM (LHsQTyVars Name)
+-- If there is a kind signature it must be of form
+--    k1 -> .. -> kn -> *
+-- Return type variables [tv1:k1, tv2:k2, .., tvn:kn]
+mk_extra_tvs tc tvs defn
+  | HsDataDefn { dd_kindSig = Just hs_kind } <- defn
+  = do { extra_tvs <- go hs_kind
+       ; return (tvs { hsq_explicit = hsq_explicit tvs ++ extra_tvs }) }
+  | otherwise
+  = return tvs
+  where
+    go :: LHsKind Name -> DsM [LHsTyVarBndr Name]
+    go (L loc (HsFunTy kind rest))
+      = do { uniq <- newUnique
+           ; let { occ = mkTyVarOccFS (fsLit "t")
+                 ; nm = mkInternalName uniq occ loc
+                 ; hs_tv = L loc (KindedTyVar (noLoc nm) kind) }
+           ; hs_tvs <- go rest
+           ; return (hs_tv : hs_tvs) }
+
+    go (L _ (HsTyVar (L _ n)))
+      |  isLiftedTypeKindTyConName n
+      = return []
+
+    go _ = failWithDs (ptext (sLit "Malformed kind signature for") <+> ppr tc)
 
 -------------------------
 -- represent fundeps
@@ -1833,12 +1864,14 @@ repData (MkC cxt) (MkC nm) (MkC _) (Just (MkC tys)) (MkC ksig) (MkC cons)
   = rep2 dataInstDName [cxt, nm, tys, ksig, cons, derivs]
 
 repNewtype :: Core TH.CxtQ -> Core TH.Name -> Core [TH.TyVarBndr]
-           -> Maybe (Core [TH.TypeQ])
+           -> Maybe (Core [TH.TypeQ]) -> Core (Maybe TH.Kind)
            -> Core TH.ConQ -> Core TH.CxtQ -> DsM (Core TH.DecQ)
-repNewtype (MkC cxt) (MkC nm) (MkC tvs) Nothing (MkC con) (MkC derivs)
-  = rep2 newtypeDName [cxt, nm, tvs, con, derivs]
-repNewtype (MkC cxt) (MkC nm) (MkC _) (Just (MkC tys)) (MkC con) (MkC derivs)
-  = rep2 newtypeInstDName [cxt, nm, tys, con, derivs]
+repNewtype (MkC cxt) (MkC nm) (MkC tvs) Nothing (MkC ksig) (MkC con)
+           (MkC derivs)
+  = rep2 newtypeDName [cxt, nm, tvs, ksig, con, derivs]
+repNewtype (MkC cxt) (MkC nm) (MkC _) (Just (MkC tys)) (MkC ksig) (MkC con)
+           (MkC derivs)
+  = rep2 newtypeInstDName [cxt, nm, tys, ksig, con, derivs]
 
 repTySyn :: Core TH.Name -> Core [TH.TyVarBndr]
          -> Core TH.TypeQ -> DsM (Core TH.DecQ)
