@@ -680,7 +680,8 @@ data ConDeclField name  -- Record fields have Haddoc docs on them
   deriving (Typeable)
 deriving instance (DataId name) => Data (ConDeclField name)
 
--- HsConDetails is use for patterns/expressions *and* for data type declarations
+-- HsConDetails is used for patterns/expressions *and* for data type
+-- declarations
 data HsConDetails arg rec
   = PrefixCon [arg]             -- C p1 p2 p3
   | RecCon    rec               -- C { x = p1, y = p2 }

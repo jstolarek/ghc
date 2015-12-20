@@ -599,7 +599,8 @@ repC :: LConDecl Name -> DsM [Core TH.ConQ]
 repC (L _ (ConDeclH98 { con_name = con
                       , con_qvars = Nothing, con_cxt = Nothing
                       , con_details = details }))
-  = repCons [con] details Nothing
+  = do { b <- repDataCon con details Nothing
+       ; return [b] }
 
 repC (L _ (ConDeclH98 { con_name = con
                       , con_qvars = mcon_tvs, con_cxt = mcxt
@@ -607,7 +608,7 @@ repC (L _ (ConDeclH98 { con_name = con
   = do { let con_tvs = fromMaybe emptyLHsQTvs mcon_tvs
              ctxt    = unLoc $ fromMaybe (noLoc []) mcxt
        ; b <- addTyVarBinds con_tvs $ \ ex_bndrs ->
-         do { [c']      <- repCons [con] details Nothing
+         do { c'        <- repDataCon con details Nothing
             ; ctxt'     <- repContext ctxt
             ; if isEmptyLHsQTvs con_tvs && null ctxt
               then return c'
@@ -622,21 +623,19 @@ repC (L _ (ConDeclGADT { con_names = cons
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
        ; (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
-       ; repCons cons hs_details (Just gadt_res_ty) }
+       ; mapM (\con -> repDataCon con hs_details (Just gadt_res_ty)) cons }
 
   | (details,res_ty',ctxt,tvs) <- gadtDetails
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
              con_tvs = HsQTvs { hsq_implicit = con_vars
                               , hsq_explicit = tvs }
-       ; b <- addTyVarBinds con_tvs $ \ ex_bndrs -> do
+       ; forM cons $ \con -> do
+       { addTyVarBinds con_tvs $ \ ex_bndrs -> do
        { (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
-       ; c' <- repCons cons hs_details (Just gadt_res_ty)
+       ; c'    <- repDataCon con hs_details (Just gadt_res_ty)
        ; ctxt' <- repContext (unLoc ctxt)
-         -- JSTOLAREK: I think this line is broken and will not work if there
-         -- are many contructors:
-       ; rep2 forallCName ([unC ex_bndrs, unC ctxt'] ++ (map unC c')) }
-       ; return [b] }
+       ; rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c']) } } }
   where
      gadtDetails = gadtDeclDetails res_ty
 
@@ -1934,13 +1933,13 @@ repProto mk_sig (MkC s) (MkC ty) = rep2 mk_sig [s, ty]
 repCtxt :: Core [TH.PredQ] -> DsM (Core TH.CxtQ)
 repCtxt (MkC tys) = rep2 cxtName [tys]
 
-repCons :: [Located Name]
-        -> HsConDeclDetails Name
-        -> Maybe (LHsType Name)
-        -> DsM [Core TH.ConQ]
-repCons cons details res_ty
-    = do cons1 <- mapM lookupLOcc cons -- See Note [Binders and occurrences]
-         mapM (repConstr details res_ty) cons1
+repDataCon :: Located Name
+           -> HsConDeclDetails Name
+           -> Maybe (LHsType Name)
+           -> DsM (Core TH.ConQ)
+repDataCon cons details res_ty
+    = do cons1 <- lookupLOcc cons -- See Note [Binders and occurrences]
+         repConstr details res_ty cons1
 
 repConstr :: HsConDeclDetails Name
           -> Maybe (LHsType Name)

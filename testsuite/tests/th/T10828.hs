@@ -14,7 +14,7 @@ $( do { decl <- [d| data family D a :: * -> *
                       MkE :: a -> E
 
                     data Foo a b where
-                      MkFoo :: a -> Foo a b
+                      MkFoo, MkFoo' :: a -> Foo a b
 
                     newtype Bar :: * -> Bool -> * where
                       MkBar :: a -> Bar a b
