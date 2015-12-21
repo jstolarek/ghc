@@ -1233,10 +1233,10 @@ reifyDataCon isGadtDataCon tys dc
 -- Consider these declarations:
 --
 --   data T a where
---      MkT :: T Int
+--      MkT :: forall a. (a ~ Int) => T a
 --
 --   data T a where
---      MkT :: forall a. (a ~ Int) => T a
+--      MkT :: T Int
 --
 -- First declaration will be reified as a GADT.  Second declaration will be
 -- reified as a normal H98 data type declaration.
