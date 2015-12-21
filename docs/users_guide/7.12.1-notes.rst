@@ -270,9 +270,7 @@ Template Haskell
 - ``Template Haskell`` has now explicit support for representing GADTs.  Until
   now GADTs were encoded using ``NormalC``, ``RecC`` (record syntax) and
   ``ForallC`` constructors.  Two new constructors - ``GadtC`` and ``RecGadtC`` -
-  are now supported during quoting and splicing.  However, GADTs are not
-  supported during reification: reified GADT constructors will still be encoded
-  using ``NormalC``, ``RecC`` and ``ForallC``.
+  are now supported during quoting, splicing and reification.
 
 -  Primitive chars (e.g., ``[| 'a'# |]``) and primitive strings (e.g.,
    ``[| "abc"# |]``) can now be quoted with Template Haskell. The
