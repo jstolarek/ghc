@@ -680,6 +680,9 @@ data ConDeclField name  -- Record fields have Haddoc docs on them
   deriving (Typeable)
 deriving instance (DataId name) => Data (ConDeclField name)
 
+instance (OutputableBndr name) => Outputable (ConDeclField name) where
+  ppr (ConDeclField fld_n fld_ty _) = ppr fld_n <+> dcolon <+> ppr fld_ty
+
 -- HsConDetails is used for patterns/expressions *and* for data type
 -- declarations
 data HsConDetails arg rec
