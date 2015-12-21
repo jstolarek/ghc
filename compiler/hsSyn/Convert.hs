@@ -486,22 +486,22 @@ cvtConstr (ForallC tvs ctxt con)
                                           (con_cxt con'))) } }
 
 cvtConstr (GadtC c strtys ty idx)
-  = do  { c'   <- cNameL c
+  = do  { c'   <- mapM cNameL c
         ; args <- mapM cvt_arg strtys
         ; idx' <- mapM cvtType idx
         ; ty'  <- tconNameL ty
         ; L _ ret_ty <- mk_apps (HsTyVar ty') idx'
         ; c_ty       <- mk_arr_apps args ret_ty
-        ; returnL $ mkGadtDecl [c'] (mkLHsSigType c_ty)}
+        ; returnL $ mkGadtDecl c' (mkLHsSigType c_ty)}
 
 cvtConstr (RecGadtC c varstrtys ty idx)
-  = do  { c'       <- cNameL c
+  = do  { c'       <- mapM cNameL c
         ; ty'      <- tconNameL ty
         ; rec_flds <- mapM cvt_id_arg varstrtys
         ; idx'     <- mapM cvtType idx
         ; ret_ty   <- mk_apps (HsTyVar ty') idx'
         ; let rec_ty = noLoc (HsFunTy (noLoc $ HsRecTy rec_flds) ret_ty)
-        ; returnL $ mkGadtDecl [c'] (mkLHsSigType rec_ty) }
+        ; returnL $ mkGadtDecl c' (mkLHsSigType rec_ty) }
 
 cvt_arg :: (TH.Strict, TH.Type) -> CvtM (LHsType RdrName)
 cvt_arg (NotStrict, ty) = cvtType ty

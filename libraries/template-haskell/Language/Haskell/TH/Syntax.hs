@@ -1600,11 +1600,11 @@ data Con = NormalC Name [StrictType]         -- ^ @C Int a@
          | RecC Name [VarStrictType]         -- ^ @C { v :: Int, w :: a }@
          | InfixC StrictType Name StrictType -- ^ @Int :+ a@
          | ForallC [TyVarBndr] Cxt Con       -- ^ @forall a. Eq a => C [a]@
-         | GadtC Name [StrictType]
+         | GadtC [Name] [StrictType]
                  Name                        -- See Note [GADT return type]
                  [Type]                      -- Indices of the type constructor
                                              -- ^ @C :: a -> b -> T b Int@
-         | RecGadtC Name [VarStrictType]
+         | RecGadtC [Name] [VarStrictType]
                     Name                     -- See Note [GADT return type]
                     [Type]                   -- Indices of the type constructor
                                              -- ^ @C :: { v :: Int } -> T b Int@

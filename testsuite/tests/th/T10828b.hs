@@ -16,7 +16,7 @@ $( return
            , ForallC [PlainTV (mkName "a")]
                      [AppT (AppT EqualityT (VarT $ mkName "a"  ) )
                                            (ConT $ mkName "Int") ] $
-             RecGadtC (mkName "MkC")
+             RecGadtC [(mkName "MkC")]
                   [ (mkName "foo", NotStrict, VarT (mkName "a"))
                   , (mkName "bar", NotStrict, VarT (mkName "b"))]
                   ( mkName "T" )

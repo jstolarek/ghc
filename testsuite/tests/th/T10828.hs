@@ -32,7 +32,7 @@ $( return
    [ DataD [] (mkName "T")
            [ PlainTV (mkName "a") ]
            (Just StarT)
-           [ GadtC (mkName "MkT")
+           [ GadtC [(mkName "MkT")]
                    [ (NotStrict, VarT (mkName "a"))
                    , (NotStrict, VarT (mkName "a"))]
                    ( mkName "T" )
@@ -40,7 +40,7 @@ $( return
            , ForallC [PlainTV (mkName "a"), PlainTV (mkName "b")]
                      [AppT (AppT EqualityT (VarT $ mkName "a"  ) )
                                            (ConT $ mkName "Int") ] $
-             RecGadtC (mkName "MkC")
+             RecGadtC [(mkName "MkC")]
                   [ (mkName "foo", NotStrict, VarT (mkName "a"))
                   , (mkName "bar", NotStrict, VarT (mkName "b"))]
                   ( mkName "T" )

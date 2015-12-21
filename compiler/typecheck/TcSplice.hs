@@ -1199,14 +1199,14 @@ reifyDataCon isGadtDataCon tys dc
                       = TH.RecC name (zip3 (map (reifyName . flSelector) fields)
                                             stricts r_arg_tys)
                       | not (null fields)
-                      = TH.RecGadtC name
+                      = TH.RecGadtC [name]
                                    (zip3 (map (reifyName . flSelector) fields)
                                     stricts r_arg_tys) r_ty_name idx_tys
                       | dataConIsInfix dc
                       = ASSERT( length arg_tys == 2 )
                         TH.InfixC (s1,r_a1) name (s2,r_a2)
                       | isGadtDataCon
-                      = TH.GadtC name (stricts `zip` r_arg_tys) r_ty_name
+                      = TH.GadtC [name] (stricts `zip` r_arg_tys) r_ty_name
                                  idx_tys
                       | otherwise
                       = TH.NormalC name (stricts `zip` r_arg_tys)

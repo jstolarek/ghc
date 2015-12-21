@@ -543,13 +543,13 @@ infixC st1 con st2 = do st1' <- st1
 forallC :: [TyVarBndr] -> CxtQ -> ConQ -> ConQ
 forallC ns ctxt con = liftM2 (ForallC ns) ctxt con
 
-gadtC :: Name -> [StrictTypeQ] -> Name -> [TypeQ] -> ConQ
-gadtC con strtys ty idx = liftM3 (GadtC con) (sequence strtys)
-                                 (return ty) (sequence idx)
+gadtC :: [Name] -> [StrictTypeQ] -> Name -> [TypeQ] -> ConQ
+gadtC cons strtys ty idx = liftM3 (GadtC cons) (sequence strtys)
+                                  (return ty)  (sequence idx)
 
-recGadtC :: Name -> [VarStrictTypeQ] -> Name -> [TypeQ] -> ConQ
-recGadtC con varstrtys ty idx = liftM3 (RecGadtC con) (sequence varstrtys)
-                                       (return ty)    (sequence idx)
+recGadtC :: [Name] -> [VarStrictTypeQ] -> Name -> [TypeQ] -> ConQ
+recGadtC cons varstrtys ty idx = liftM3 (RecGadtC cons) (sequence varstrtys)
+                                        (return ty)     (sequence idx)
 
 -------------------------------------------------------------------------------
 -- *   Type

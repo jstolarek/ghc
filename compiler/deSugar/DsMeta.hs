@@ -293,21 +293,19 @@ repDataDefn tc bndrs opt_tys
                       , dd_cons = cons, dd_derivs = mb_derivs })
   = do { cxt1     <- repLContext cxt
        ; derivs1  <- repDerivs mb_derivs
-       ; case new_or_data of
-           NewType  -> do { con1  <- repC (head cons)
-                          ; ksig' <- repMaybeLKind ksig
-                          ; case con1 of
-                             [c] -> repNewtype cxt1 tc bndrs opt_tys ksig' c
-                                               derivs1
-                             _cs -> failWithDs (
-                                     text "Multiple constructors for newtype:"
-                                      <+> pprQuotedList
-                                              (getConNames $ unLoc $ head cons))
-                          }
-           DataType -> do { ksig' <- repMaybeLKind ksig
-                          ; consL <- concatMapM repC cons
-                          ; cons1 <- coreList conQTyConName consL
-                          ; repData cxt1 tc bndrs opt_tys ksig' cons1 derivs1 }
+       ; case (new_or_data, cons) of
+           (NewType, [con])  -> do { con'  <- repC con
+                                   ; ksig' <- repMaybeLKind ksig
+                                   ; repNewtype cxt1 tc bndrs opt_tys ksig' con'
+                                                derivs1 }
+           (NewType, _) -> failWithDs (text "Multiple constructors for newtype:"
+                                       <+> pprQuotedList
+                                       (getConNames $ unLoc $ head cons))
+           (DataType, _) -> do { ksig' <- repMaybeLKind ksig
+                               ; consL <- mapM repC cons
+                               ; cons1 <- coreList conQTyConName consL
+                               ; repData cxt1 tc bndrs opt_tys ksig' cons1
+                                         derivs1 }
        }
 
 repSynDecl :: Core TH.Name -> Core [TH.TyVarBndr]
@@ -595,25 +593,25 @@ repAnnProv ModuleAnnProvenance
 --                      Constructors
 -------------------------------------------------------
 
-repC :: LConDecl Name -> DsM [Core TH.ConQ]
+repC :: LConDecl Name -> DsM (Core TH.ConQ)
 repC (L _ (ConDeclH98 { con_name = con
                       , con_qvars = Nothing, con_cxt = Nothing
                       , con_details = details }))
-  = do { b <- repDataCon con details Nothing
-       ; return [b] }
+  = repDataCon con details
 
 repC (L _ (ConDeclH98 { con_name = con
                       , con_qvars = mcon_tvs, con_cxt = mcxt
                       , con_details = details }))
   = do { let con_tvs = fromMaybe emptyLHsQTvs mcon_tvs
              ctxt    = unLoc $ fromMaybe (noLoc []) mcxt
-       ; b <- addTyVarBinds con_tvs $ \ ex_bndrs ->
-         do { c'        <- repDataCon con details Nothing
-            ; ctxt'     <- repContext ctxt
+       ; addTyVarBinds con_tvs $ \ ex_bndrs ->
+         do { c'    <- repDataCon con details
+            ; ctxt' <- repContext ctxt
             ; if isEmptyLHsQTvs con_tvs && null ctxt
               then return c'
-              else rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c']) }
-       ; return [b] }
+              else rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c'])
+            }
+       }
 
 repC (L _ (ConDeclGADT { con_names = cons
                        , con_type = res_ty@(HsIB { hsib_vars = con_vars })}))
@@ -623,19 +621,18 @@ repC (L _ (ConDeclGADT { con_names = cons
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
        ; (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
-       ; mapM (\con -> repDataCon con hs_details (Just gadt_res_ty)) cons }
+       ; repGadtDataCons cons hs_details gadt_res_ty }
 
   | (details,res_ty',ctxt,tvs) <- gadtDetails
   = do { let doc = text "In the constructor for " <+> ppr (head cons)
              con_tvs = HsQTvs { hsq_implicit = con_vars
                               , hsq_explicit = tvs }
-       ; forM cons $ \con -> do
-       { addTyVarBinds con_tvs $ \ ex_bndrs -> do
+       ; addTyVarBinds con_tvs $ \ ex_bndrs -> do
        { (hs_details, gadt_res_ty) <-
            updateGadtResult failWithDs doc details res_ty'
-       ; c'    <- repDataCon con hs_details (Just gadt_res_ty)
+       ; c'    <- repGadtDataCons cons hs_details gadt_res_ty
        ; ctxt' <- repContext (unLoc ctxt)
-       ; rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c']) } } }
+       ; rep2 forallCName ([unC ex_bndrs, unC ctxt', unC c']) } }
   where
      gadtDetails = gadtDeclDetails res_ty
 
@@ -1935,34 +1932,47 @@ repCtxt (MkC tys) = rep2 cxtName [tys]
 
 repDataCon :: Located Name
            -> HsConDeclDetails Name
-           -> Maybe (LHsType Name)
            -> DsM (Core TH.ConQ)
-repDataCon cons details res_ty
-    = do cons1 <- lookupLOcc cons -- See Note [Binders and occurrences]
-         repConstr details res_ty cons1
+repDataCon con details
+    = do con' <- lookupLOcc con -- See Note [Binders and occurrences]
+         repConstr details Nothing [con']
 
+repGadtDataCons :: [Located Name]
+                -> HsConDeclDetails Name
+                -> LHsType Name
+                -> DsM (Core TH.ConQ)
+repGadtDataCons cons details res_ty
+    = do cons' <- mapM lookupLOcc cons -- See Note [Binders and occurrences]
+         repConstr details (Just res_ty) cons'
+
+-- Invariant:
+--   * for plain H98 data constructors second argument is Nothing and third
+--     argument is a singleton list
+--   * for GADTs data constructors second argument is (Just return_type) and
+--     third argument is a non-empty list
 repConstr :: HsConDeclDetails Name
           -> Maybe (LHsType Name)
-          -> Core TH.Name
+          -> [Core TH.Name]
           -> DsM (Core TH.ConQ)
-repConstr (PrefixCon ps) Nothing con
+repConstr (PrefixCon ps) Nothing [con]
     = do arg_tys  <- repList strictTypeQTyConName repBangTy ps
          rep2 normalCName [unC con, unC arg_tys]
 
-repConstr (PrefixCon ps) (Just res_ty) con
+repConstr (PrefixCon ps) (Just res_ty) cons
     = do arg_tys      <- repList strictTypeQTyConName repBangTy ps
          (res_n, idx) <- repGadtReturnTy res_ty
-         rep2 gadtCName [unC con, unC arg_tys, unC res_n, unC idx]
+         rep2 gadtCName [ unC (nonEmptyCoreList cons), unC arg_tys, unC res_n
+                        , unC idx]
 
-repConstr (RecCon (L _ ips)) resTy con
+repConstr (RecCon (L _ ips)) resTy cons
     = do args     <- concatMapM rep_ip ips
          arg_vtys <- coreList varStrictTypeQTyConName args
          case resTy of
-           Nothing ->
-               rep2 recCName [unC con, unC arg_vtys]
+           Nothing -> rep2 recCName [unC (head cons), unC arg_vtys]
            Just res_ty -> do
              (res_n, idx) <- repGadtReturnTy res_ty
-             rep2 recGadtCName [unC con, unC arg_vtys, unC res_n, unC idx]
+             rep2 recGadtCName [unC (nonEmptyCoreList cons), unC arg_vtys,
+                                unC res_n, unC idx]
 
     where
       rep_ip (L _ ip) = mapM (rep_one_ip (cd_fld_type ip)) (cd_fld_names ip)
@@ -1972,12 +1982,13 @@ repConstr (RecCon (L _ ips)) resTy con
                           ; MkC ty <- repBangTy  t
                           ; rep2 varStrictTypeName [v,ty] }
 
-repConstr (InfixCon st1 st2) Nothing con
+repConstr (InfixCon st1 st2) Nothing [con]
     = do arg1 <- repBangTy st1
          arg2 <- repBangTy st2
          rep2 infixCName [unC arg1, unC con, unC arg2]
 
 repConstr (InfixCon {}) (Just _) _ = panic "repConstr: infix GADT constructor?"
+repConstr _ _ _                    = panic "repConstr: invariant violated"
 
 repGadtReturnTy :: LHsType Name -> DsM (Core TH.Name, Core [TH.TypeQ])
 repGadtReturnTy res_ty | Just (n, tys) <- hsTyGetAppHead_maybe res_ty
