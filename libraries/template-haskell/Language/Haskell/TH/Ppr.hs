@@ -510,7 +510,8 @@ instance Ppr Con where
         = commaSep c <+> dcolon <+> pprForall ns ctxt <+> pprGadtRHS sts ty idx
 
     ppr (ForallC ns ctxt (RecGadtC c vsts ty idx))
-        = commaSep c <+> dcolon <+> pprForall ns ctxt <+> pprRecFields vsts ty idx
+        = commaSep c <+> dcolon <+> pprForall ns ctxt
+      <+> pprRecFields vsts ty idx
 
     ppr (ForallC ns ctxt con)
         = pprForall ns ctxt <+> ppr con

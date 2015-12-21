@@ -115,7 +115,6 @@ nest   :: Int -> Doc -> Doc;     -- ^ Nested
 hang :: Doc -> Int -> Doc -> Doc;       -- ^ @hang d1 n d2 = sep [d1, nest n d2]@
 punctuate :: Doc -> [Doc] -> [Doc];     -- ^ @punctuate p [d1, ... dn] = [d1 \<> p, d2 \<> p, ... dn-1 \<> p, dn]@
 
-
 -- ---------------------------------------------------------------------------
 -- The "implementation"
 
