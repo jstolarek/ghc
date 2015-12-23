@@ -40,10 +40,20 @@ import Pair
 import Outputable
 import UniqFM
 
-import Control.Monad
 #if __GLASGOW_HASKELL__ > 710
 import qualified Control.Monad.Fail as MonadFail
 #endif
+{- JSTOLAREK: should be safe to remove
+<<<<<<< HEAD
+=======
+
+#if __GLASGOW_HASKELL__ < 709
+import Data.Traversable ( traverse )
+#endif
+
+import Control.Monad
+>>>>>>> 332bc0d... Generalized injective type families
+-}
 import Control.Applicative hiding ( empty )
 import qualified Control.Applicative
 
@@ -795,11 +805,12 @@ unify_ty ty1 ty2 _kco
   = if tc1 == tc2 || (isStarKind ty1 && isStarKind ty2)
     then if isInjectiveTyCon tc1 Nominal
          then unify_tys tys1 tys2
-         else do { let inj | isTypeFamilyTyCon tc1
-                           = case familyTyConInjectivityInfo tc1 of
-                               NotInjective -> repeat False
-                               Injective bs -> bs
-                           | otherwise
+         else do { let inj -- SLPJ: what to do here?
+                           -- | isTypeFamilyTyCon tc1
+                           -- = case familyTyConInjectivityInfo tc1 of
+                           --     NotInjective -> repeat False
+                           --     Injective bs -> bs
+                           -- | otherwise
                            = repeat False
 
                        (inj_tys1, noninj_tys1) = partitionByList inj tys1
