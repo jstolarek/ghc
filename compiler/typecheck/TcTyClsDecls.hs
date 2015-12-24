@@ -795,7 +795,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
 {-
 JSTOLAREK: Big wad of refactoring
   ; let all_tvs = kvs' ++ tvs'
-  ; inj' <- tcInjectivity all_tvs inj
+  ; inj' <- tcInjectivity all_tvs sig res_kind inj
   ; let tycon = mkFamilyTyCon tc_name full_kind all_tvs
                                OpenSynFamilyTyCon parent
                                (resultVariableName sig) inj'
@@ -811,9 +811,17 @@ JSTOLAREK: Big wad of refactoring
        ; (inj', binders, res_kind)
             <- tcTyClTyVars tc_name
                $ \ binders res_kind ->
-               do { inj' <- tcInjectivity binders inj
+               do { inj' <- tcInjectivity binders sig res_kind inj
                   ; return (inj', binders, res_kind) }
-
+{- JSTOLAREK: 6dac3e824ab6216b83d437224da40e1828a3ffe5 scoping fix
+=======
+       ; (tvs', inj', kind) <- tcTyClTyVars tc_name tvs
+                               $ \ kvs' tvs' full_kind res_kind ->
+                               do { let all_tvs = kvs' ++ tvs'
+                                  ; inj' <- tcInjectivity all_tvs sig res_kind inj
+                                  ; return (all_tvs, inj', full_kind) }
+>>>>>>> 6dac3e8... Fix scoping of result tyvar in tcInjectivity
+-}
        ; checkFamFlag tc_name -- make sure we have -XTypeFamilies
 
          -- If Nothing, this is an abstract family in a hs-boot file;
@@ -866,9 +874,11 @@ JSTOLAREK: Big wad of refactoring
 -- True on position
 -- N means that a function is injective in its Nth argument. False means it is
 -- not.
-tcInjectivity :: [TyConBinder] -> Maybe (LInjectivityAnn Name)
+tcInjectivity :: [TyConBinder]
+              -> FamilyResultSig Name -> Kind
+              -> Maybe (LInjectivityAnn Name)
               -> TcM Injectivity
-tcInjectivity _ Nothing
+tcInjectivity _ _ _ Nothing
   = return []
 
   -- User provided an injectivity annotation, so for each tyvar argument we
@@ -912,9 +922,14 @@ tcInjectivity tcbs (Just (L loc (InjectivityAnn _ lInjNames)))
                                        , ppr inj_ktvs, ppr inj_bools ])
        ; return $ Injective inj_bools }
 -}
-tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
+tcInjectivity tvs res_sig res_kind (Just (L loc (InjectivityAnn injConds)))
   = setSrcSpan loc $
+    tcExtendTyVarEnv res_tv $
     mapM (tcInjectivityCond tvs) injConds
+  where
+    res_tv = case res_sig of
+               TyVarSig res_tv -> [mkTyVar (hsLTyVarName res_tv) res_kind]
+               _               -> []
 
 tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
                   -> TcM InjCondition
