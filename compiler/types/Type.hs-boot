@@ -1,7 +1,7 @@
 module Type where
 import TyCon
 import Var ( TyVar )
-import {-# SOURCE #-} TyCoRep( Type, Kind )
+import {-# SOURCE #-} TyCoRep( Type, Kind, VisibilityFlag )
 
 isPredTy     :: Type -> Bool
 isCoercionTy :: Type -> Bool
@@ -14,7 +14,7 @@ eqType :: Type -> Type -> Bool
 
 coreViewOneStarKind :: Type -> Maybe Type
 
-partitionInvisibles :: TyCon -> (a -> Type) -> [a] -> ([a], [a])
+tagVisibility :: TyCon -> (a -> Type) -> [a] -> [(a,VisibilityFlag)]
 
 coreView :: Type -> Maybe Type
 

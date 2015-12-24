@@ -828,11 +828,11 @@ A user can declare a type family to be injective:
          type family Foo a b c = d | d -> a c where ...
 
 Note that:
- (a) naming of type family result is required to provide injectivity
-     annotation
- (b) for associated types if the result was named then injectivity annotation
-     is mandatory. Otherwise result type variable is indistinguishable from
-     associated type default.
+ a) naming of type family result is required to provide injectivity
+    annotation
+ b) for associated types if the result was named then injectivity annotation
+    is mandatory. Otherwise result type variable is indistinguishable from
+    associated type default.
 
 It is possible that in the future this syntax will be extended to support
 more complicated injectivity annotations. For example we could declare that

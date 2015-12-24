@@ -781,7 +781,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
                               real_res_kind
                               (resultVariableName sig)
                               (DataFamilyTyCon tc_rep_name)
-                              parent NotInjective
+                              parent []
   ; return tycon }
 
   | OpenTypeFamily <- fam_info
@@ -792,6 +792,14 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
   ; let tycon = mkFamilyTyCon tc_name binders res_kind
                                (resultVariableName sig) OpenSynFamilyTyCon
                                parent inj'
+{-
+JSTOLAREK: Big wad of refactoring
+  ; let all_tvs = kvs' ++ tvs'
+  ; inj' <- tcInjectivity all_tvs inj
+  ; let tycon = mkFamilyTyCon tc_name full_kind all_tvs
+                               OpenSynFamilyTyCon parent
+                               (resultVariableName sig) inj'
+-}
   ; return tycon }
 
   | ClosedTypeFamily mb_eqns <- fam_info
@@ -815,7 +823,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
                return $ mkFamilyTyCon tc_name binders res_kind
                                       (resultVariableName sig)
                                       AbstractClosedSynFamilyTyCon parent
-                                      inj'
+                                      (resultVariableName sig) inj'
            Just eqns -> do {
 
          -- Process the equations, creating CoAxBranches
@@ -861,7 +869,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
 tcInjectivity :: [TyConBinder] -> Maybe (LInjectivityAnn Name)
               -> TcM Injectivity
 tcInjectivity _ Nothing
-  = return NotInjective
+  = return []
 
   -- User provided an injectivity annotation, so for each tyvar argument we
   -- check whether a type family was declared injective in that argument. We
@@ -906,26 +914,28 @@ tcInjectivity tcbs (Just (L loc (InjectivityAnn _ lInjNames)))
 -}
 tcInjectivity tvs (Just (L loc (InjectivityAnn injConds)))
   = setSrcSpan loc $
-    do { injConds' <- mapM (tcInjectivityCond tvs) injConds
-       ; return $ Injective injConds' }
+    mapM (tcInjectivityCond tvs) injConds
 
 tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
                   -> TcM InjCondition
 tcInjectivityCond the_tvs (L loc (InjectivityCond lInjNames rInjNames))
   = setSrcSpan loc $
-    do { l_bools <- find_bools lInjNames
-       ; r_bools <- find_bools rInjNames
+    do { l_ktvs <- find_ktvs lInjNames
+       ; r_ktvs <- find_ktvs rInjNames
+       ; let to_spec tv | tv `elemVarSet` l_ktvs = InjLHS
+                        | tv `elemVarSet` r_ktvs = InjRHS
+                        | otherwise              = InjNil
+             specs = map to_spec the_tvs
        ; traceTc "tcInjectivityCond"
            (vcat [ ppr the_tvs, ppr lInjNames, ppr rInjNames
-                 , ppr l_bools, ppr r_bools ])
-       ; return (l_bools, r_bools) }
+                 , ppr l_ktvs, ppr r_ktvs, ppr specs ])
+       ; return (InjCond specs) }
   where
-    find_bools names
+    find_ktvs names
        = do { inj_tvs <- mapM (tcLookupTyVar . unLoc) names
-            ; let inj_ktvs  = closeOverKinds $
-                              filterVarSet isTyVar $  -- no injective coercion vars
-                              mkVarSet inj_tvs
-            ; return (map (`elemVarSet` inj_ktvs) the_tvs) }
+            ; return (closeOverKinds $
+                      filterVarSet isTyVar $  -- no injective coercion vars
+                      mkVarSet inj_tvs ) }
 
 tcTySynRhs :: RolesInfo
            -> Name
@@ -2571,8 +2581,8 @@ checkValidRoleAnnots role_annots tc
     name                   = tyConName tc
     tyvars                 = tyConTyVars tc
     roles                  = tyConRoles tc
-    (vis_roles, vis_vars)  = unzip $ snd $
-                             partitionInvisibles tc (mkTyVarTy . snd) $
+    (vis_roles, vis_vars)  = unzip $ pickVisibles $
+                             tagVisibility tc (mkTyVarTy . snd) $
                              zip roles tyvars
     role_annot_decl_maybe  = lookupRoleAnnot role_annots name
 

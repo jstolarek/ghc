@@ -1375,9 +1375,10 @@ reifyTyCon tc
   = return (TH.PrimTyConI (reifyName tc) (tyConArity tc) (isUnliftedTyCon tc))
 
   | isTypeFamilyTyCon tc
-  = do { let tvs      = tyConTyVars tc
-             res_kind = tyConResKind tc
-             resVar   = famTcResVar tc
+  = do { let tvs       = tyConTyVars tc
+             res_kind  = tyConResKind tc
+             resVar    = famTcResVar tc
+             inj_annot = familyTyConInjectivityInfo tc
 
        ; kind' <- reifyKind res_kind
        ; let (resultSig, injectivity) =
@@ -1398,9 +1399,32 @@ reifyTyCon tc
                                          TH.InjectivityCond (reifyInjNames from)
                                                             (reifyInjNames to)
                      in (sig, inj)
+{-
+JSTOLAREK: Big wad of refactoring
+  = do { let tvs       = tyConTyVars tc
+             kind      = tyConKind tc
+             resVar    = famTcResVar tc
+
+             -- we need the *result kind* (see #8884)
+             (kvs, mono_kind) = splitForAllTys kind
+                                -- tyConArity includes *kind* params
+             (_, res_kind)    = splitFunTysN (tyConArity tc - length kvs)
+                                             mono_kind
+       ; let res_tv_name = case resVar of
+                              Nothing   -> pprPanic "reifyTyCon" (ppr tc <+> ppr inj_annot)
+                              Just name -> reifyName name
+             all_tv_names = res_tv_name : map (reifyName . tyVarName) tvs
+             injectivity  = map reifyInjCond ms
+             reifyInjCont cond = TH.InjectivityCond (getInjLHS cond all_tv_names)
+                                                    (getInjRHS cond all_tv_names)
+
+-}
        ; tvs' <- reifyTyVars tvs (Just tc)
-       ; let tfHead =
-               TH.TypeFamilyHead (reifyName tc) tvs' resultSig injectivity
+       ; kind' <- reifyKind res_kind
+       ; let resultSig = case resVar of
+                             Nothing   -> TH.KindSig kind'
+                             Just name -> TH.TyVarSig (TH.KindedTV (reifyName name) kind')
+             tfHead = TH.TypeFamilyHead (reifyName tc) tvs' resultSig injectivity
        ; if isOpenTypeFamilyTyCon tc
          then do { fam_envs <- tcGetFamInstEnvs
                  ; instances <- reifyFamilyInstances tc

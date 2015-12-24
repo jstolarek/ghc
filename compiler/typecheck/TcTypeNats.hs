@@ -17,8 +17,7 @@ module TcTypeNats
 import Type
 import Pair
 import TcType     ( TcType, tcEqType )
-import TyCon      ( TyCon, FamTyConFlav(..), mkFamilyTyCon
-                  , Injectivity(..) )
+import TyCon      ( TyCon, FamTyConFlav(..), mkFamilyTyCon )
 import Coercion   ( Role(..) )
 import TcRnTypes  ( Xi )
 import CoAxiom    ( CoAxiomRule(..), BuiltInSynFamily(..), Eqn )
@@ -105,16 +104,15 @@ typeNatLeqTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     Nothing
-    NotInjective
-
+    [] -- not injective
   where
-  name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "<=?")
-                typeNatLeqTyFamNameKey typeNatLeqTyCon
-  ops = BuiltInSynFamily
-    { sfMatchFam      = matchFamLeq
-    , sfInteractTop   = interactTopLeq
-    , sfInteractInert = interactInertLeq
-    }
+    name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "<=?")
+                  typeNatLeqTyFamNameKey typeNatLeqTyCon
+    ops = BuiltInSynFamily
+      { sfMatchFam      = matchFamLeq
+      , sfInteractTop   = interactTopLeq
+      , sfInteractInert = interactInertLeq
+      }
 
 typeNatCmpTyCon :: TyCon
 typeNatCmpTyCon =
@@ -124,16 +122,15 @@ typeNatCmpTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     Nothing
-    NotInjective
-
+    [] -- not injective
   where
-  name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpNat")
-                typeNatCmpTyFamNameKey typeNatCmpTyCon
-  ops = BuiltInSynFamily
-    { sfMatchFam      = matchFamCmpNat
-    , sfInteractTop   = interactTopCmpNat
-    , sfInteractInert = \_ _ _ _ -> []
-    }
+    name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpNat")
+                  typeNatCmpTyFamNameKey typeNatCmpTyCon
+    ops = BuiltInSynFamily
+      { sfMatchFam      = matchFamCmpNat
+      , sfInteractTop   = interactTopCmpNat
+      , sfInteractInert = \_ _ _ _ -> []
+      }
 
 typeSymbolCmpTyCon :: TyCon
 typeSymbolCmpTyCon =
@@ -143,20 +140,15 @@ typeSymbolCmpTyCon =
     Nothing
     (BuiltInSynFamTyCon ops)
     Nothing
-    NotInjective
-
+    [] -- not injective
   where
-  name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpSymbol")
-                typeSymbolCmpTyFamNameKey typeSymbolCmpTyCon
-  ops = BuiltInSynFamily
-    { sfMatchFam      = matchFamCmpSymbol
-    , sfInteractTop   = interactTopCmpSymbol
-    , sfInteractInert = \_ _ _ _ -> []
-    }
-
-
-
-
+    name = mkWiredInTyConName UserSyntax gHC_TYPELITS (fsLit "CmpSymbol")
+                  typeSymbolCmpTyFamNameKey typeSymbolCmpTyCon
+    ops = BuiltInSynFamily
+      { sfMatchFam      = matchFamCmpSymbol
+      , sfInteractTop   = interactTopCmpSymbol
+      , sfInteractInert = \_ _ _ _ -> []
+      }
 
 -- Make a binary built-in constructor of kind: Nat -> Nat -> Nat
 mkTypeNatFunTyCon2 :: Name -> BuiltInSynFamily -> TyCon
@@ -167,9 +159,7 @@ mkTypeNatFunTyCon2 op tcb =
     Nothing
     (BuiltInSynFamTyCon tcb)
     Nothing
-    NotInjective
-
-
+    [] -- not injective
 
 {-------------------------------------------------------------------------------
 Built-in rules axioms

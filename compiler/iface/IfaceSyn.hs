@@ -48,6 +48,8 @@ import Demand
 import Class
 import FieldLabel
 import NameSet
+import FamInstEnv( pprInjCond )
+import InstEnv( IsOrphan )
 import CoAxiom ( BranchIndex )
 import Name
 import CostCentre
@@ -61,10 +63,11 @@ import SrcLoc
 import Fingerprint
 import Binary
 import BooleanFormula ( BooleanFormula, pprBooleanFormula, isTrue )
+import HsBinds
 import Var( TyVarBndr(..) )
 import TyCon ( Role (..), Injectivity(..), HowAbstract(..) )
 import StaticFlags (opt_PprStyle_Debug)
-import Util( filterOut, filterByList )
+import Util( filterOut )
 import DataCon (SrcStrictness(..), SrcUnpackedness(..))
 import Lexeme (isLexSym)
 
@@ -759,26 +762,24 @@ pprIfaceDecl ss (IfaceFamily { ifName = tycon
 
   | otherwise
   = hang (text "type family" <+> pprIfaceDeclHead [] ss tycon binders (Just res_kind))
-       2 (pp_inj res_var inj <+> ppShowRhs ss (pp_rhs rhs))
+       2 (pp_inj res_var inj <+> ppr_inj inj <+> ppShowRhs ss (pp_rhs rhs))
     $$
     nest 2 (ppShowRhs ss (pp_branches rhs))
   where
-    pp_inj Nothing    _   = empty
-    pp_inj (Just res) inj
-       | Injective injectivity <- inj = hsep [ equals, ppr res, dcolon, ppr kind
-                                             , pp_inj_conds res injectivity]
-       | otherwise = hsep [ equals, ppr res, dcolon, ppr kind ]
+    ppr_res Nothing    = empty
+    ppr_res (Just res) = equals <+> ppr res
 
-    pp_inj_conds _ []
     -- JSTOLAREK : check that this invariant is true for generalized injectivity
-      = empty -- not possible (invariant from the parser)
-    pp_inj_conds res conds
-      = text "|" <+> hsep (punctuate (text ",") (map (ppr_inj_cond res) conds))
+    pp_inj_conds [] = empty -- not possible (invariant from the parser)
+    pp_inj_conds conds
+      = text "|" <+> sep (punctuate (text ",") (map ppr_cond conds))
 
-    ppr_inj_cond res (lhs, rhs)
-      = hsep [ ppr res, pp_inj_tvs lhs, text "->", pp_inj_tvs rhs]
+    pp_res = case res_var of
+               Just res -> ppr res
+               Nothing  -> pprPanic "pprIfaceConDecl" (ppr tycon)
+    pp_inj_tvs = pp_res : map ppr tyvars
 
-    pp_inj_tvs inj = interppSP (map fst (filterByList inj tyvars))
+    ppr_cond cond = pprInjCond cond pp_inj_tvs
 
     pp_rhs IfaceDataFamilyTyCon
       = ppShowIface ss (text "data")

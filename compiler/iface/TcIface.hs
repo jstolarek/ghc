@@ -562,6 +562,7 @@ tc_iface_decl parent _ (IfaceFamily {ifName = tc_name,
      ; rhs      <- forkM (mk_doc tc_name) $
                    tc_fam_flav tc_name fam_flav
      ; res_name <- traverse (newIfaceName . mkTyVarOccFS) res
+     -- JSTOLAREK: possible compilation problems here - I rejected Simon's refactoring
      ; let tycon = mkFamilyTyCon tc_name binders' res_kind' res_name rhs parent inj
      ; return (ATyCon tycon) }
    where

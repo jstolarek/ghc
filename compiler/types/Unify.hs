@@ -9,6 +9,7 @@ module Unify (
         tcMatchTys, tcMatchTyKis,
         tcMatchTyX, tcMatchTysX, tcMatchTyKisX,
         ruleMatchTyKiX,
+        tcUnifyTyWithTFs,tcUnifyTysWithTFs,
 
         -- * Rough matching
         roughMatchTcs, instanceCantMatch,
@@ -43,17 +44,7 @@ import UniqFM
 #if __GLASGOW_HASKELL__ > 710
 import qualified Control.Monad.Fail as MonadFail
 #endif
-{- JSTOLAREK: should be safe to remove
-<<<<<<< HEAD
-=======
 
-#if __GLASGOW_HASKELL__ < 709
-import Data.Traversable ( traverse )
-#endif
-
-import Control.Monad
->>>>>>> 332bc0d... Generalized injective type families
--}
 import Control.Applicative hiding ( empty )
 import qualified Control.Applicative
 
@@ -358,21 +349,30 @@ tcUnifyTyWithTFs :: Bool  -- ^ True <=> do two-way unification;
                           --   False <=> do one-way matching.
                           --   See end of sec 5.2 from the paper
                  -> Type -> Type -> Maybe TCvSubst
+tcUnifyTyWithTFs two_way t1 t2 = tcUnifyTysWithTFs two_way [t1] [t2]
+
+-- | Unify two types, treating type family applications as possibly unifying
+-- with anything and looking through injective type family applications.
+tcUnifyTysWithTFs :: Bool  -- ^ True <=> do two-way unification;
+                           --   False <=> do one-way matching.
+                           --   See end of sec 5.2 from the paper
+                 -> [Type] -> [Type] -> Maybe TCvSubst
 -- This algorithm is an implementation of the "Algorithm U" presented in
 -- the paper "Injective type families for Haskell", Figures 2 and 3.
 -- The code is incorporated with the standard unifier for convenience, but
 -- its operation should match the specification in the paper.
-tcUnifyTyWithTFs twoWay t1 t2
+tcUnifyTysWithTFs twoWay tys1 tys2
   = case tc_unify_tys (const BindMe) twoWay True False
                        rn_env emptyTvSubstEnv emptyCvSubstEnv
-                       [t1] [t2] of
+                       tys1 tys2 of
       Unifiable  (subst, _) -> Just $ niFixTCvSubst subst
       MaybeApart (subst, _) -> Just $ niFixTCvSubst subst
       -- we want to *succeed* in questionable cases. This is a
       -- pre-unification algorithm.
       SurelyApart      -> Nothing
   where
-    rn_env = mkRnEnv2 $ mkInScopeSet $ tyCoVarsOfTypes [t1, t2]
+    rn_env = mkRnEnv2 $ mkInScopeSet $
+             tyCoVarsOfTypes tys1 `unionVarSet` tyCoVarsOfTypes tys2
 
 -----------------
 tcUnifyTys :: (TyCoVar -> BindFlag)

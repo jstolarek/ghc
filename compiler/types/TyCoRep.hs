@@ -30,6 +30,7 @@ module TyCoRep (
         KindOrType, Kind,
         PredType, ThetaType,      -- Synonyms
         ArgFlag(..),
+        VisibilityFlag(..), pickVisibles, pickInvisibles,
 
         -- * Coercions
         Coercion(..), LeftOrRight(..),
@@ -132,7 +133,8 @@ import {-# SOURCE #-} DataCon( dataConTyCon, dataConFullSig
                               , DataCon, filterEqSpec )
 import {-# SOURCE #-} Type( isPredTy, isCoercionTy, mkAppTy
                           , tyCoVarsOfTypesWellScoped
-                          , partitionInvisibles, coreView, typeKind
+                          , partitionInvisibles, tagVisibility
+                          , coreView, typeKind
                           , eqType )
    -- Transitively pulls in a LOT of stuff, better to break the loop
 
@@ -302,7 +304,38 @@ data Type
 data TyLit
   = NumTyLit Integer
   | StrTyLit FastString
-  deriving (Eq, Ord, Data.Data)
+  deriving (Eq, Ord, Data.Data, Data.Typeable)
+
+-- | A 'TyBinder' represents an argument to a function. TyBinders can be dependent
+-- ('Named') or nondependent ('Anon'). They may also be visible or not.
+data TyBinder
+  = Named TyVar VisibilityFlag
+  | Anon Type   -- visibility is determined by the type (Constraint vs. *)
+    deriving (Data.Typeable, Data.Data)
+
+-- | Is something required to appear in source Haskell ('Visible') or
+-- prohibited from appearing in source Haskell ('Invisible')?
+data VisibilityFlag = Visible | Invisible
+  deriving (Eq, Data.Typeable, Data.Data)
+
+instance Binary VisibilityFlag where
+  put_ bh Visible   = putByte bh 0
+  put_ bh Invisible = putByte bh 1
+
+  get bh = do
+    h <- getByte bh
+    case h of
+      0 -> return Visible
+      _ -> return Invisible
+
+pickVisibles, pickInvisibles :: [(a,VisibilityFlag)] -> [a]
+pickVisibles   prs = [ x | (x, Visible)   <- prs ]
+pickInvisibles prs = [ x | (x, Invisible) <- prs ]
+
+type KindOrType = Type -- See Note [Arguments to type constructors]
+
+-- | The key type representing kinds in the compiler.
+type Kind = Type
 
 {- Note [Arguments to type constructors]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3005,7 +3038,7 @@ of equalities.  If you see a better design, go for it.
 suppressInvisibles :: (a -> Type) -> DynFlags -> TyCon -> [a] -> [a]
 suppressInvisibles to_type dflags tc xs
   | gopt Opt_PrintExplicitKinds dflags = xs
-  | otherwise                          = snd $ partitionInvisibles tc to_type xs
+  | otherwise                          = pickVisibles $ tagVisibility tc to_type xs
 
 ----------------
 pprTyList :: TyPrec -> Type -> Type -> SDoc
