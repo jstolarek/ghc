@@ -336,6 +336,7 @@ output it generates.
  'infixl'       { L _ ITinfixl }
  'infixr'       { L _ ITinfixr }
  'instance'     { L _ ITinstance }
+ 'kind'         { L _ ITkind }
  'let'          { L _ ITlet }
  'module'       { L _ ITmodule }
  'newtype'      { L _ ITnewtype }
@@ -875,6 +876,13 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- We need the location on tycl_hdr in case
                                    -- constrs and deriving are both empty
                         ((fst $ unLoc $1):(fst $ unLoc $4)) }
+
+          -- data kind without corresponding data type (H98 syntax)
+        | 'data' 'kind' capi_ctype tycl_hdr constrs
+                {% amms (mkTyData (comb4 $1 $2 $4 $5) DataType
+                           AllowedInTypesOnly $3 $4 Nothing
+                           (reverse (snd $ unLoc $5)) Nothing)
+                        (fst $ unLoc $5) }
 
           -- ordinary GADT declaration
         | data_or_newtype capi_ctype tycl_hdr opt_kind_sig
@@ -2979,7 +2987,7 @@ qvarid :: { Located RdrName }
         : varid               { $1 }
         | QVARID              { sL1 $1 $! mkQual varName (getQVARID $1) }
 
--- Note that 'role' and 'family' get lexed separately regardless of
+-- Note that 'role', 'family' and 'kind' get lexed separately regardless of
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.
 -- See Note [Lexing type pseudo-keywords] in Lexer.x
@@ -2992,6 +3000,7 @@ varid :: { Located RdrName }
         | 'forall'         { sL1 $1 $! mkUnqual varName (fsLit "forall") }
         | 'family'         { sL1 $1 $! mkUnqual varName (fsLit "family") }
         | 'role'           { sL1 $1 $! mkUnqual varName (fsLit "role") }
+        | 'kind'           { sL1 $1 $! mkUnqual varName (fsLit "kind") }
 
 qvarsym :: { Located RdrName }
         : varsym                { $1 }

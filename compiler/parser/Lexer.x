@@ -566,6 +566,7 @@ data Token
   | ITinfixl
   | ITinfixr
   | ITinstance
+  | ITkind
   | ITlet
   | ITmodule
   | ITnewtype
@@ -769,6 +770,7 @@ reservedWordsFM = listToUFM $
          ( "infixl",         ITinfixl,        0 ),
          ( "infixr",         ITinfixr,        0 ),
          ( "instance",       ITinstance,      0 ),
+         ( "kind",           ITkind,          0 ),
          ( "let",            ITlet,           0 ),
          ( "module",         ITmodule,        0 ),
          ( "newtype",        ITnewtype,       0 ),
