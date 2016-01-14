@@ -27,6 +27,8 @@ module BasicTypes(
 
         FunctionOrData(..),
 
+        AllowedInTerms(..),
+
         WarningTxt(..), StringLiteral(..),
 
         Fixity(..), FixityDirection(..),
@@ -226,10 +228,11 @@ unSwap :: SwapFlag -> (a->a->b) -> a -> a -> b
 unSwap NotSwapped f a b = f a b
 unSwap IsSwapped  f a b = f b a
 
+
 {-
 ************************************************************************
 *                                                                      *
-\subsection[FunctionOrData]{FunctionOrData}
+                       FunctionOrData
 *                                                                      *
 ************************************************************************
 -}
@@ -244,7 +247,22 @@ instance Outputable FunctionOrData where
 {-
 ************************************************************************
 *                                                                      *
-\subsection[Version]{Module and identifier version numbers}
+                       AllowedInTerms
+*                                                                      *
+************************************************************************
+-}
+
+-- | Used to distinguish between normal data types that exist at runtime and
+-- data kinds that exists without their associated term-level equivalent.
+data AllowedInTerms
+  = AllowedInTerms              -- ^ @data T ...@, @newtype T ...@
+  | AllowedInTypesOnly          -- JSTOLAREK: insert example syntax here
+    deriving ( Data )
+
+{-
+************************************************************************
+*                                                                      *
+             Module and identifier version numbers
 *                                                                      *
 ************************************************************************
 -}
@@ -306,7 +324,7 @@ pprRuleName rn = doubleQuotes (ftext rn)
 {-
 ************************************************************************
 *                                                                      *
-\subsection[Fixity]{Fixity info}
+             Fixity info
 *                                                                      *
 ************************************************************************
 -}

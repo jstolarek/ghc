@@ -204,7 +204,10 @@ cvtDec (DataD ctxt tc tvs ksig constrs derivs)
         ; ksig' <- cvtKind `traverse` ksig
         ; cons' <- mapM cvtConstr constrs
         ; derivs' <- cvtDerivs derivs
-        ; let defn = HsDataDefn { dd_ND = DataType, dd_cType = Nothing
+        ; let defn = HsDataDefn { dd_ND = DataType
+                               -- JSTOLAREK: kludge until TH support implemented
+                                , dd_kindOnly = AllowedInTerms
+                                , dd_cType = Nothing
                                 , dd_ctxt = ctxt'
                                 , dd_kindSig = ksig'
                                 , dd_cons = cons', dd_derivs = derivs' }
@@ -217,7 +220,10 @@ cvtDec (NewtypeD ctxt tc tvs ksig constr derivs)
         ; ksig' <- cvtKind `traverse` ksig
         ; con' <- cvtConstr constr
         ; derivs' <- cvtDerivs derivs
-        ; let defn = HsDataDefn { dd_ND = NewType, dd_cType = Nothing
+        ; let defn = HsDataDefn { dd_ND = NewType
+                               -- JSTOLAREK: kludge until TH support implemented
+                                , dd_kindOnly = AllowedInTerms
+                                , dd_cType = Nothing
                                 , dd_ctxt = ctxt'
                                 , dd_kindSig = ksig'
                                 , dd_cons = [con']
@@ -279,7 +285,9 @@ cvtDec (DataInstD ctxt tc tys ksig constrs derivs)
        ; ksig' <- cvtKind `traverse` ksig
        ; cons' <- mapM cvtConstr constrs
        ; derivs' <- cvtDerivs derivs
-       ; let defn = HsDataDefn { dd_ND = DataType, dd_cType = Nothing
+       ; let defn = HsDataDefn { dd_ND = DataType
+                               , dd_kindOnly = AllowedInTerms
+                               , dd_cType = Nothing
                                , dd_ctxt = ctxt'
                                , dd_kindSig = ksig'
                                , dd_cons = cons', dd_derivs = derivs' }
@@ -294,7 +302,9 @@ cvtDec (NewtypeInstD ctxt tc tys ksig constr derivs)
        ; ksig' <- cvtKind `traverse` ksig
        ; con' <- cvtConstr constr
        ; derivs' <- cvtDerivs derivs
-       ; let defn = HsDataDefn { dd_ND = NewType, dd_cType = Nothing
+       ; let defn = HsDataDefn { dd_ND = NewType
+                               , dd_kindOnly = AllowedInTerms
+                               , dd_cType = Nothing
                                , dd_ctxt = ctxt'
                                , dd_kindSig = ksig'
                                , dd_cons = [con'], dd_derivs = derivs' }

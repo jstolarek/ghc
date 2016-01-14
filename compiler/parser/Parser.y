@@ -869,9 +869,9 @@ ty_decl :: { LTyClDecl RdrName }
 
           -- ordinary data type or newtype declaration
         | data_or_newtype capi_ctype tycl_hdr constrs deriving
-                {% amms (mkTyData (comb4 $1 $3 $4 $5) (snd $ unLoc $1) $2 $3
-                           Nothing (reverse (snd $ unLoc $4))
-                                   (unLoc $5))
+                {% amms (mkTyData (comb4 $1 $3 $4 $5) (snd $ unLoc $1)
+                           AllowedInTerms $2 $3 Nothing
+                           (reverse (snd $ unLoc $4)) (unLoc $5))
                                    -- We need the location on tycl_hdr in case
                                    -- constrs and deriving are both empty
                         ((fst $ unLoc $1):(fst $ unLoc $4)) }
@@ -880,8 +880,9 @@ ty_decl :: { LTyClDecl RdrName }
         | data_or_newtype capi_ctype tycl_hdr opt_kind_sig
                  gadt_constrlist
                  deriving
-            {% amms (mkTyData (comb4 $1 $3 $5 $6) (snd $ unLoc $1) $2 $3
-                            (snd $ unLoc $4) (snd $ unLoc $5) (unLoc $6) )
+            {% amms (mkTyData (comb4 $1 $3 $5 $6) (snd $ unLoc $1)
+                             AllowedInTerms $2 $3 (snd $ unLoc $4)
+                             (snd $ unLoc $5) (unLoc $6) )
                                    -- We need the location on tycl_hdr in case
                                    -- constrs and deriving are both empty
                     ((fst $ unLoc $1):(fst $ unLoc $4)++(fst $ unLoc $5)) }
@@ -3281,7 +3282,7 @@ we have to calculate the span using more of the tokens from the lhs, eg.
 
         | 'newtype' tycl_hdr '=' newconstr deriving
                 { L (comb3 $1 $4 $5)
-                    (mkTyData NewType (unLoc $2) $4 (unLoc $5)) }
+                    (mkTyData NewType AllowedInTerms (unLoc $2) $4 (unLoc $5)) }
 
 We provide comb3 and comb4 functions which are useful in such cases.
 

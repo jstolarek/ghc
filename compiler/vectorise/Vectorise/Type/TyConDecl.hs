@@ -186,7 +186,7 @@ vectDataCon dc
        ; liftDs $ buildDataCon fam_envs
                     name'
                     (dataConIsInfix dc)          -- infix if the original is
-                    (dataConIsDataKindOnly dc)   -- kind only if the original is
+                    (dataConAllowedInTerms dc)   -- kind only if the original is
                     rep_nm
                     (dataConSrcBangs dc)         -- strictness as original con
                     (Just $ dataConImplBangs dc)

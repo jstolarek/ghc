@@ -535,7 +535,7 @@ tcIfaceDataCons tycon_name tycon tc_tyvars if_cons
                                     ; mkNewTyConRhs tycon_name tycon data_con }
   where
     tc_con_decl field_lbls (IfCon { ifConInfix = is_infix,
-                         ifConDataKind = datakind_only,
+                         ifConAllowedInTerms = if_allowed_in_terms,
                          ifConExTvs = ex_tvs,
                          ifConOcc = occ, ifConCtxt = ctxt, ifConEqSpec = spec,
                          ifConArgTys = args, ifConFields = my_lbls,
@@ -575,9 +575,10 @@ tcIfaceDataCons tycon_name tycon tc_tyvars if_cons
 
         ; prom_rep_name <- newTyConRepName dc_name
 
-        ; con <- buildDataCon (pprPanic "tcIfaceDataCons: FamInstEnvs" (ppr dc_name))
-                       dc_name is_infix datakind_only prom_rep_name
-                       (map src_strict if_src_stricts)
+        ; con <- buildDataCon
+                       (pprPanic "tcIfaceDataCons: FamInstEnvs" (ppr dc_name))
+                       dc_name is_infix (allowed_in_terms if_allowed_in_terms)
+                       prom_rep_name (map src_strict if_src_stricts)
                        (Just stricts)
                        -- Pass the HsImplBangs (i.e. final
                        -- decisions) to buildDataCon; it'll use
@@ -591,6 +592,9 @@ tcIfaceDataCons tycon_name tycon tc_tyvars if_cons
         ; traceIf (text "Done interface-file tc_con_decl" <+> ppr dc_name)
         ; return con }
     mk_doc con_name = ptext (sLit "Constructor") <+> ppr con_name
+
+    allowed_in_terms IfaceAllowedInTerms     = AllowedInTerms
+    allowed_in_terms IfaceAllowedInTypesOnly = AllowedInTypesOnly
 
     tc_strict :: IfaceBang -> IfL HsImplBang
     tc_strict IfNoBang = return (HsLazy)

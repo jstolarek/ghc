@@ -80,7 +80,7 @@ buildPDataDataCon orig_name vect_tc repr_tc repr
       rep_nm    <- liftDs $ newTyConRepName dc_name
       liftDs $ buildDataCon fam_envs dc_name
                             False                  -- not infix
-                            False                  -- can be used in terms
+                            AllowedInTerms
                             rep_nm
                             (map (const no_bang) comp_tys)
                             (Just $ map (const HsLazy) comp_tys)
@@ -125,7 +125,7 @@ buildPDatasDataCon orig_name vect_tc repr_tc repr
       rep_nm   <- liftDs $ newTyConRepName dc_name
       liftDs $ buildDataCon fam_envs dc_name
                             False                  -- not infix
-                            False                  -- can be used in terms
+                            AllowedInTerms
                             rep_nm
                             (map (const no_bang) comp_tys)
                             (Just $ map (const HsLazy) comp_tys)

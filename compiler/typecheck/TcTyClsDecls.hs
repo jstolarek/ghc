@@ -862,9 +862,12 @@ tcDataDefn :: RecTyInfo -> Name
   -- NB: not used for newtype/data instances (whether associated or not)
 tcDataDefn rec_info     -- Knot-tied; don't look at this eagerly
            tc_name tvs tycon_kind res_kind
-         (HsDataDefn { dd_ND = new_or_data, dd_cType = cType
-                     , dd_ctxt = ctxt, dd_kindSig = mb_ksig
-                     , dd_cons = cons })
+         (HsDataDefn { dd_ND       = new_or_data
+                     , dd_kindOnly = allowed_in_terms
+                     , dd_cType    = cType
+                     , dd_ctxt     = ctxt
+                     , dd_kindSig  = mb_ksig
+                     , dd_cons     = cons })
  =  do { extra_tvs <- tcDataKindSig res_kind
        ; let final_tvs  = tvs `chkAppend` extra_tvs
              roles      = rti_roles rec_info tc_name
@@ -883,7 +886,8 @@ tcDataDefn rec_info     -- Knot-tied; don't look at this eagerly
 
        ; tycon <- fixM $ \ tycon -> do
              { let res_ty = mkTyConApp tycon (mkTyVarTys final_tvs)
-             ; data_cons <- tcConDecls new_or_data tycon (final_tvs, res_ty) cons
+             ; data_cons <- tcConDecls new_or_data allowed_in_terms tycon
+                                       (final_tvs, res_ty) cons
              ; tc_rhs    <- mk_tc_rhs is_boot tycon data_cons
              ; tc_rep_nm <- newTyConRepName tc_name
              ; return (mkAlgTyCon tc_name tycon_kind final_tvs roles
@@ -1327,20 +1331,21 @@ consUseGadtSyntax _                           = False
                  -- All constructors have same shape
 
 -----------------------------------
-tcConDecls :: NewOrData -> TyCon -> ([TyVar], Type)
+tcConDecls :: NewOrData -> AllowedInTerms -> TyCon -> ([TyVar], Type)
            -> [LConDecl Name] -> TcM [DataCon]
-tcConDecls new_or_data rep_tycon (tmpl_tvs, res_tmpl)
+tcConDecls new_or_data allowed_in_terms rep_tycon (tmpl_tvs, res_tmpl)
   = concatMapM $ addLocM $
-    tcConDecl new_or_data rep_tycon tmpl_tvs res_tmpl
+    tcConDecl new_or_data allowed_in_terms rep_tycon tmpl_tvs res_tmpl
 
 tcConDecl :: NewOrData
+          -> AllowedInTerms
           -> TyCon             -- Representation tycon. Knot-tied!
           -> [TyVar] -> Type   -- Return type template (with its template tyvars)
                                --    (tvs, T tys), where T is the family TyCon
           -> ConDecl Name
           -> TcM [DataCon]
 
-tcConDecl new_or_data rep_tycon tmpl_tvs res_tmpl
+tcConDecl new_or_data allowed_in_terms rep_tycon tmpl_tvs res_tmpl
           (ConDeclH98 { con_name = name
                       , con_qvars = hs_qvars, con_cxt = hs_ctxt
                       , con_details = hs_details })
@@ -1378,8 +1383,7 @@ tcConDecl new_or_data rep_tycon tmpl_tvs res_tmpl
              { is_infix <- tcConIsInfixH98 name hs_details
              ; rep_nm   <- newTyConRepName name
 
-               -- JSTOLAREK: False = kludge until parser is implemented
-             ; buildDataCon fam_envs name is_infix False rep_nm
+             ; buildDataCon fam_envs name is_infix allowed_in_terms rep_nm
                             stricts Nothing field_lbls
                             tmpl_tvs qtkvs [{- no eq_preds -}] ctxt arg_tys
                             res_tmpl rep_tycon
@@ -1391,7 +1395,7 @@ tcConDecl new_or_data rep_tycon tmpl_tvs res_tmpl
        ; mapM buildOneDataCon [name]
        }
 
-tcConDecl _new_or_data rep_tycon tmpl_tvs res_tmpl
+tcConDecl _new_or_data allowed_in_terms rep_tycon tmpl_tvs res_tmpl
           (ConDeclGADT { con_names = names, con_type = ty })
   = addErrCtxt (dataConCtxtName names) $
     do { traceTc "tcConDecl 1" (ppr names)
@@ -1421,8 +1425,7 @@ tcConDecl _new_or_data rep_tycon tmpl_tvs res_tmpl
              { is_infix <- tcConIsInfixGADT name hs_details
              ; rep_nm   <- newTyConRepName name
 
-               -- JSTOLAREK: False = kludge until parser is implemented
-             ; buildDataCon fam_envs name is_infix False
+             ; buildDataCon fam_envs name is_infix allowed_in_terms
                             rep_nm
                             stricts Nothing field_lbls
                             univ_tvs ex_tvs eq_preds

@@ -106,7 +106,7 @@ mkNewTyConRhs tycon_name tycon con
 buildDataCon :: FamInstEnvs
             -> Name
             -> Bool                    -- Declared infix
-            -> Bool                    -- Exists only in types
+            -> AllowedInTerms
             -> TyConRepName
             -> [HsSrcBang]
             -> Maybe [HsImplBang]
@@ -123,9 +123,9 @@ buildDataCon :: FamInstEnvs
 --   a) makes the worker Id
 --   b) makes the wrapper Id if necessary, including
 --      allocating its unique (hence monadic)
-buildDataCon fam_envs src_name declared_infix datakind_only prom_info src_bangs
-             impl_bangs field_lbls univ_tvs ex_tvs eq_spec ctxt arg_tys res_ty
-             rep_tycon
+buildDataCon fam_envs src_name declared_infix allowed_in_terms prom_info
+             src_bangs impl_bangs field_lbls univ_tvs ex_tvs eq_spec ctxt
+             arg_tys res_ty rep_tycon
   = do  { wrap_name <- newImplicitBinder src_name mkDataConWrapperOcc
         ; work_name <- newImplicitBinder src_name mkDataConWorkerOcc
         -- This last one takes the name of the data constructor in the source
@@ -137,7 +137,7 @@ buildDataCon fam_envs src_name declared_infix datakind_only prom_info src_bangs
         ; dflags <- getDynFlags
         ; let
                 stupid_ctxt = mkDataConStupidTheta rep_tycon arg_tys univ_tvs
-                data_con = mkDataCon src_name declared_infix datakind_only
+                data_con = mkDataCon src_name declared_infix allowed_in_terms
                                      prom_info src_bangs field_lbls
                                      univ_tvs ex_tvs eq_spec ctxt
                                      arg_tys res_ty rep_tycon
@@ -270,7 +270,7 @@ buildClass tycon_name tvs roles sc_theta kind fds at_items sig_stuff mindef tc_i
         ; dict_con <- buildDataCon (panic "buildClass: FamInstEnvs")
                                    datacon_name
                                    False        -- Not declared infix
-                                   False        -- Can be used in terms
+                                   AllowedInTerms
                                    rep_nm
                                    (map (const no_bang) args)
                                    (Just (map (const HsLazy) args))

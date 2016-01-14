@@ -17,6 +17,7 @@ module IfaceSyn (
         IfaceClsInst(..), IfaceFamInst(..), IfaceTickish(..),
         IfaceBang(..),
         IfaceSrcBang(..), SrcUnpackedness(..), SrcStrictness(..),
+        IfaceAllowedInTerms(..),
         IfaceAxBranch(..),
         IfaceTyConParent(..),
 
@@ -207,10 +208,10 @@ data IfaceConDecls
 
 data IfaceConDecl
   = IfCon {
-        ifConOcc      :: IfaceTopBndr,       -- Constructor name
-        ifConWrapper  :: Bool,               -- True <=> has a wrapper
-        ifConInfix    :: Bool,               -- True <=> declared infix
-        ifConDataKind :: Bool,               -- True <=> only a data kind
+        ifConOcc     :: IfaceTopBndr,       -- Constructor name
+        ifConWrapper :: Bool,               -- True <=> has a wrapper
+        ifConInfix   :: Bool,               -- True <=> declared infix
+        ifConAllowedInTerms :: IfaceAllowedInTerms,
 
         -- The universal type variables are precisely those
         -- of the type constructor of this data constructor
@@ -218,12 +219,12 @@ data IfaceConDecl
         -- but it's not so easy for the original TyCon/DataCon
         -- So this guarantee holds for IfaceConDecl, but *not* for DataCon
 
-        ifConExTvs    :: [IfaceTvBndr],      -- Existential tyvars
-        ifConEqSpec   :: IfaceEqSpec,        -- Equality constraints
-        ifConCtxt     :: IfaceContext,       -- Non-stupid context
-        ifConArgTys   :: [IfaceType],        -- Arg types
-        ifConFields   :: [IfaceTopBndr],     -- ...ditto... (field labels)
-        ifConStricts  :: [IfaceBang],
+        ifConExTvs   :: [IfaceTvBndr],      -- Existential tyvars
+        ifConEqSpec  :: IfaceEqSpec,        -- Equality constraints
+        ifConCtxt    :: IfaceContext,       -- Non-stupid context
+        ifConArgTys  :: [IfaceType],        -- Arg types
+        ifConFields  :: [IfaceTopBndr],     -- ...ditto... (field labels)
+        ifConStricts :: [IfaceBang],
           -- Empty (meaning all lazy),
           -- or 1-1 corresp with arg tys
           -- See Note [Bangs on imported data constructors] in MkId
@@ -239,6 +240,10 @@ data IfaceBang
 -- | This corresponds to HsSrcBang
 data IfaceSrcBang
   = IfSrcBang SrcUnpackedness SrcStrictness
+
+data IfaceAllowedInTerms
+  = IfaceAllowedInTerms
+  | IfaceAllowedInTypesOnly
 
 data IfaceClsInst
   = IfaceClsInst { ifInstCls  :: IfExtName,                -- See comments with
@@ -1698,6 +1703,16 @@ instance Binary IfaceSrcBang where
       do a1 <- get bh
          a2 <- get bh
          return (IfSrcBang a1 a2)
+
+instance Binary IfaceAllowedInTerms where
+    put_ bh IfaceAllowedInTerms     = putByte bh 0
+    put_ bh IfaceAllowedInTypesOnly = putByte bh 1
+
+    get bh = do
+            h <- getByte bh
+            case h of
+              0 -> do return IfaceAllowedInTerms
+              _ -> do return IfaceAllowedInTypesOnly
 
 instance Binary IfaceClsInst where
     put_ bh (IfaceClsInst cls tys dfun flag orph) = do

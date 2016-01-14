@@ -126,7 +126,7 @@ import RdrName
 import Name
 import NameSet          ( NameSet, mkNameSet, elemNameSet )
 import BasicTypes       ( Arity, RecFlag(..), Boxity(..),
-                           TupleSort(..) )
+                           TupleSort(..), AllowedInTerms(..) )
 import ForeignCall
 import SrcLoc           ( noSrcSpan )
 import Unique
@@ -399,7 +399,7 @@ pcDataConWithFixity' declared_infix dc_name wrk_key tyvars ex_tyvars arg_tys tyc
   = data_con
   where
     data_con = mkDataCon dc_name declared_infix
-                False   -- Can be used in terms
+                AllowedInTerms
                 prom_info
                 (map (const no_bang) arg_tys)
                 []      -- No labelled fields

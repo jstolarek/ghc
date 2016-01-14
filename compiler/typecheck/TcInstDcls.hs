@@ -635,7 +635,10 @@ tcDataFamInstDecl mb_clsinfo
     (L loc decl@(DataFamInstDecl
        { dfid_pats = pats
        , dfid_tycon = fam_tc_name
+         -- invariant: dd_kindOnly always AllowedInTerms for data families
+         -- JSTOLAREK: insert an ASSERT
        , dfid_defn = defn@HsDataDefn { dd_ND = new_or_data, dd_cType = cType
+                                     , dd_kindOnly = allowed_in_terms
                                      , dd_ctxt = ctxt, dd_cons = cons
                                      , dd_derivs = derivs } }))
   = setSrcSpan loc             $
@@ -678,7 +681,7 @@ tcDataFamInstDecl mb_clsinfo
              orig_res_ty          = mkTyConApp fam_tc pats'
 
        ; (rep_tc, fam_inst) <- fixM $ \ ~(rec_rep_tc, _) ->
-           do { data_cons <- tcConDecls new_or_data
+           do { data_cons <- tcConDecls new_or_data allowed_in_terms
                                         rec_rep_tc
                                         (full_tvs, orig_res_ty) cons
               ; tc_rhs <- case new_or_data of

@@ -163,36 +163,42 @@ mkATDefault (L loc (TyFamInstDecl { tfid_eqn = L _ e }))
 
 mkTyData :: SrcSpan
          -> NewOrData
+         -> AllowedInTerms
          -> Maybe (Located CType)
          -> Located (Maybe (LHsContext RdrName), LHsType RdrName)
          -> Maybe (LHsKind RdrName)
          -> [LConDecl RdrName]
          -> HsDeriving RdrName
          -> P (LTyClDecl RdrName)
-mkTyData loc new_or_data cType (L _ (mcxt, tycl_hdr)) ksig data_cons maybe_deriv
+mkTyData loc new_or_data allowed_in_terms cType (L _ (mcxt, tycl_hdr)) ksig
+         data_cons maybe_deriv
   = do { (tc, tparams,ann) <- checkTyClHdr False tycl_hdr
        ; mapM_ (\a -> a loc) ann -- Add any API Annotations to the top SrcSpan
        ; tyvars <- checkTyVarsP (ppr new_or_data) equalsDots tc tparams
-       ; defn <- mkDataDefn new_or_data cType mcxt ksig data_cons maybe_deriv
+       ; defn <- mkDataDefn new_or_data allowed_in_terms cType mcxt ksig
+                            data_cons maybe_deriv
        ; return (L loc (DataDecl { tcdLName = tc, tcdTyVars = tyvars,
                                    tcdDataDefn = defn,
                                    tcdFVs = placeHolderNames })) }
 
 mkDataDefn :: NewOrData
+           -> AllowedInTerms
            -> Maybe (Located CType)
            -> Maybe (LHsContext RdrName)
            -> Maybe (LHsKind RdrName)
            -> [LConDecl RdrName]
            -> HsDeriving RdrName
            -> P (HsDataDefn RdrName)
-mkDataDefn new_or_data cType mcxt ksig data_cons maybe_deriv
+mkDataDefn new_or_data allowed_in_terms cType mcxt ksig data_cons maybe_deriv
   = do { checkDatatypeContext mcxt
        ; let cxt = fromMaybe (noLoc []) mcxt
-       ; return (HsDataDefn { dd_ND = new_or_data, dd_cType = cType
-                            , dd_ctxt = cxt
-                            , dd_cons = data_cons
-                            , dd_kindSig = ksig
-                            , dd_derivs = maybe_deriv }) }
+       ; return (HsDataDefn { dd_ND       = new_or_data
+                            , dd_kindOnly = allowed_in_terms
+                            , dd_cType    = cType
+                            , dd_ctxt     = cxt
+                            , dd_cons     = data_cons
+                            , dd_kindSig  = ksig
+                            , dd_derivs   = maybe_deriv }) }
 
 
 mkTySynonym :: SrcSpan
@@ -227,7 +233,8 @@ mkDataFamInst :: SrcSpan
 mkDataFamInst loc new_or_data cType (L _ (mcxt, tycl_hdr)) ksig data_cons maybe_deriv
   = do { (tc, tparams,ann) <- checkTyClHdr False tycl_hdr
        ; mapM_ (\a -> a loc) ann -- Add any API Annotations to the top SrcSpan
-       ; defn <- mkDataDefn new_or_data cType mcxt ksig data_cons maybe_deriv
+       ; defn <- mkDataDefn new_or_data AllowedInTerms cType mcxt ksig data_cons
+                            maybe_deriv
        ; return (L loc (DataFamInstD (
                   DataFamInstDecl { dfid_tycon = tc
                                   , dfid_pats = mkHsImplicitBndrs tparams
