@@ -79,6 +79,7 @@ module TyCon(
         synTyConDefn_maybe, synTyConRhs_maybe,
         famTyConFlav_maybe, famTcResVar,
         algTyConRhs,
+        promTyConDataCon,
         newTyConRhs, newTyConEtadArity, newTyConEtadRhs,
         unwrapNewTyCon_maybe, unwrapNewTyConEtad_maybe,
         algTcFields,
@@ -1763,6 +1764,11 @@ tyConFamilySize tc = pprPanic "tyConFamilySize 2" (ppr tc)
 algTyConRhs :: TyCon -> AlgTyConRhs
 algTyConRhs (AlgTyCon {algTcRhs = rhs}) = rhs
 algTyConRhs other = pprPanic "algTyConRhs" (ppr other)
+
+-- | Extract 'DataCon' from a promoted data constructor
+promTyConDataCon :: TyCon -> DataCon
+promTyConDataCon (PromotedDataCon {dataCon = dc}) = dc
+promTyConDataCon other = pprPanic "promTyConDataCon" (ppr other)
 
 -- | Extract type variable naming the result of injective type family
 tyConFamilyResVar_maybe :: TyCon -> Maybe Name
