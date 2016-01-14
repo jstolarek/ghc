@@ -1460,20 +1460,20 @@ tyConToIfaceDecl env tycon
         -- (Tuple declarations are not serialised into interface files.)
 
     ifaceConDecl data_con
-        = IfCon   { ifConOcc            = getOccName (dataConName data_con),
-                    ifConInfix          = dataConIsInfix data_con,
-                    ifConAllowedInTerms = allowed_in_terms,
-                    ifConWrapper        = isJust (dataConWrapId_maybe data_con),
-                    ifConExTvs          = toIfaceTvBndrs ex_tvs',
-                    ifConEqSpec         = map (to_eq_spec . eqSpecPair) eq_spec,
-                    ifConCtxt           = tidyToIfaceContext con_env2 theta,
-                    ifConArgTys         = map (tidyToIfaceType con_env2) arg_tys,
-                    ifConFields         = map (nameOccName . flSelector)
-                                              (dataConFieldLabels data_con),
-                    ifConStricts        = map (toIfaceBang con_env2)
-                                              (dataConImplBangs data_con),
-                    ifConSrcStricts     = map toIfaceSrcBang
-                                              (dataConSrcBangs data_con)}
+        = IfCon { ifConOcc            = getOccName (dataConName data_con),
+                  ifConInfix          = dataConIsInfix data_con,
+                  ifConAllowedInTerms = allowed_in_terms,
+                  ifConWrapper        = isJust (dataConWrapId_maybe data_con),
+                  ifConExTvs          = toIfaceTvBndrs ex_tvs',
+                  ifConEqSpec         = map (to_eq_spec . eqSpecPair) eq_spec,
+                  ifConCtxt           = tidyToIfaceContext con_env2 theta,
+                  ifConArgTys         = map (tidyToIfaceType con_env2) arg_tys,
+                  ifConFields         = map (nameOccName . flSelector)
+                                            (dataConFieldLabels data_con),
+                  ifConStricts        = map (toIfaceBang con_env2)
+                                            (dataConImplBangs data_con),
+                  ifConSrcStricts     = map toIfaceSrcBang
+                                            (dataConSrcBangs data_con)}
         where
           (univ_tvs, ex_tvs, eq_spec, theta, arg_tys, _)
             = dataConFullSig data_con
