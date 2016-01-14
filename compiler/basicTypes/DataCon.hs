@@ -38,7 +38,7 @@ module DataCon (
         dataConFieldLabels, dataConFieldType,
         dataConSrcBangs,
         dataConSourceArity, dataConRepArity, dataConRepRepArity,
-        dataConIsInfix,
+        dataConIsInfix, dataConIsDataKindOnly,
         dataConWorkId, dataConWrapId, dataConWrapId_maybe,
         dataConImplicitTyThings,
         dataConRepStrictness, dataConImplBangs, dataConBoxer,
@@ -404,8 +404,11 @@ data DataCon
                                 -- Used for Template Haskell and 'deriving' only
                                 -- The actual fixity is stored elsewhere
 
-        dcPromoted :: TyCon    -- The promoted TyCon
+        dcPromoted :: TyCon,   -- The promoted TyCon
                                -- See Note [Promoted data constructors] in TyCon
+
+        dcDataKind :: Bool     -- True <=> exists only as promoted data kind,
+                               -- can't be used to construct run-time data
   }
   deriving Data.Typeable.Typeable
 
@@ -710,6 +713,7 @@ isMarkedStrict _               = True   -- All others are strict
 -- | Build a new data constructor
 mkDataCon :: Name
           -> Bool           -- ^ Is the constructor declared infix?
+          -> Bool           -- ^ Is this datakind-only constrctor?
           -> TyConRepName   -- ^  TyConRepName for the promoted TyCon
           -> [HsSrcBang]    -- ^ Strictness/unpack annotations, from user
           -> [FieldLabel]   -- ^ Field labels for the constructor,
@@ -728,7 +732,7 @@ mkDataCon :: Name
           -> DataCon
   -- Can get the tag from the TyCon
 
-mkDataCon name declared_infix prom_info
+mkDataCon name datakind_only declared_infix prom_info
           arg_stricts   -- Must match orig_arg_tys 1-1
           fields
           univ_tvs ex_tvs
@@ -760,7 +764,8 @@ mkDataCon name declared_infix prom_info
                   dcRep = rep,
                   dcSourceArity = length orig_arg_tys,
                   dcRepArity = length rep_arg_tys,
-                  dcPromoted = promoted }
+                  dcPromoted = promoted,
+                  dcDataKind = datakind_only }
 
         -- The 'arg_stricts' passed to mkDataCon are simply those for the
         -- source-language arguments.  We add extra ones for the
@@ -806,6 +811,10 @@ dataConRepType = dcRepType
 -- | Should the 'DataCon' be presented infix?
 dataConIsInfix :: DataCon -> Bool
 dataConIsInfix = dcInfix
+
+-- | Can this 'DataCon' be used only in types but not in terms?
+dataConIsDataKindOnly :: DataCon -> Bool
+dataConIsDataKindOnly = dcDataKind
 
 -- | The universally-quantified type variables of the constructor
 dataConUnivTyVars :: DataCon -> [TyVar]

@@ -207,9 +207,10 @@ data IfaceConDecls
 
 data IfaceConDecl
   = IfCon {
-        ifConOcc     :: IfaceTopBndr,                -- Constructor name
-        ifConWrapper :: Bool,                   -- True <=> has a wrapper
-        ifConInfix   :: Bool,                   -- True <=> declared infix
+        ifConOcc      :: IfaceTopBndr,       -- Constructor name
+        ifConWrapper  :: Bool,               -- True <=> has a wrapper
+        ifConInfix    :: Bool,               -- True <=> declared infix
+        ifConDataKind :: Bool,               -- True <=> only a data kind
 
         -- The universal type variables are precisely those
         -- of the type constructor of this data constructor
@@ -217,12 +218,12 @@ data IfaceConDecl
         -- but it's not so easy for the original TyCon/DataCon
         -- So this guarantee holds for IfaceConDecl, but *not* for DataCon
 
-        ifConExTvs   :: [IfaceTvBndr],      -- Existential tyvars
-        ifConEqSpec  :: IfaceEqSpec,        -- Equality constraints
-        ifConCtxt    :: IfaceContext,       -- Non-stupid context
-        ifConArgTys  :: [IfaceType],        -- Arg types
-        ifConFields  :: [IfaceTopBndr],     -- ...ditto... (field labels)
-        ifConStricts :: [IfaceBang],
+        ifConExTvs    :: [IfaceTvBndr],      -- Existential tyvars
+        ifConEqSpec   :: IfaceEqSpec,        -- Equality constraints
+        ifConCtxt     :: IfaceContext,       -- Non-stupid context
+        ifConArgTys   :: [IfaceType],        -- Arg types
+        ifConFields   :: [IfaceTopBndr],     -- ...ditto... (field labels)
+        ifConStricts  :: [IfaceBang],
           -- Empty (meaning all lazy),
           -- or 1-1 corresp with arg tys
           -- See Note [Bangs on imported data constructors] in MkId
@@ -1648,7 +1649,7 @@ instance Binary IfaceConDecls where
             _ -> error "Binary(IfaceConDecls).get: Invalid IfaceConDecls"
 
 instance Binary IfaceConDecl where
-    put_ bh (IfCon a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) = do
+    put_ bh (IfCon a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) = do
         put_ bh a1
         put_ bh a2
         put_ bh a3
@@ -1659,6 +1660,7 @@ instance Binary IfaceConDecl where
         put_ bh a8
         put_ bh a9
         put_ bh a10
+        put_ bh a11
     get bh = do
         a1 <- get bh
         a2 <- get bh
@@ -1670,7 +1672,8 @@ instance Binary IfaceConDecl where
         a8 <- get bh
         a9 <- get bh
         a10 <- get bh
-        return (IfCon a1 a2 a3 a4 a5 a6 a7 a8 a9 a10)
+        a11 <- get bh
+        return (IfCon a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11)
 
 instance Binary IfaceBang where
     put_ bh IfNoBang        = putByte bh 0

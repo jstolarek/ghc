@@ -1378,7 +1378,8 @@ tcConDecl new_or_data rep_tycon tmpl_tvs res_tmpl
              { is_infix <- tcConIsInfixH98 name hs_details
              ; rep_nm   <- newTyConRepName name
 
-             ; buildDataCon fam_envs name is_infix rep_nm
+               -- JSTOLAREK: False = kludge until parser is implemented
+             ; buildDataCon fam_envs name is_infix False rep_nm
                             stricts Nothing field_lbls
                             tmpl_tvs qtkvs [{- no eq_preds -}] ctxt arg_tys
                             res_tmpl rep_tycon
@@ -1420,7 +1421,8 @@ tcConDecl _new_or_data rep_tycon tmpl_tvs res_tmpl
              { is_infix <- tcConIsInfixGADT name hs_details
              ; rep_nm   <- newTyConRepName name
 
-             ; buildDataCon fam_envs name is_infix
+               -- JSTOLAREK: False = kludge until parser is implemented
+             ; buildDataCon fam_envs name is_infix False
                             rep_nm
                             stricts Nothing field_lbls
                             univ_tvs ex_tvs eq_preds

@@ -185,18 +185,19 @@ vectDataCon dc
        ; rep_nm    <- liftDs $ newTyConRepName name'
        ; liftDs $ buildDataCon fam_envs
                     name'
-                    (dataConIsInfix dc)            -- infix if the original is
+                    (dataConIsInfix dc)          -- infix if the original is
+                    (dataConIsDataKindOnly dc)   -- kind only if the original is
                     rep_nm
-                    (dataConSrcBangs dc)           -- strictness as original constructor
+                    (dataConSrcBangs dc)         -- strictness as original con
                     (Just $ dataConImplBangs dc)
-                    []                             -- no labelled fields for now
-                    univ_tvs                       -- universally quantified vars
-                    []                             -- no existential tvs for now
-                    []                             -- no equalities for now
-                    []                             -- no context for now
-                    arg_tys                        -- argument types
-                    ret_ty                         -- return type
-                    tycon'                         -- representation tycon
+                    []                           -- no labelled fields for now
+                    univ_tvs                     -- universally quantified vars
+                    []                           -- no existential tvs for now
+                    []                           -- no equalities for now
+                    []                           -- no context for now
+                    arg_tys                      -- argument types
+                    ret_ty                       -- return type
+                    tycon'                       -- representation tycon
        }
   where
     name        = dataConName dc

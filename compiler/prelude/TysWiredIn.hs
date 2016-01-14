@@ -398,7 +398,9 @@ pcDataConWithFixity' :: Bool -> Name -> Unique -> [TyVar] -> [TyVar]
 pcDataConWithFixity' declared_infix dc_name wrk_key tyvars ex_tyvars arg_tys tycon
   = data_con
   where
-    data_con = mkDataCon dc_name declared_infix prom_info
+    data_con = mkDataCon dc_name declared_infix
+                False   -- Can be used in terms
+                prom_info
                 (map (const no_bang) arg_tys)
                 []      -- No labelled fields
                 tyvars
