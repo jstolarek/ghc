@@ -10,8 +10,9 @@ data kind Universe = Sum  Universe Universe
                    | K (*)
 
 -- JSTOLAREK: this should be rejected!
-foo :: Universe
-foo = Sum undefined undefined
+--foo :: Universe
+--foo = Sum undefined undefined
+
 {-
 -- closed kind using GADTs syntax
 data kind Universe where
@@ -30,4 +31,3 @@ Things to test:
     correctly)
   * Check that indexing works
 -}
-

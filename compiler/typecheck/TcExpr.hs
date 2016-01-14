@@ -1379,6 +1379,11 @@ tc_infer_id lbl id_name
     return_id id = return (HsVar (noLoc id), idType id)
 
     return_data_con con
+      -- make sure this constructor can be used to construct runtime things
+      | AllowedInTypesOnly <- dataConAllowedInTerms con
+      = failWithTc $ ppr con <+> text "is used to construct an expression"
+                             <+> text "but it is allowed only in types"
+
        -- For data constructors, must perform the stupid-theta check
       | null stupid_theta
       = return_id con_wrapper_id
