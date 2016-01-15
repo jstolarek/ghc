@@ -877,13 +877,6 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- constrs and deriving are both empty
                         ((fst $ unLoc $1):(fst $ unLoc $4)) }
 
-          -- data kind without corresponding data type (H98 syntax)
-        | 'data' 'kind' capi_ctype tycl_hdr constrs
-                {% amms (mkTyData (comb4 $1 $2 $4 $5) DataType
-                           AllowedInTypesOnly $3 $4 Nothing
-                           (reverse (snd $ unLoc $5)) Nothing)
-                        (fst $ unLoc $5) }
-
           -- ordinary GADT declaration
         | data_or_newtype capi_ctype tycl_hdr opt_kind_sig
                  gadt_constrlist
@@ -895,7 +888,22 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- constrs and deriving are both empty
                     ((fst $ unLoc $1):(fst $ unLoc $4)++(fst $ unLoc $5)) }
 
-          -- data/newtype family
+          -- data kind without corresponding data type (H98 syntax)
+        | 'data' 'kind' capi_ctype tycl_hdr constrs
+                {% amms (mkTyData (comb4 $1 $2 $4 $5) DataType
+                           AllowedInTypesOnly $3 $4 Nothing
+                           (reverse (snd $ unLoc $5)) Nothing)
+                        (fst $ unLoc $5) }
+
+         -- data kind without corresponding data type (GADT syntax)
+        | 'data' 'kind' capi_ctype tycl_hdr opt_kind_sig
+                 gadt_constrlist
+            {% amms (mkTyData (comb4 $1 $2 $4 $6) DataType
+                             AllowedInTypesOnly $3 $4 (snd $ unLoc $5)
+                             (snd $ unLoc $6) Nothing)
+                    ((fst $ unLoc $5)++(fst $ unLoc $6)) }
+
+           -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig
                 {% amms (mkFamDecl (comb3 $1 $2 $4) DataFamily $3
                                    (snd $ unLoc $4) Nothing)
