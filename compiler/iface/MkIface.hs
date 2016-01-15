@@ -1462,7 +1462,7 @@ tyConToIfaceDecl env tycon
     ifaceConDecl data_con
         = IfCon { ifConOcc            = getOccName (dataConName data_con),
                   ifConInfix          = dataConIsInfix data_con,
-                  ifConAllowedInTerms = allowed_in_terms,
+                  ifConAllowedInTerms = dataConAllowedInTerms data_con,
                   ifConWrapper        = isJust (dataConWrapId_maybe data_con),
                   ifConExTvs          = toIfaceTvBndrs ex_tvs',
                   ifConEqSpec         = map (to_eq_spec . eqSpecPair) eq_spec,
@@ -1477,10 +1477,6 @@ tyConToIfaceDecl env tycon
         where
           (univ_tvs, ex_tvs, eq_spec, theta, arg_tys, _)
             = dataConFullSig data_con
-
-          allowed_in_terms = case dataConAllowedInTerms data_con of
-            AllowedInTerms     -> IfaceAllowedInTerms
-            AllowedInTypesOnly -> IfaceAllowedInTypesOnly
 
           -- Tidy the univ_tvs of the data constructor to be identical
           -- to the tyConTyVars of the type constructor.  This means

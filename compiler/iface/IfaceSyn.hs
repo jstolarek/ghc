@@ -17,7 +17,6 @@ module IfaceSyn (
         IfaceClsInst(..), IfaceFamInst(..), IfaceTickish(..),
         IfaceBang(..),
         IfaceSrcBang(..), SrcUnpackedness(..), SrcStrictness(..),
-        IfaceAllowedInTerms(..),
         IfaceAxBranch(..),
         IfaceTyConParent(..),
 
@@ -211,7 +210,7 @@ data IfaceConDecl
         ifConOcc     :: IfaceTopBndr,       -- Constructor name
         ifConWrapper :: Bool,               -- True <=> has a wrapper
         ifConInfix   :: Bool,               -- True <=> declared infix
-        ifConAllowedInTerms :: IfaceAllowedInTerms,
+        ifConAllowedInTerms :: AllowedInTerms,
 
         -- The universal type variables are precisely those
         -- of the type constructor of this data constructor
@@ -240,10 +239,6 @@ data IfaceBang
 -- | This corresponds to HsSrcBang
 data IfaceSrcBang
   = IfSrcBang SrcUnpackedness SrcStrictness
-
-data IfaceAllowedInTerms
-  = IfaceAllowedInTerms
-  | IfaceAllowedInTypesOnly
 
 data IfaceClsInst
   = IfaceClsInst { ifInstCls  :: IfExtName,                -- See comments with
@@ -1703,16 +1698,6 @@ instance Binary IfaceSrcBang where
       do a1 <- get bh
          a2 <- get bh
          return (IfSrcBang a1 a2)
-
-instance Binary IfaceAllowedInTerms where
-    put_ bh IfaceAllowedInTerms     = putByte bh 0
-    put_ bh IfaceAllowedInTypesOnly = putByte bh 1
-
-    get bh = do
-            h <- getByte bh
-            case h of
-              0 -> do return IfaceAllowedInTerms
-              _ -> do return IfaceAllowedInTypesOnly
 
 instance Binary IfaceClsInst where
     put_ bh (IfaceClsInst cls tys dfun flag orph) = do

@@ -739,6 +739,16 @@ instance Binary FunctionOrData where
           1 -> return IsData
           _ -> panic "Binary FunctionOrData"
 
+instance Binary AllowedInTerms where
+    put_ bh AllowedInTerms     = putByte bh 0
+    put_ bh AllowedInTypesOnly = putByte bh 1
+
+    get bh = do
+            h <- getByte bh
+            case h of
+              0 -> do return AllowedInTerms
+              _ -> do return AllowedInTypesOnly
+
 instance Binary TupleSort where
     put_ bh BoxedTuple      = putByte bh 0
     put_ bh UnboxedTuple    = putByte bh 1
