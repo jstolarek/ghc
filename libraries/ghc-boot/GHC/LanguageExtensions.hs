@@ -62,6 +62,7 @@ data Extension
    | ConstraintKinds
    | PolyKinds                -- Kind polymorphism
    | DataKinds                -- Datatype promotion
+   | KindsWithoutData
    | InstanceSigs
    | ApplicativeDo
 

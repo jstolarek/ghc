@@ -1,5 +1,4 @@
--- JSTOLAREK: some language extension here
-{-# LANGUAGE TypeInType, GADTSyntax #-}
+{-# LANGUAGE KindsWithoutData, TypeInType, GADTSyntax #-}
 module T11080 where
 
 import Data.Kind

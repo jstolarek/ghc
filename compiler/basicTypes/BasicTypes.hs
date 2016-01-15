@@ -27,7 +27,7 @@ module BasicTypes(
 
         FunctionOrData(..),
 
-        AllowedInTerms(..),
+        AllowedInTerms(..), isAllowedInTerms,
 
         WarningTxt(..), StringLiteral(..),
 
@@ -258,6 +258,10 @@ data AllowedInTerms
   = AllowedInTerms              -- ^ @data T ...@, @newtype T ...@
   | AllowedInTypesOnly          -- JSTOLAREK: insert example syntax here
     deriving ( Data )
+
+isAllowedInTerms :: AllowedInTerms -> Bool
+isAllowedInTerms AllowedInTerms     = True
+isAllowedInTerms AllowedInTypesOnly = False
 
 {-
 ************************************************************************

@@ -7389,6 +7389,18 @@ tried to write ``Either * Bool``, would it be ``Either`` applied to
 operators to the kind level.
 
 
+.. _kinds-no-data:
+
+Kinds without data
+==================
+
+.. ghc-flag:: -XKindsWithoutData
+
+    Allow open data kinds and closed kinds without corresponding data
+    declaration.
+
+
+
 .. _type-level-literals:
 
 Type-Level Literals

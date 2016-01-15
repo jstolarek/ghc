@@ -369,6 +369,12 @@ languageOptions =
          , flagReverse = "-XNoKindSignatures"
          , flagSince = "6.8.1"
          }
+  , flag { flagName = "-XKindsWithoutData"
+         , flagDescription = "Enable :ref:`kinds without data <kinds-no-data>`."
+         , flagType = DynamicFlag
+         , flagReverse = "-XNoKindsWithoutData"
+         , flagSince = "8.4"
+         }
   , flag { flagName = "-XLambdaCase"
          , flagDescription =
            "Enable :ref:`lambda-case expressions <lambda-case>`."

@@ -939,6 +939,11 @@ data HsDataDefn name   -- The payload of a data type defn
     --  data/newtype T a = <constrs>
     --  data/newtype instance T [a] = <constrs>
     -- @
+    -- Can be used to declare datakinds without associated data type:
+    -- @
+    -- data kind T a = <constrs>
+    -- data kind T a where <constrs>
+    -- @
     HsDataDefn { dd_ND       :: NewOrData,
                  dd_kindOnly :: AllowedInTerms,
                  dd_ctxt     :: LHsContext name,           -- ^ Context

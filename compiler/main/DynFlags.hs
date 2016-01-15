@@ -3214,6 +3214,7 @@ xFlags = [
   flagSpec "InterruptibleFFI"                 LangExt.InterruptibleFFI,
   flagSpec "JavaScriptFFI"                    LangExt.JavaScriptFFI,
   flagSpec "KindSignatures"                   LangExt.KindSignatures,
+  flagSpec "KindsWithoutData"                 LangExt.KindsWithoutData,
   flagSpec "LambdaCase"                       LangExt.LambdaCase,
   flagSpec "LiberalTypeSynonyms"              LangExt.LiberalTypeSynonyms,
   flagSpec "MagicHash"                        LangExt.MagicHash,
@@ -3358,6 +3359,7 @@ impliedXFlags
 
     , (LangExt.TypeFamilies,     turnOn, LangExt.KindSignatures)  -- Type families use kind signatures
     , (LangExt.PolyKinds,        turnOn, LangExt.KindSignatures)  -- Ditto polymorphic kinds
+    , (LangExt.KindsWithoutData, turnOn, LangExt.PolyKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.DataKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.PolyKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.KindSignatures)

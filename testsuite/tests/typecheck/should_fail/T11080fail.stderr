@@ -1,10 +1,10 @@
 
-T11080fail.hs:9:7:
+T11080fail.hs:10:7:
      Bar is used to construct an expression but it is allowed only in types
      In the expression: Bar
       In an equation for ‘foo’: foo = Bar
 
-T11080fail.hs:15:7:
+T11080fail.hs:13:7:
      Bar' is used to construct an expression but it is allowed only in types
      In the expression: Bar'
       In an equation for ‘bar’: bar = Bar'

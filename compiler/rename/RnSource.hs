@@ -41,7 +41,7 @@ import NameEnv
 import Avail
 import Outputable
 import Bag
-import BasicTypes       ( RuleName, pprRuleName )
+import BasicTypes       ( RuleName, pprRuleName, isAllowedInTerms )
 import FastString
 import SrcLoc
 import DynFlags
@@ -1342,7 +1342,11 @@ rnDataDefn doc (HsDataDefn { dd_ND = new_or_data, dd_kindOnly = allowed_in_terms
                            , dd_derivs = derivs })
   = do  { checkTc (h98_style || null (unLoc context))
                   (badGadtStupidTheta doc)
-
+        ; dflags <- getDynFlags
+        ; checkTc (xopt LangExt.KindsWithoutData dflags
+               ||  isAllowedInTerms allowed_in_terms)
+                  (text "Illegal kind declaration" $$
+                   text "Use KindsWithoutData to allow this")
         ; (sig', sig_fvs)  <- rnLHsMaybeKind doc sig
         ; (context', fvs1) <- rnContext doc context
         ; (derivs',  fvs3) <- rn_derivs derivs
