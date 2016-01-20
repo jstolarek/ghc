@@ -3359,7 +3359,7 @@ impliedXFlags
 
     , (LangExt.TypeFamilies,     turnOn, LangExt.KindSignatures)  -- Type families use kind signatures
     , (LangExt.PolyKinds,        turnOn, LangExt.KindSignatures)  -- Ditto polymorphic kinds
-    , (LangExt.KindsWithoutData, turnOn, LangExt.PolyKinds)
+    , (LangExt.KindsWithoutData, turnOn, LangExt.DataKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.DataKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.PolyKinds)
     , (LangExt.TypeInType,       turnOn, LangExt.KindSignatures)
