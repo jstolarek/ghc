@@ -1,0 +1,40 @@
+---Problems (should be empty list)---
+[]
+---Annotations-----------------------
+-- SrcSpan the annotation is attached to, AnnKeywordId,
+--    list of locations the keyword item appears in
+[
+((Test11080.hs:1:1,AnnModule), [Test11080.hs:2:1-6]),
+((Test11080.hs:1:1,AnnWhere), [Test11080.hs:2:18-22]),
+((Test11080.hs:4:1-16,AnnImport), [Test11080.hs:4:1-6]),
+((Test11080.hs:4:1-16,AnnSemi), [Test11080.hs:7:1]),
+((Test11080.hs:(7,1)-(9,26),AnnData), [Test11080.hs:7:1-4]),
+((Test11080.hs:(7,1)-(9,26),AnnEqual), [Test11080.hs:7:20]),
+((Test11080.hs:(7,1)-(9,26),AnnKind), [Test11080.hs:7:6-9]),
+((Test11080.hs:(7,1)-(9,26),AnnSemi), [Test11080.hs:12:1]),
+((Test11080.hs:7:22-43,AnnVbar), [Test11080.hs:8:20]),
+((Test11080.hs:8:22-43,AnnVbar), [Test11080.hs:9:20]),
+((Test11080.hs:9:24-26,AnnCloseP), [Test11080.hs:9:26]),
+((Test11080.hs:9:24-26,AnnOpenP), [Test11080.hs:9:24]),
+((Test11080.hs:9:24-26,AnnVal), [Test11080.hs:9:25]),
+((Test11080.hs:(12,1)-(15,48),AnnData), [Test11080.hs:12:1-4]),
+((Test11080.hs:(12,1)-(15,48),AnnKind), [Test11080.hs:12:6-9]),
+((Test11080.hs:(12,1)-(15,48),AnnSemi), [Test11080.hs:16:1]),
+((Test11080.hs:(12,1)-(15,48),AnnWhere), [Test11080.hs:12:21-25]),
+((Test11080.hs:13:5-48,AnnDcolon), [Test11080.hs:13:11-12]),
+((Test11080.hs:13:5-48,AnnSemi), [Test11080.hs:14:5]),
+((Test11080.hs:13:14-22,AnnRarrow), [Test11080.hs:13:24-25]),
+((Test11080.hs:13:14-48,AnnRarrow), [Test11080.hs:13:24-25]),
+((Test11080.hs:13:27-35,AnnRarrow), [Test11080.hs:13:37-38]),
+((Test11080.hs:13:27-48,AnnRarrow), [Test11080.hs:13:37-38]),
+((Test11080.hs:14:5-48,AnnDcolon), [Test11080.hs:14:11-12]),
+((Test11080.hs:14:5-48,AnnSemi), [Test11080.hs:15:5]),
+((Test11080.hs:14:14-22,AnnRarrow), [Test11080.hs:14:24-25]),
+((Test11080.hs:14:14-48,AnnRarrow), [Test11080.hs:14:24-25]),
+((Test11080.hs:14:27-35,AnnRarrow), [Test11080.hs:14:37-38]),
+((Test11080.hs:14:27-48,AnnRarrow), [Test11080.hs:14:37-38]),
+((Test11080.hs:15:5-48,AnnDcolon), [Test11080.hs:15:11-12]),
+((Test11080.hs:15:14,AnnRarrow), [Test11080.hs:15:37-38]),
+((Test11080.hs:15:14-48,AnnRarrow), [Test11080.hs:15:37-38]),
+((<no location info>,AnnEofPos), [Test11080.hs:16:1])
+]

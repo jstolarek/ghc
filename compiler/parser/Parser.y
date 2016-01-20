@@ -893,7 +893,7 @@ ty_decl :: { LTyClDecl RdrName }
                 {% amms (mkTyData (comb4 $1 $2 $4 $5) DataType
                            AllowedInTypesOnly $3 $4 Nothing
                            (reverse (snd $ unLoc $5)) Nothing)
-                        (fst $ unLoc $5) }
+                        (mj AnnData $1:mj AnnKind $2:(fst $ unLoc $5)) }
 
          -- data kind without corresponding data type (GADT syntax)
         | 'data' 'kind' capi_ctype tycl_hdr opt_kind_sig
@@ -901,7 +901,7 @@ ty_decl :: { LTyClDecl RdrName }
             {% amms (mkTyData (comb4 $1 $2 $4 $6) DataType
                              AllowedInTypesOnly $3 $4 (snd $ unLoc $5)
                              (snd $ unLoc $6) Nothing)
-                    ((fst $ unLoc $5)++(fst $ unLoc $6)) }
+                    (mj AnnData $1:mj AnnKind $2:(fst $ unLoc $5)++(fst $ unLoc $6)) }
 
            -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig

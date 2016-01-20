@@ -21,5 +21,6 @@ test('T10313',      normal, run_command, ['$MAKE -s --no-print-directory T10313'
 test('T11018',      normal, run_command, ['$MAKE -s --no-print-directory T11018'])
 test('bundle-export', normal, run_command, ['$MAKE -s --no-print-directory bundle-export'])
 test('T10276',      normal, run_command, ['$MAKE -s --no-print-directory T10276'])
+test('T11080Ann',   normal, run_command, ['$MAKE -s --no-print-directory T11080Ann'])
 test('T11321',      normal, run_command, ['$MAKE -s --no-print-directory T11321'])
 test('T11332',      normal, run_command, ['$MAKE -s --no-print-directory T11332'])
