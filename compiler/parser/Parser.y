@@ -86,7 +86,8 @@ import Prelude
 import qualified GHC.LanguageExtensions as LangExt
 }
 
-%expect 36 -- shift/reduce conflicts
+--JSTOLAREK: increased number of conflicts!
+%expect 37 -- shift/reduce conflicts
 
 {- Last updated: 9 Jan 2016
 
@@ -2995,7 +2996,7 @@ qvarid :: { Located RdrName }
         : varid               { $1 }
         | QVARID              { sL1 $1 $! mkQual varName (getQVARID $1) }
 
--- Note that 'role', 'family' and 'kind' get lexed separately regardless of
+-- Note that 'role' and 'family' get lexed separately regardless of
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.
 -- See Note [Lexing type pseudo-keywords] in Lexer.x
@@ -3008,7 +3009,6 @@ varid :: { Located RdrName }
         | 'forall'         { sL1 $1 $! mkUnqual varName (fsLit "forall") }
         | 'family'         { sL1 $1 $! mkUnqual varName (fsLit "family") }
         | 'role'           { sL1 $1 $! mkUnqual varName (fsLit "role") }
-        | 'kind'           { sL1 $1 $! mkUnqual varName (fsLit "kind") }
 
 qvarsym :: { Located RdrName }
         : varsym                { $1 }
@@ -3048,6 +3048,7 @@ special_id
         | 'prim'                { sL1 $1 (fsLit "prim") }
         | 'javascript'          { sL1 $1 (fsLit "javascript") }
         | 'group'               { sL1 $1 (fsLit "group") }
+        | 'kind'                { sL1 $1 (fsLit "kind") }
 
 special_sym :: { Located FastString }
 special_sym : '!'       {% ams (sL1 $1 (fsLit "!")) [mj AnnBang $1] }
