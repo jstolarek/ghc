@@ -527,6 +527,12 @@ data TyClDecl name
 
         -- For details on above see note [Api annotations] in ApiAnnotation
 
+  | OpenKindDecl { tcdLName   :: Located name    -- ^ Name of the open data kind
+                 , tcdTyVars  :: LHsQTyVars name -- ^ Type variables
+                 , tcdKindSig :: Maybe (LHsKind name)
+                 , tcdFVs     :: PostRn name NameSet
+                 }
+
   deriving (Typeable)
 deriving instance (DataId id) => Data (TyClDecl id)
 
@@ -643,6 +649,7 @@ hsDeclHasCusk (SynDecl { tcdTyVars = tyvars, tcdRhs = rhs })
       _            -> False
 hsDeclHasCusk (DataDecl { tcdTyVars = tyvars })  = hsTvbAllKinded tyvars
 hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
+--JSTOLAREK: match open kind
 
 -- Pretty-printing TyClDecl
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -650,6 +657,7 @@ hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 instance OutputableBndr name
               => Outputable (TyClDecl name) where
 
+--JSTOLAREK: match open kind
     ppr (FamDecl { tcdFam = decl }) = ppr decl
     ppr (SynDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdRhs = rhs })
       = hang (ptext (sLit "type") <+>
@@ -689,6 +697,7 @@ pp_vanilla_decl_head :: OutputableBndr name
 pp_vanilla_decl_head thing tyvars context
  = hsep [pprHsContext context, pprPrefixOcc (unLoc thing), ppr tyvars]
 
+--JSTOLAREK: match open kind
 pprTyClDeclFlavour :: TyClDecl a -> SDoc
 pprTyClDeclFlavour (ClassDecl {})   = ptext (sLit "class")
 pprTyClDeclFlavour (SynDecl {})     = ptext (sLit "type")

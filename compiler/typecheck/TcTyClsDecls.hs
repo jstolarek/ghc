@@ -379,6 +379,7 @@ getInitialKind :: TyClDecl Name
 --
 -- No family instances are passed to getInitialKinds
 
+--JSTOLAREK: match open kind
 getInitialKind decl@(ClassDecl { tcdLName = L _ name, tcdTyVars = ktvs, tcdATs = ats })
   = do { (cl_kind, inner_prs) <-
            kcHsTyVarBndrs (hsDeclHasCusk decl) ktvs $ \_ _ ->
@@ -478,6 +479,7 @@ kcTyClDecl :: TyClDecl Name -> TcM ()
 --    result kind signature have already been dealt with
 --    by getInitialKind, so we can ignore them here.
 
+--JSTOLAREK: match open kind
 kcTyClDecl (DataDecl { tcdLName = L _ name, tcdTyVars = hs_tvs, tcdDataDefn = defn })
   | HsDataDefn { dd_cons = cons, dd_kindSig = Just _ } <- defn
   = mapM_ (wrapLocM kcConDecl) cons
@@ -655,6 +657,7 @@ tcTyClDecl rec_info (L loc decl)
 
   -- "type family" declarations
 tcTyClDecl1 :: Maybe Class -> RecTyInfo -> TyClDecl Name -> TcM TyCon
+--JSTOLAREK: match open kind
 tcTyClDecl1 parent _rec_info (FamDecl { tcdFam = fd })
   = tcFamDecl1 parent fd
 

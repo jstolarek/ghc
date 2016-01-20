@@ -566,7 +566,6 @@ data Token
   | ITinfixl
   | ITinfixr
   | ITinstance
-  | ITkind
   | ITlet
   | ITmodule
   | ITnewtype
@@ -591,6 +590,8 @@ data Token
   | ITmdo
   | ITfamily
   | ITrole
+  | ITkind
+  | ITopen
   | ITgroup
   | ITby
   | ITusing

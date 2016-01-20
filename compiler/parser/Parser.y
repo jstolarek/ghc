@@ -86,8 +86,10 @@ import Prelude
 import qualified GHC.LanguageExtensions as LangExt
 }
 
---JSTOLAREK: increased number of conflicts!
-%expect 37 -- shift/reduce conflicts
+--JSTOLAREK: increased number of conflicts! Was 36:
+-- +1 conflict from 'kind'
+-- +1 conflict from 'open'
+%expect 38 -- shift/reduce conflicts
 
 {- Last updated: 9 Jan 2016
 
@@ -337,7 +339,6 @@ output it generates.
  'infixl'       { L _ ITinfixl }
  'infixr'       { L _ ITinfixr }
  'instance'     { L _ ITinstance }
- 'kind'         { L _ ITkind }
  'let'          { L _ ITlet }
  'module'       { L _ ITmodule }
  'newtype'      { L _ ITnewtype }
@@ -358,6 +359,8 @@ output it generates.
  'mdo'          { L _ ITmdo }
  'family'       { L _ ITfamily }
  'role'         { L _ ITrole }
+ 'kind'         { L _ ITkind }
+ 'open'         { L _ ITopen }
  'stdcall'      { L _ ITstdcallconv }
  'ccall'        { L _ ITccallconv }
  'capi'         { L _ ITcapiconv }
@@ -889,20 +892,27 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- constrs and deriving are both empty
                     ((fst $ unLoc $1):(fst $ unLoc $4)++(fst $ unLoc $5)) }
 
-          -- data kind without corresponding data type (H98 syntax)
+        | 'data' 'kind' 'open' tycl_hdr opt_kind_sig
+            -- JSTOLAREK: comb4 = voodoo coding!
+            {% amms (mkOpenKindDecl (comb4 $1 $2 $3 $4) $4 (snd $ unLoc $5))
+                    (mj AnnData $1:mj AnnKind $2:mj AnnOpenKind $3:
+                     (fst $ unLoc $5)) }
+
+          -- closed data kind without corresponding data type (H98 syntax)
         | 'data' 'kind' capi_ctype tycl_hdr constrs
                 {% amms (mkTyData (comb4 $1 $2 $4 $5) DataType
                            AllowedInTypesOnly $3 $4 Nothing
                            (reverse (snd $ unLoc $5)) Nothing)
                         (mj AnnData $1:mj AnnKind $2:(fst $ unLoc $5)) }
 
-         -- data kind without corresponding data type (GADT syntax)
+         -- closed data kind without corresponding data type (GADT syntax)
         | 'data' 'kind' capi_ctype tycl_hdr opt_kind_sig
                  gadt_constrlist
             {% amms (mkTyData (comb4 $1 $2 $4 $6) DataType
                              AllowedInTypesOnly $3 $4 (snd $ unLoc $5)
                              (snd $ unLoc $6) Nothing)
-                    (mj AnnData $1:mj AnnKind $2:(fst $ unLoc $5)++(fst $ unLoc $6)) }
+                    (mj AnnData $1:mj AnnKind $2:(fst $ unLoc $5)++
+                                                 (fst $ unLoc $6)) }
 
            -- data/newtype family
         | 'data' 'family' type opt_datafam_kind_sig
@@ -3049,6 +3059,7 @@ special_id
         | 'javascript'          { sL1 $1 (fsLit "javascript") }
         | 'group'               { sL1 $1 (fsLit "group") }
         | 'kind'                { sL1 $1 (fsLit "kind") }
+        | 'open'                { sL1 $1 (fsLit "open") }
 
 special_sym :: { Located FastString }
 special_sym : '!'       {% ams (sL1 $1 (fsLit "!")) [mj AnnBang $1] }

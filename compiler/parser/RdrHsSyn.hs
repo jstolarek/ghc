@@ -14,6 +14,7 @@ module RdrHsSyn (
         mkRoleAnnotDecl,
         mkClassDecl,
         mkTyData, mkDataFamInst,
+        mkOpenKindDecl,
         mkTySynonym, mkTyFamInstEqn,
         mkTyFamInst,
         mkFamDecl, mkLHsSigType,
@@ -200,6 +201,12 @@ mkDataDefn new_or_data allowed_in_terms cType mcxt ksig data_cons maybe_deriv
                             , dd_kindSig = ksig
                             , dd_derivs  = maybe_deriv }) }
 
+mkOpenKindDecl :: SrcSpan
+               -> Located (Maybe (LHsContext RdrName), LHsType RdrName)
+               -> Maybe (LHsKind RdrName)
+               -> P (LTyClDecl RdrName)
+mkOpenKindDecl loc (L _ (mcxt, tycl_hdr)) ksig =
+  undefined
 
 mkTySynonym :: SrcSpan
             -> LHsType RdrName  -- LHS

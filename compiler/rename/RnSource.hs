@@ -1185,6 +1185,7 @@ rnTyClDecl :: TyClDecl RdrName
 -- All flavours of type family declarations ("type family", "newtype family",
 -- and "data family"), both top level and (for an associated type)
 -- in a class decl
+--JSTOLAREK: match open kind
 rnTyClDecl (FamDecl { tcdFam = decl })
   = do { (decl', fvs) <- rnFamDecl Nothing decl
        ; return (FamDecl decl', fvs) }

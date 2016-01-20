@@ -227,7 +227,7 @@ data AnnKeywordId
     | AnnIn
     | AnnInfix -- ^ 'infix' or 'infixl' or 'infixr'
     | AnnInstance
-    | AnnKind
+    | AnnKind  -- ^ 'kind' in kind-without-data declaration
     | AnnLam
     | AnnLarrow     -- ^ '<-'
     | AnnLarrowU    -- ^ '<-', unicode variant
@@ -241,6 +241,7 @@ data AnnKeywordId
     | AnnOpen   -- ^ '(\#' or '{-\# LANGUAGE' etc
     | AnnOpenC   -- ^ '{'
     | AnnOpenE   -- ^ '[e|' or '[e||'
+    | AnnOpenKind -- ^ 'open' in open data kind declaration
     | AnnOpenP   -- ^ '('
     | AnnOpenPE   -- ^ '$('
     | AnnOpenPTE   -- ^ '$$('
