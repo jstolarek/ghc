@@ -204,13 +204,14 @@ cvtDec (DataD ctxt tc tvs ksig constrs derivs)
         ; ksig' <- cvtKind `traverse` ksig
         ; cons' <- mapM cvtConstr constrs
         ; derivs' <- cvtDerivs derivs
-        ; let defn = HsDataDefn { dd_ND = DataType
+        ; let defn = HsDataDefn { dd_ND      = DataType
                                -- JSTOLAREK: kludge until TH support implemented
                                 , dd_inTerms = AllowedInTerms
-                                , dd_cType = Nothing
-                                , dd_ctxt = ctxt'
+                                , dd_cType   = Nothing
+                                , dd_ctxt    = ctxt'
                                 , dd_kindSig = ksig'
-                                , dd_cons = cons', dd_derivs = derivs' }
+                                , dd_cons    = cons'
+                                , dd_derivs  = derivs' }
         ; returnJustL $ TyClD (DataDecl { tcdLName = tc', tcdTyVars = tvs'
                                         , tcdDataDefn = defn
                                         , tcdFVs = placeHolderNames }) }
@@ -220,14 +221,14 @@ cvtDec (NewtypeD ctxt tc tvs ksig constr derivs)
         ; ksig' <- cvtKind `traverse` ksig
         ; con' <- cvtConstr constr
         ; derivs' <- cvtDerivs derivs
-        ; let defn = HsDataDefn { dd_ND = NewType
+        ; let defn = HsDataDefn { dd_ND      = NewType
                                -- JSTOLAREK: kludge until TH support implemented
                                 , dd_inTerms = AllowedInTerms
-                                , dd_cType = Nothing
-                                , dd_ctxt = ctxt'
+                                , dd_cType   = Nothing
+                                , dd_ctxt    = ctxt'
                                 , dd_kindSig = ksig'
-                                , dd_cons = [con']
-                                , dd_derivs = derivs' }
+                                , dd_cons    = [con']
+                                , dd_derivs  = derivs' }
         ; returnJustL $ TyClD (DataDecl { tcdLName = tc', tcdTyVars = tvs'
                                     , tcdDataDefn = defn
                                     , tcdFVs = placeHolderNames }) }
@@ -285,12 +286,13 @@ cvtDec (DataInstD ctxt tc tys ksig constrs derivs)
        ; ksig' <- cvtKind `traverse` ksig
        ; cons' <- mapM cvtConstr constrs
        ; derivs' <- cvtDerivs derivs
-       ; let defn = HsDataDefn { dd_ND = DataType
+       ; let defn = HsDataDefn { dd_ND      = DataType
                                , dd_inTerms = AllowedInTerms
-                               , dd_cType = Nothing
-                               , dd_ctxt = ctxt'
+                               , dd_cType   = Nothing
+                               , dd_ctxt    = ctxt'
                                , dd_kindSig = ksig'
-                               , dd_cons = cons', dd_derivs = derivs' }
+                               , dd_cons    = cons'
+                               , dd_derivs  = derivs' }
 
        ; returnJustL $ InstD $ DataFamInstD
            { dfid_inst = DataFamInstDecl { dfid_tycon = tc', dfid_pats = typats'
@@ -302,12 +304,13 @@ cvtDec (NewtypeInstD ctxt tc tys ksig constr derivs)
        ; ksig' <- cvtKind `traverse` ksig
        ; con' <- cvtConstr constr
        ; derivs' <- cvtDerivs derivs
-       ; let defn = HsDataDefn { dd_ND = NewType
+       ; let defn = HsDataDefn { dd_ND      = NewType
                                , dd_inTerms = AllowedInTerms
-                               , dd_cType = Nothing
-                               , dd_ctxt = ctxt'
+                               , dd_cType   = Nothing
+                               , dd_ctxt    = ctxt'
                                , dd_kindSig = ksig'
-                               , dd_cons = [con'], dd_derivs = derivs' }
+                               , dd_cons    = [con']
+                               , dd_derivs  = derivs' }
        ; returnJustL $ InstD $ DataFamInstD
            { dfid_inst = DataFamInstDecl { dfid_tycon = tc', dfid_pats = typats'
                                          , dfid_defn = defn
