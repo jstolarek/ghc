@@ -944,11 +944,11 @@ data HsDataDefn name   -- The payload of a data type defn
     -- data kind T a = <constrs>
     -- data kind T a where <constrs>
     -- @
-    HsDataDefn { dd_ND       :: NewOrData,
-                 dd_kindOnly :: AllowedInTerms,
-                 dd_ctxt     :: LHsContext name,           -- ^ Context
-                 dd_cType    :: Maybe (Located CType),
-                 dd_kindSig  :: Maybe (LHsKind name),
+    HsDataDefn { dd_ND      :: NewOrData,
+                 dd_inTerms :: AllowedInTerms,
+                 dd_ctxt    :: LHsContext name,           -- ^ Context
+                 dd_cType   :: Maybe (Located CType),
+                 dd_kindSig :: Maybe (LHsKind name),
                      -- ^ Optional kind signature.
                      --
                      -- @(Just k)@ for a GADT-style @data@,
@@ -956,7 +956,7 @@ data HsDataDefn name   -- The payload of a data type defn
                      --
                      -- Always @Nothing@ for H98-syntax decls
 
-                 dd_cons     :: [LConDecl name],
+                 dd_cons    :: [LConDecl name],
                      -- ^ Data constructors
                      --
                      -- For @data T a = T1 | T2 a@
@@ -964,7 +964,7 @@ data HsDataDefn name   -- The payload of a data type defn
                      -- For @data T a where { T1 :: T a }@
                      --   the 'LConDecls' all have 'ConDeclGADT'.
 
-                 dd_derivs   :: HsDeriving name  -- ^ Optional 'deriving' claues
+                 dd_derivs  :: HsDeriving name  -- ^ Optional 'deriving' claues
 
              -- For details on above see note [Api annotations] in ApiAnnotation
    }

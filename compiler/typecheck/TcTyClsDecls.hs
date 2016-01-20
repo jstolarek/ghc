@@ -862,12 +862,12 @@ tcDataDefn :: RecTyInfo -> Name
   -- NB: not used for newtype/data instances (whether associated or not)
 tcDataDefn rec_info     -- Knot-tied; don't look at this eagerly
            tc_name tvs tycon_kind res_kind
-         (HsDataDefn { dd_ND       = new_or_data
-                     , dd_kindOnly = allowed_in_terms
-                     , dd_cType    = cType
-                     , dd_ctxt     = ctxt
-                     , dd_kindSig  = mb_ksig
-                     , dd_cons     = cons })
+         (HsDataDefn { dd_ND      = new_or_data
+                     , dd_inTerms = allowed_in_terms
+                     , dd_cType   = cType
+                     , dd_ctxt    = ctxt
+                     , dd_kindSig = mb_ksig
+                     , dd_cons    = cons })
  =  do { extra_tvs <- tcDataKindSig res_kind
        ; let final_tvs  = tvs `chkAppend` extra_tvs
              roles      = rti_roles rec_info tc_name

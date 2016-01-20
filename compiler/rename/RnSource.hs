@@ -1336,7 +1336,7 @@ orphanRoleAnnotErr (L loc decl)
             text "is declared.")
 
 rnDataDefn :: HsDocContext -> HsDataDefn RdrName -> RnM (HsDataDefn Name, FreeVars)
-rnDataDefn doc (HsDataDefn { dd_ND = new_or_data, dd_kindOnly = allowed_in_terms
+rnDataDefn doc (HsDataDefn { dd_ND = new_or_data, dd_inTerms = allowed_in_terms
                            , dd_cType = cType, dd_ctxt = context
                            , dd_cons = condecls, dd_kindSig = sig
                            , dd_derivs = derivs })
@@ -1364,7 +1364,7 @@ rnDataDefn doc (HsDataDefn { dd_ND = new_or_data, dd_kindOnly = allowed_in_terms
         ; let all_fvs = fvs1 `plusFV` fvs3 `plusFV`
                         con_fvs `plusFV` sig_fvs
         ; return ( HsDataDefn { dd_ND = new_or_data, dd_cType = cType
-                              , dd_kindOnly = allowed_in_terms
+                              , dd_inTerms = allowed_in_terms
                               , dd_ctxt = context', dd_kindSig = sig'
                               , dd_cons = condecls'
                               , dd_derivs = derivs' }

@@ -192,13 +192,13 @@ mkDataDefn :: NewOrData
 mkDataDefn new_or_data allowed_in_terms cType mcxt ksig data_cons maybe_deriv
   = do { checkDatatypeContext mcxt
        ; let cxt = fromMaybe (noLoc []) mcxt
-       ; return (HsDataDefn { dd_ND       = new_or_data
-                            , dd_kindOnly = allowed_in_terms
-                            , dd_cType    = cType
-                            , dd_ctxt     = cxt
-                            , dd_cons     = data_cons
-                            , dd_kindSig  = ksig
-                            , dd_derivs   = maybe_deriv }) }
+       ; return (HsDataDefn { dd_ND      = new_or_data
+                            , dd_inTerms = allowed_in_terms
+                            , dd_cType   = cType
+                            , dd_ctxt    = cxt
+                            , dd_cons    = data_cons
+                            , dd_kindSig = ksig
+                            , dd_derivs  = maybe_deriv }) }
 
 
 mkTySynonym :: SrcSpan

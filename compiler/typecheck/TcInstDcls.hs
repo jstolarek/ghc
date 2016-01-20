@@ -635,10 +635,10 @@ tcDataFamInstDecl mb_clsinfo
     (L loc decl@(DataFamInstDecl
        { dfid_pats = pats
        , dfid_tycon = fam_tc_name
-         -- invariant: dd_kindOnly always AllowedInTerms for data families
+         -- invariant: dd_inTerms always AllowedInTerms for data families
          -- JSTOLAREK: insert an ASSERT
        , dfid_defn = defn@HsDataDefn { dd_ND = new_or_data, dd_cType = cType
-                                     , dd_kindOnly = allowed_in_terms
+                                     , dd_inTerms = allowed_in_terms
                                      , dd_ctxt = ctxt, dd_cons = cons
                                      , dd_derivs = derivs } }))
   = setSrcSpan loc             $
