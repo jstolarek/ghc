@@ -900,7 +900,6 @@ hsLTyClDeclBinders :: Located (TyClDecl name) -> ([Located name], [LFieldOcc nam
 -- Each returned (Located name) has a SrcSpan for the /whole/ declaration.
 -- See Note [SrcSpan for binders]
 
---JSTOLAREK: match open kind
 hsLTyClDeclBinders (L loc (FamDecl { tcdFam = FamilyDecl { fdLName = L _ name } }))
   = ([L loc name], [])
 hsLTyClDeclBinders (L loc (SynDecl     { tcdLName = L _ name })) = ([L loc name], [])
@@ -912,6 +911,8 @@ hsLTyClDeclBinders (L loc (ClassDecl   { tcdLName = L _ cls_name
     , [])
 hsLTyClDeclBinders (L loc (DataDecl    { tcdLName = L _ name, tcdDataDefn = defn }))
   = (\ (xs, ys) -> (L loc name : xs, ys)) $ hsDataDefnBinders defn
+hsLTyClDeclBinders (L loc (OpenKindDecl { tcdLName = L _ name } ))
+  = ([L loc name], [])
 
 -------------------
 hsForeignDeclsBinders :: [LForeignDecl name] -> [Located name]

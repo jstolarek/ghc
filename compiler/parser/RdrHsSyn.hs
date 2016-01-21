@@ -173,7 +173,7 @@ mkTyData :: SrcSpan
          -> P (LTyClDecl RdrName)
 mkTyData loc new_or_data allowed_in_terms cType (L _ (mcxt, tycl_hdr)) ksig
          data_cons maybe_deriv
-  = do { (tc, tparams,ann) <- checkTyClHdr False tycl_hdr
+  = do { (tc, tparams, ann) <- checkTyClHdr False tycl_hdr
        ; mapM_ (\a -> a loc) ann -- Add any API Annotations to the top SrcSpan
        ; tyvars <- checkTyVarsP (ppr new_or_data) equalsDots tc tparams
        ; defn <- mkDataDefn new_or_data allowed_in_terms cType mcxt ksig
@@ -202,11 +202,17 @@ mkDataDefn new_or_data allowed_in_terms cType mcxt ksig data_cons maybe_deriv
                             , dd_derivs  = maybe_deriv }) }
 
 mkOpenKindDecl :: SrcSpan
-               -> Located (Maybe (LHsContext RdrName), LHsType RdrName)
+               -> LHsType RdrName
                -> Maybe (LHsKind RdrName)
                -> P (LTyClDecl RdrName)
-mkOpenKindDecl loc (L _ (mcxt, tycl_hdr)) ksig =
-  undefined
+mkOpenKindDecl loc ty ksig
+  = do { (tc, tparams, ann) <- checkTyClHdr False ty
+       ; mapM_ (\a -> a loc) ann -- Add any API Annotations to the top SrcSpan
+       ; tyvars <- checkTyVarsP (text "open data kind") empty tc tparams
+       ; return (L loc (OpenKindDecl { tcdLName   = tc
+                                     , tcdTyVars  = tyvars
+                                     , tcdKindSig = ksig
+                                     , tcdFVs     = placeHolderNames })) }
 
 mkTySynonym :: SrcSpan
             -> LHsType RdrName  -- LHS

@@ -771,7 +771,6 @@ reservedWordsFM = listToUFM $
          ( "infixl",         ITinfixl,        0 ),
          ( "infixr",         ITinfixr,        0 ),
          ( "instance",       ITinstance,      0 ),
-         ( "kind",           ITkind,          0 ),
          ( "let",            ITlet,           0 ),
          ( "module",         ITmodule,        0 ),
          ( "newtype",        ITnewtype,       0 ),
@@ -788,6 +787,8 @@ reservedWordsFM = listToUFM $
              -- See Note [Lexing type pseudo-keywords]
          ( "family",         ITfamily,        0 ),
          ( "role",           ITrole,          0 ),
+         ( "kind",           ITkind,          0 ),
+         ( "open",           ITopen,          0 ),
          ( "pattern",        ITpattern,       xbit PatternSynonymsBit),
          ( "static",         ITstatic,        0 ),
          ( "group",          ITgroup,         xbit TransformComprehensionsBit),

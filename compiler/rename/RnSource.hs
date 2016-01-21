@@ -1185,7 +1185,6 @@ rnTyClDecl :: TyClDecl RdrName
 -- All flavours of type family declarations ("type family", "newtype family",
 -- and "data family"), both top level and (for an associated type)
 -- in a class decl
---JSTOLAREK: match open kind
 rnTyClDecl (FamDecl { tcdFam = decl })
   = do { (decl', fvs) <- rnFamDecl Nothing decl
        ; return (FamDecl decl', fvs) }
@@ -1276,6 +1275,20 @@ rnTyClDecl (ClassDecl { tcdCtxt = context, tcdLName = lcls,
                   all_fvs ) }
   where
     cls_doc  = ClassDeclCtx lcls
+
+-- open data kind declarations
+rnTyClDecl (OpenKindDecl { tcdLName   = tycon
+                         , tcdTyVars  = tyvars
+                         , tcdKindSig = ksig })
+  = do { tycon' <- lookupLocatedTopBndrRn tycon
+       ; let doc = TyOpenKindCtx tycon
+       ; (tvs', _) <- bindHsQTyVars doc Nothing [] tyvars $ \ tyvars' -> do
+       { return (tyvars', emptyFVs) }
+       ; (ksig', fvs)  <- rnLHsMaybeKind doc ksig
+       ; return (OpenKindDecl { tcdLName   = tycon'
+                              , tcdTyVars  = tvs'
+                              , tcdKindSig = ksig' }, fvs )
+       }
 
 -- "type" and "type instance" declarations
 rnTySyn :: HsDocContext -> LHsType RdrName -> RnM (LHsType Name, FreeVars)

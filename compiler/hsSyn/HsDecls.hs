@@ -647,9 +647,9 @@ hsDeclHasCusk (SynDecl { tcdTyVars = tyvars, tcdRhs = rhs })
       HsParTy lty  -> rhs_annotated lty
       HsKindSig {} -> True
       _            -> False
-hsDeclHasCusk (DataDecl { tcdTyVars = tyvars })  = hsTvbAllKinded tyvars
-hsDeclHasCusk (ClassDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
---JSTOLAREK: match open kind
+hsDeclHasCusk (DataDecl     { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
+hsDeclHasCusk (ClassDecl    { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
+hsDeclHasCusk (OpenKindDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 
 -- Pretty-printing TyClDecl
 -- ~~~~~~~~~~~~~~~~~~~~~~~~

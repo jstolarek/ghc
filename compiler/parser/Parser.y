@@ -892,7 +892,7 @@ ty_decl :: { LTyClDecl RdrName }
                                    -- constrs and deriving are both empty
                     ((fst $ unLoc $1):(fst $ unLoc $4)++(fst $ unLoc $5)) }
 
-        | 'data' 'kind' 'open' tycl_hdr opt_kind_sig
+        | 'data' 'kind' 'open' type opt_kind_sig
             -- JSTOLAREK: comb4 = voodoo coding!
             {% amms (mkOpenKindDecl (comb4 $1 $2 $3 $4) $4 (snd $ unLoc $5))
                     (mj AnnData $1:mj AnnKind $2:mj AnnOpenKind $3:
