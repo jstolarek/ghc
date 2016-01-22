@@ -29,6 +29,7 @@ module TyCon(
         mkTupleTyCon,
         mkSynonymTyCon,
         mkFamilyTyCon,
+        mkOpenKindTyCon,
         mkPromotedDataCon,
         mkTcTyCon,
 
@@ -37,6 +38,7 @@ module TyCon(
         isClassTyCon, isFamInstTyCon,
         isFunTyCon,
         isPrimTyCon,
+        isOpenKindTyCon,
         isTupleTyCon, isUnboxedTupleTyCon, isBoxedTupleTyCon,
         isTypeSynonymTyCon,
         mightBeUnsaturatedTyCon,
@@ -589,6 +591,29 @@ data TyCon
         tcRoles     :: [Role], -- ^ Roles: N for kind vars, R for type vars
         dataCon     :: DataCon,-- ^ Corresponding data constructor
         tcRepName   :: TyConRepName
+    }
+
+  | OpenKindTyCon {
+        tyConUnique   :: Unique,  -- ^ A Unique of this TyCon. Invariant:
+                                  -- identical to Unique of Name stored in
+                                  -- tyConName field.
+
+        tyConName     :: Name,    -- ^ Name of the constructor
+        tyConKind     :: Kind,    -- ^ Kind of this TyCon (full kind, not just
+                                  -- the return kind)
+        tyConArity    :: Arity,   -- ^ Number of arguments this TyCon must
+                                  -- receive to be considered saturated
+                                  -- (including implicit kind variables)
+
+        tyConTyVars   :: [TyVar], -- ^ List of type and kind variables in this
+                                  -- TyCon. Includes implicit kind variables.
+                                  -- Invariant: length tyConTyVars = tyConArity
+
+        -- JSTOLAREK: What should the roles be? If the are all identical this
+        -- field should be removed and tyConRoles should be modified instead.
+        tcRoles       :: [Role]  -- ^ The role for each type variable
+                                 -- This list has the same length as tyConTyVars
+                                 -- See also Note [TyCon Role signatures]
     }
 
   -- | These exist only during a recursive type/class type-checking knot.
@@ -1254,6 +1279,16 @@ mkFamilyTyCon name kind tyvars resVar flav parent inj
       , famTcInj    = inj
       }
 
+mkOpenKindTyCon :: Name -> Kind -> [TyVar] -> [Role] -> TyCon
+mkOpenKindTyCon name kind tyvars roles
+  = OpenKindTyCon
+      { tyConUnique = nameUnique name
+      , tyConName   = name
+      , tyConKind   = kind
+      , tyConArity  = length tyvars
+      , tyConTyVars = tyvars
+      , tcRoles     = roles
+      }
 
 -- | Create a promoted data constructor 'TyCon'
 -- Somewhat dodgily, we give it the same Name
@@ -1301,6 +1336,11 @@ makeTyConAbstract tc
 isPrimTyCon :: TyCon -> Bool
 isPrimTyCon (PrimTyCon {}) = True
 isPrimTyCon _              = False
+
+-- | Is this an open data kind?
+isOpenKindTyCon :: TyCon -> Bool
+isOpenKindTyCon (OpenKindTyCon {}) = True
+isOpenKindTyCon _                  = False
 
 -- | Is this 'TyCon' unlifted (i.e. cannot contain bottom)? Note that this can
 -- only be true for primitive and unboxed-tuple 'TyCon's
@@ -1360,6 +1400,7 @@ isInjectiveTyCon (FamilyTyCon { famTcFlav = DataFamilyTyCon _ })
                                                Nominal          = True
 isInjectiveTyCon (FamilyTyCon { famTcInj = Injective inj }) _   = and inj
 isInjectiveTyCon (FamilyTyCon {})              _                = False
+isInjectiveTyCon (OpenKindTyCon {})            _                = True
 isInjectiveTyCon (PrimTyCon {})                _                = True
 isInjectiveTyCon (PromotedDataCon {})          _                = True
 isInjectiveTyCon tc@(TcTyCon {})               _
@@ -1642,6 +1683,8 @@ isImplicitTyCon (AlgTyCon { algTcRhs = rhs, tyConName = name })
   | TupleTyCon {} <- rhs             = isWiredInName name
   | otherwise                        = False
 isImplicitTyCon (FamilyTyCon { famTcParent = parent }) = isJust parent
+--JSTOLAREK: But this can change if OpenKindTyCon gets a parent!
+isImplicitTyCon (OpenKindTyCon {})   = False
 isImplicitTyCon (SynonymTyCon {})    = False
 isImplicitTyCon tc@(TcTyCon {})
   = pprPanic "isImplicitTyCon sees a TcTyCon" (ppr tc)
@@ -1786,6 +1829,7 @@ tyConRoles tc
     ; FamilyTyCon {}                      -> const_role Nominal
     ; PrimTyCon { tcRoles = roles }       -> roles
     ; PromotedDataCon { tcRoles = roles } -> roles
+    ; OpenKindTyCon { tcRoles = roles }   -> roles
     ; TcTyCon {} -> pprPanic "tyConRoles sees a TcTyCon" (ppr tc)
     }
   where
@@ -1947,6 +1991,7 @@ tyConFlavour (SynonymTyCon {})    = "type synonym"
 tyConFlavour (FunTyCon {})        = "built-in type"
 tyConFlavour (PrimTyCon {})       = "built-in type"
 tyConFlavour (PromotedDataCon {}) = "promoted data constructor"
+tyConFlavour (OpenKindTyCon {})   = "open data kind"
 tyConFlavour tc@(TcTyCon {})
   = pprPanic "tyConFlavour sees a TcTyCon" (ppr tc)
 

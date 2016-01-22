@@ -1287,7 +1287,8 @@ rnTyClDecl (OpenKindDecl { tcdLName   = tycon
        ; (ksig', fvs)  <- rnLHsMaybeKind doc ksig
        ; return (OpenKindDecl { tcdLName   = tycon'
                               , tcdTyVars  = tvs'
-                              , tcdKindSig = ksig' }, fvs )
+                              , tcdKindSig = ksig'
+                              , tcdFVs     = fvs }, fvs )
        }
 
 -- "type" and "type instance" declarations

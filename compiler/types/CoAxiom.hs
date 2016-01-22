@@ -427,7 +427,7 @@ instance Outputable CoAxBranch where
 Roles are defined here to avoid circular dependencies.
 -}
 
--- See Note [Roles] in Coercion
+-- See Note [Roles] in TyCoRep
 -- defined here to avoid cyclic dependency with Coercion
 data Role = Nominal | Representational | Phantom
   deriving (Eq, Ord, Data.Data, Data.Typeable)

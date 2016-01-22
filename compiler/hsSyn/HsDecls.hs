@@ -657,7 +657,6 @@ hsDeclHasCusk (OpenKindDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 instance OutputableBndr name
               => Outputable (TyClDecl name) where
 
---JSTOLAREK: match open kind
     ppr (FamDecl { tcdFam = decl }) = ppr decl
     ppr (SynDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdRhs = rhs })
       = hang (ptext (sLit "type") <+>
@@ -666,6 +665,16 @@ instance OutputableBndr name
 
     ppr (DataDecl { tcdLName = ltycon, tcdTyVars = tyvars, tcdDataDefn = defn })
       = pp_data_defn (pp_vanilla_decl_head ltycon tyvars) defn
+
+    ppr (OpenKindDecl { tcdLName   = ltycon
+                      , tcdTyVars  = tyvars
+                      , tcdKindSig = m_ksig } )
+      = text "data kind open" <+> pp_vanilla_decl_head ltycon tyvars []
+                              <+> pp_ksig
+        where
+          pp_ksig = case m_ksig of
+            Nothing   -> empty
+            Just kind -> dcolon <+> ppr kind
 
     ppr (ClassDecl {tcdCtxt = context, tcdLName = lclas, tcdTyVars = tyvars,
                     tcdFDs  = fds,
@@ -697,7 +706,6 @@ pp_vanilla_decl_head :: OutputableBndr name
 pp_vanilla_decl_head thing tyvars context
  = hsep [pprHsContext context, pprPrefixOcc (unLoc thing), ppr tyvars]
 
---JSTOLAREK: match open kind
 pprTyClDeclFlavour :: TyClDecl a -> SDoc
 pprTyClDeclFlavour (ClassDecl {})   = ptext (sLit "class")
 pprTyClDeclFlavour (SynDecl {})     = ptext (sLit "type")
@@ -705,6 +713,7 @@ pprTyClDeclFlavour (FamDecl { tcdFam = FamilyDecl { fdInfo = info }})
   = pprFlavour info <+> text "family"
 pprTyClDeclFlavour (DataDecl { tcdDataDefn = HsDataDefn { dd_ND = nd } })
   = ppr nd
+pprTyClDeclFlavour (OpenKindDecl {}) = text "open data kind"
 
 
 {- *********************************************************************

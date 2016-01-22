@@ -10,14 +10,15 @@ data kind Universe = Sum  Universe Universe
 data kind Universe' where
     Sum'  :: Universe' -> Universe' -> Universe'
     Prod' :: Universe' -> Universe' -> Universe'
-    K'    :: Universe
+    K'    :: Universe'
 
 -- if this works then -XKindsWithoutData correctly implies -XDataKinds
 type family F (a :: Universe) :: Bool where
   F (Sum  _ _) = 'True
   F (Prod _ _) = 'False
 
-data kind open Dimension :: *
+data kind open Dimension
+data kind open Dimension' :: *
 data kind open Unit :: Dimension -> *
 data kind open Unit2 (a :: Dimension) :: *
 

@@ -363,7 +363,7 @@ getInitialKinds decls
 getInitialKind :: TyClDecl Name
                -> TcM [(Name, TcTyThing)]    -- Mixture of ATcTyCon and APromotionErr
 -- Allocate a fresh kind variable for each TyCon and Class
--- For each tycon, return   (name, ATcTyCon (TcCyCon with kind k))
+-- For each tycon, return   (name, ATcTyCon (TcTyCon with kind k))
 --                 where k is the kind of tc, derived from the LHS
 --                       of the definition (and probably including
 --                       kind unification variables)
@@ -375,7 +375,7 @@ getInitialKind :: TyClDecl Name
 --   * The result kinds signature on a TyClDecl
 --
 -- ALSO for each datacon, return (dc, APromotionErr RecDataConPE)
---    See Note [ARecDataCon: Recursion and promoting data constructors]
+--    See Note [Recursion and promoting data constructors]
 --
 -- No family instances are passed to getInitialKinds
 
@@ -404,6 +404,18 @@ getInitialKind decl@(DataDecl { tcdLName = L _ name
               inner_prs = [ (unLoc con, APromotionErr RecDataConPE)
                           | L _ con' <- cons, con <- getConNames con' ]
         ; return (main_pr : inner_prs) }
+
+getInitialKind decl@(OpenKindDecl { tcdLName   = L _ name
+                                  , tcdTyVars  = ktvs
+                                  , tcdKindSig = m_ksig } )
+  = do  { (decl_kind, _) <-
+           kcHsTyVarBndrs (hsDeclHasCusk decl) ktvs $ \_ _ ->
+           do { res_k <- case m_ksig of
+                           Just ksig -> tcLHsKind ksig
+                           Nothing   -> newMetaKindVar
+              ; return (res_k, ()) }
+        ; decl_kind <- zonkTcType decl_kind
+        ; return [ mkTcTyConPair name decl_kind ] }
 
 getInitialKind (FamDecl { tcdFam = decl })
   = getFamDeclInitialKind decl
@@ -479,7 +491,6 @@ kcTyClDecl :: TyClDecl Name -> TcM ()
 --    result kind signature have already been dealt with
 --    by getInitialKind, so we can ignore them here.
 
---JSTOLAREK: match open kind
 kcTyClDecl (DataDecl { tcdLName = L _ name, tcdTyVars = hs_tvs, tcdDataDefn = defn })
   | HsDataDefn { dd_cons = cons, dd_kindSig = Just _ } <- defn
   = mapM_ (wrapLocM kcConDecl) cons
@@ -495,10 +506,13 @@ kcTyClDecl (DataDecl { tcdLName = L _ name, tcdTyVars = hs_tvs, tcdDataDefn = de
     do  { _ <- tcHsContext ctxt
         ; mapM_ (wrapLocM kcConDecl) cons }
 
+-- JSTOLAREK: is there anything to do here for OpenKindDecl?
+kcTyClDecl (OpenKindDecl {}) = return ()
+
 kcTyClDecl decl@(SynDecl {}) = pprPanic "kcTyClDecl" (ppr decl)
 
 kcTyClDecl (ClassDecl { tcdLName = L _ name, tcdTyVars = hs_tvs
-                       , tcdCtxt = ctxt, tcdSigs = sigs })
+                      , tcdCtxt = ctxt, tcdSigs = sigs })
   = kcTyClTyVars name hs_tvs $
     do  { _ <- tcHsContext ctxt
         ; mapM_ (wrapLocM kc_sig)     sigs }
@@ -657,7 +671,6 @@ tcTyClDecl rec_info (L loc decl)
 
   -- "type family" declarations
 tcTyClDecl1 :: Maybe Class -> RecTyInfo -> TyClDecl Name -> TcM TyCon
---JSTOLAREK: match open kind
 tcTyClDecl1 parent _rec_info (FamDecl { tcdFam = fd })
   = tcFamDecl1 parent fd
 
@@ -674,6 +687,13 @@ tcTyClDecl1 _parent rec_info
   = ASSERT( isNothing _parent )
     tcTyClTyVars tc_name tvs $ \ kvs' tvs' tycon_kind res_kind ->
     tcDataDefn rec_info tc_name (kvs' ++ tvs') tycon_kind res_kind defn
+
+  -- "open data kind" declaration
+tcTyClDecl1 _parent rec_info
+            (OpenKindDecl { tcdLName = L _ tc_name, tcdTyVars = tvs } )
+  = ASSERT( isNothing _parent )
+    tcTyClTyVars tc_name tvs $ \ kvs' tvs' tycon_kind res_kind ->
+    tcOpenKindDefn rec_info tc_name (kvs' ++ tvs') tycon_kind res_kind
 
 tcTyClDecl1 _parent rec_info
             (ClassDecl { tcdLName = L _ class_name, tcdTyVars = tvs
@@ -862,6 +882,7 @@ tcTySynRhs rec_info tc_name tvs full_kind res_kind hs_ty
 tcDataDefn :: RecTyInfo -> Name
            -> [TyVar] -> Kind -> Kind
            -> HsDataDefn Name -> TcM TyCon
+-- JSTOLAREK: the comment below seems to be false
   -- NB: not used for newtype/data instances (whether associated or not)
 tcDataDefn rec_info     -- Knot-tied; don't look at this eagerly
            tc_name tvs tycon_kind res_kind
@@ -909,6 +930,14 @@ tcDataDefn rec_info     -- Knot-tied; don't look at this eagerly
           DataType -> return (mkDataTyConRhs data_cons)
           NewType  -> ASSERT( not (null data_cons) )
                       mkNewTyConRhs tc_name tycon (head data_cons)
+
+tcOpenKindDefn :: RecTyInfo -> Name -> [TyVar] -> Kind -> Kind -> TcM TyCon
+tcOpenKindDefn _rec_info     -- Knot-tied; don't look at this eagerly
+               tc_name tvs full_kind _res_kind
+  = do { -- JSTOLAREK: should I have something similar to tcDataKindSig?
+       -- JSTOLAREK: roles are a lie! List should not be empty
+       return (mkOpenKindTyCon tc_name full_kind tvs [])
+       }
 
 {-
 ************************************************************************
@@ -1914,6 +1943,9 @@ checkValidTyCl tc
 checkValidTyCon :: TyCon -> TcM ()
 checkValidTyCon tc
   | isPrimTyCon tc   -- Happens when Haddock'ing GHC.Prim
+  = return ()
+
+  | isOpenKindTyCon tc
   = return ()
 
   | otherwise

@@ -894,7 +894,7 @@ data PromotionErr
                      -- See Note [Don't promote pattern synonyms] in TcEnv
 
   | RecDataConPE     -- Data constructor in a recursive loop
-                     -- See Note [ARecDataCon: recusion and promoting data constructors] in TcTyClsDecls
+                     -- See Note [Recusion and promoting data constructors] in TcTyClsDecls
   | NoDataKinds      -- -XDataKinds not enabled
   | NoTypeInTypeTC   -- -XTypeInType not enabled (for a tycon)
   | NoTypeInTypeDC   -- -XTypeInType not enabled (for a datacon)
