@@ -379,7 +379,6 @@ getInitialKind :: TyClDecl Name
 --
 -- No family instances are passed to getInitialKinds
 
---JSTOLAREK: match open kind
 getInitialKind decl@(ClassDecl { tcdLName = L _ name, tcdTyVars = ktvs, tcdATs = ats })
   = do { (cl_kind, inner_prs) <-
            kcHsTyVarBndrs (hsDeclHasCusk decl) ktvs $ \_ _ ->

@@ -2233,7 +2233,8 @@ pprHsDocContext DefaultDeclCtx        = text "a `default' declaration"
 pprHsDocContext DerivDeclCtx          = text "a deriving declaration"
 pprHsDocContext (RuleCtx name)        = text "the transformation rule" <+> ftext name
 pprHsDocContext (TyDataCtx tycon)     = text "the data type declaration for" <+> quotes (ppr tycon)
-pprHsDocContext (TyOpenKindCtx tycon) = text "the open data kind type declaration for" <+> quotes (ppr tycon)
+pprHsDocContext (TyOpenKindCtx tycon)
+  = text "the open data kind type declaration for" <+> quotes (ppr tycon)
 pprHsDocContext (FamPatCtx tycon)     = text "a type pattern of family instance for" <+> quotes (ppr tycon)
 pprHsDocContext (TySynCtx name)       = text "the declaration for type synonym" <+> quotes (ppr name)
 pprHsDocContext (TyFamilyCtx name)    = text "the declaration for type family" <+> quotes (ppr name)

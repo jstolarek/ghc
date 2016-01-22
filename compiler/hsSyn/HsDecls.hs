@@ -107,7 +107,7 @@ import SrcLoc
 import FastString
 
 import Bag
-import Data.Maybe ( fromMaybe )
+import Data.Maybe ( fromMaybe, isJust )
 import Data.Data        hiding (TyCon,Fixity)
 
 {-
@@ -649,7 +649,8 @@ hsDeclHasCusk (SynDecl { tcdTyVars = tyvars, tcdRhs = rhs })
       _            -> False
 hsDeclHasCusk (DataDecl     { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
 hsDeclHasCusk (ClassDecl    { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
-hsDeclHasCusk (OpenKindDecl { tcdTyVars = tyvars }) = hsTvbAllKinded tyvars
+hsDeclHasCusk (OpenKindDecl { tcdTyVars = tyvars, tcdKindSig = ksig })
+  = isJust ksig && hsTvbAllKinded tyvars
 
 -- Pretty-printing TyClDecl
 -- ~~~~~~~~~~~~~~~~~~~~~~~~
