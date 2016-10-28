@@ -133,9 +133,7 @@ import {-# SOURCE #-} DataCon( dataConTyCon, dataConFullSig
                               , DataCon, filterEqSpec )
 import {-# SOURCE #-} Type( isPredTy, isCoercionTy, mkAppTy
                           , tyCoVarsOfTypesWellScoped
-                          , partitionInvisibles, tagVisibility
-                          , coreView, typeKind
-                          , eqType )
+                          , tagVisibility, coreView, typeKind, eqType )
    -- Transitively pulls in a LOT of stuff, better to break the loop
 
 import {-# SOURCE #-} Coercion
@@ -305,13 +303,6 @@ data TyLit
   = NumTyLit Integer
   | StrTyLit FastString
   deriving (Eq, Ord, Data.Data, Data.Typeable)
-
--- | A 'TyBinder' represents an argument to a function. TyBinders can be dependent
--- ('Named') or nondependent ('Anon'). They may also be visible or not.
-data TyBinder
-  = Named TyVar VisibilityFlag
-  | Anon Type   -- visibility is determined by the type (Constraint vs. *)
-    deriving (Data.Typeable, Data.Data)
 
 -- | Is something required to appear in source Haskell ('Visible') or
 -- prohibited from appearing in source Haskell ('Invisible')?

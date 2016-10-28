@@ -1533,6 +1533,7 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
                         Just br -> apartnessCheck (substTys subst ax_args) br
                         Nothing -> True
                     , (ax_arg, arg, True) <- zip3 ax_args args inj_to ]
+        else return []
 {-
 JSTOLAREK: Here's Simon refactoring after my application of fix to 12522:
       injImproveCond (ax_args, theta, unsubstTvs, cabr) inj_cond = do
@@ -1545,7 +1546,6 @@ JSTOLAREK: Here's Simon refactoring after my application of fix to 12522:
                  Nothing -> True
         then return [ Pair (substTy subst ax_arg) arg
                     | Pair ax_arg arg <- getInjRHS inj_cond arg_prs ]
-        else return []
 -}
 
 

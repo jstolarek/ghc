@@ -9,7 +9,6 @@ module Unify (
         tcMatchTys, tcMatchTyKis,
         tcMatchTyX, tcMatchTysX, tcMatchTyKisX,
         ruleMatchTyKiX,
-        tcUnifyTyWithTFs,tcUnifyTysWithTFs,
 
         -- * Rough matching
         roughMatchTcs, instanceCantMatch,
@@ -17,7 +16,7 @@ module Unify (
 
         -- Side-effect free unification
         tcUnifyTy, tcUnifyTyKi, tcUnifyTys, tcUnifyTyKis,
-        tcUnifyTysFG, tcUnifyTyWithTFs,
+        tcUnifyTysFG, tcUnifyTyWithTFs, tcUnifyTysWithTFs,
         BindFlag(..),
         UnifyResult, UnifyResultM(..),
 
@@ -41,6 +40,7 @@ import Pair
 import Outputable
 import UniqFM
 
+import Control.Monad
 #if __GLASGOW_HASKELL__ > 710
 import qualified Control.Monad.Fail as MonadFail
 #endif

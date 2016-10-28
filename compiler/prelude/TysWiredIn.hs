@@ -371,7 +371,7 @@ anyTyCon :: TyCon
 anyTyCon = mkFamilyTyCon anyTyConName binders res_kind Nothing
                          (ClosedSynFamilyTyCon Nothing)
                          Nothing
-                         NotInjective
+                         []
   where
     binders@[kv] = mkTemplateKindTyConBinders [liftedTypeKind]
     res_kind = mkTyVarTy (binderVar kv)

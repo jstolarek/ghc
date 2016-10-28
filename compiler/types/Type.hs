@@ -232,7 +232,6 @@ import Name    ( mkInternalName )
 import Maybes           ( orElse )
 import Data.Maybe       ( isJust, mapMaybe )
 import Control.Monad    ( guard )
-import Control.Arrow    ( first, second )
 
 -- $type_classification
 -- #type_classification#
@@ -1372,19 +1371,12 @@ filterOutInvisibleTyVars tc tvs = pickVisibles $ tagVisibility tc mkTyVarTy tvs
 tagVisibility :: TyCon -> (a -> Type) -> [a] -> [(a, VisibilityFlag)]
 tagVisibility tc get_ty = go emptyTCvSubst (tyConKind tc)
   where
-    go _ _ [] = ([], [])
-    go subst (ForAllTy (TvBndr tv vis) res_ki) (x:xs)
-      | isVisibleArgFlag vis = second (x :) (go subst' res_ki xs)
-      | otherwise            = first  (x :) (go subst' res_ki xs)
-{- JSTOLAREK: delete this
-=======
     go _ _ [] = []
-    go subst (ForAllTy bndr res_ki) (x:xs)
-      = (x, binderVisibility bndr) : go subst' res_ki xs
->>>>>>> 952b11f... Big wad of refactoring
--}
+    go subst (ForAllTy (TvBndr tv vis) res_ki) (x:xs)
+      = (x, binderVisibility) : go subst' res_ki xs
       where
         subst' = extendTvSubst subst tv (get_ty x)
+        binderVisibility = if isVisibleArgFlag vis then Visible else Invisible
     go subst (TyVarTy tv) xs
       | Just ki <- lookupTyVar subst tv = go subst ki xs
     go _ _ xs = [(x,Visible) | x <- xs]
