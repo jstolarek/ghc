@@ -1475,7 +1475,7 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
 
   | Just ax <- isClosedSynFamilyTyConWithAxiom_maybe fam_tc
   , not (null injectivity)
-  = concatMapM (injImproveEqns injectivity) $
+      = concatMapM (injImproveEqns injectivity) $
       buildImprovementData (fromBranches (co_ax_branches ax))
                            cab_lhs cab_rhs Just
 
@@ -1506,15 +1506,15 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
                 unsubstTvs    = filter (notInSubst <&&> isTyVar) tvs ]
 
       injImproveEqns :: [InjCondition]
-                     -> ([Type], TCvSubst, TyCoVarSet, Maybe CoAxBranch)
+                     -> ([Type], TCvSubst, [TyVar], Maybe CoAxBranch)
                      -> TcS [Eqn]
       injImproveEqns injConds improvementData =
           concatMapM (injImproveCond improvementData) injConds
 
-      injImproveCond :: ([Type], TCvSubst, TyVarSet, Maybe CoAxBranch)
+      injImproveCond :: ([Type], TCvSubst, [TyVar], Maybe CoAxBranch)
                      -> InjCondition
                      -> TcS [Eqn]
-      injImproveCond (ax_args, theta, unsubstTvs, cabr) (inj_from, inj_to) = do
+      injImproveCond (ax_args, theta, unsubstTvs, cabr) inj_cond = do
 -- JSTOLAREK: This line was used before merge:
 --        (theta', _) <- instFlexiTcS (varSetElems unsubstTvs)
         (theta', _) <- instFlexiTcS unsubstTvs
@@ -1524,21 +1524,6 @@ improve_top_fun_eqs fam_envs fam_tc args rhs_ty
         -- part of the tuple, which is the range of the substitution then
         -- the order could be important.
         let subst = theta `unionTCvSubst` theta'
-            inj_args    = filterByList inj_from    args
-            inj_ax_args = filterByList inj_from ax_args
-        if and (zipWith tcEqType inj_args inj_ax_args)
-        -- JSTOLAREK: a fragile fix to #12522. Make sure it works
-        then return [ Pair (substTy subst ax_arg) arg
-                    | case cabr of
-                        Just br -> apartnessCheck (substTys subst ax_args) br
-                        Nothing -> True
-                    , (ax_arg, arg, True) <- zip3 ax_args args inj_to ]
-        else return []
-{-
-JSTOLAREK: Here's Simon refactoring after my application of fix to 12522:
-      injImproveCond (ax_args, theta, unsubstTvs, cabr) inj_cond = do
-        (theta', _) <- instFlexiTcS (varSetElems unsubstTvs)
-        let subst = theta `unionTCvSubst` theta'
             arg_prs = ax_args `zipPairs` args
         if and [ tcEqType arg ax_arg | Pair ax_arg arg <- getInjLHS inj_cond arg_prs ]
            && case cabr of
@@ -1546,6 +1531,18 @@ JSTOLAREK: Here's Simon refactoring after my application of fix to 12522:
                  Nothing -> True
         then return [ Pair (substTy subst ax_arg) arg
                     | Pair ax_arg arg <- getInjRHS inj_cond arg_prs ]
+        else return []
+{-
+        if and (zipWith tcEqType inj_args inj_ax_args)
+        -- JSTOLAREK: a fragile fix to #12522. Make sure it works
+        then return [ Pair (substTy subst ax_arg) arg
+                    | case cabr of
+                        Just br -> apartnessCheck (substTys subst ax_args) br
+                        Nothing -> True
+                    , (ax_arg, arg, True) <- zip3 ax_args args inj_to ]
+JSTOLAREK: Here's Simon refactoring after my application of fix to 12522:
+        (theta', _) <- instFlexiTcS (varSetElems unsubstTvs)
+      injImproveCond (ax_args, theta, unsubstTvs, cabr) inj_cond = do
 -}
 
 

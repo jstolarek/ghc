@@ -1467,7 +1467,8 @@ checkConsistentFamInst (Just (clas, inst_tvs, mini_env)) fam_tc _at_tvs at_tys
     arg_shapes = [ (lookupVarEnv mini_env fam_tc_tv, at_ty)
                  | (fam_tc_tv, at_ty) <- tyConTyVars fam_tc `zip` at_tys ]
 
-    (kind_shapes, type_shapes) = partitionInvisibles fam_tc snd arg_shapes
+    (kind_shapes, type_shapes) = partitionByVisibility $
+                                 tagVisibility fam_tc snd arg_shapes
 
     check_arg :: AssocInstArgShape -> Bool
     check_arg (Just exp_ty, at_ty) = exp_ty `tcEqType` at_ty

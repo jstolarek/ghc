@@ -788,7 +788,7 @@ tcFamDecl1 parent (FamilyDecl { fdInfo = fam_info, fdLName = tc_lname@(L _ tc_na
   = tcTyClTyVars tc_name $ \ binders res_kind -> do
   { traceTc "open type family:" (ppr tc_name)
   ; checkFamFlag tc_name
-  ; inj' <- tcInjectivity binders inj
+  ; inj' <- tcInjectivity binders sig res_kind inj
   ; let tycon = mkFamilyTyCon tc_name binders res_kind
                                (resultVariableName sig) OpenSynFamilyTyCon
                                parent inj'
@@ -830,8 +830,7 @@ JSTOLAREK: Big wad of refactoring
            Nothing   ->
                return $ mkFamilyTyCon tc_name binders res_kind
                                       (resultVariableName sig)
-                                      AbstractClosedSynFamilyTyCon parent
-                                      (resultVariableName sig) inj'
+                                      AbstractClosedSynFamilyTyCon parent inj'
            Just eqns -> do {
 
          -- Process the equations, creating CoAxBranches
@@ -931,18 +930,25 @@ tcInjectivity tvs res_sig res_kind (Just (L loc (InjectivityAnn injConds)))
                TyVarSig res_tv -> [mkTyVar (hsLTyVarName res_tv) res_kind]
                _               -> []
 
-tcInjectivityCond :: [TyVar] -> LInjectivityCond Name
+tcInjectivityCond :: [TyConBinder] -> LInjectivityCond Name
                   -> TcM InjCondition
-tcInjectivityCond the_tvs (L loc (InjectivityCond lInjNames rInjNames))
+tcInjectivityCond tcbs (L loc (InjectivityCond lInjNames rInjNames))
   = setSrcSpan loc $
-    do { l_ktvs <- find_ktvs lInjNames
+    do { let tvs = binderVars tcbs
+       -- JSTOLAREK: is this check required here?  Shouldn't this be caught by
+       -- the renamer?
+       ; dflags <- getDynFlags
+       ; checkTc (xopt LangExt.TypeFamilyDependencies dflags)
+                 (text "Illegal injectivity annotation" $$
+                  text "Use TypeFamilyDependencies to allow this")
+       ; l_ktvs <- find_ktvs lInjNames
        ; r_ktvs <- find_ktvs rInjNames
        ; let to_spec tv | tv `elemVarSet` l_ktvs = InjLHS
                         | tv `elemVarSet` r_ktvs = InjRHS
                         | otherwise              = InjNil
-             specs = map to_spec the_tvs
+             specs = map to_spec tvs
        ; traceTc "tcInjectivityCond"
-           (vcat [ ppr the_tvs, ppr lInjNames, ppr rInjNames
+           (vcat [ ppr tcbs, ppr lInjNames, ppr rInjNames
                  , ppr l_ktvs, ppr r_ktvs, ppr specs ])
        ; return (InjCond specs) }
   where

@@ -558,7 +558,8 @@ injectiveBranches cond
         tys2 = rhs2 : lhs2
     in case tcUnifyTysWithTFs True
                (getInjLHS cond tys1) (getInjLHS cond tys2) of -- True = two-way pre-unification
-       Nothing -> InjectivityAccepted -- RHS are different,
+       Nothing -> trace "injectiveBranches InjectivityAccepted" $
+           InjectivityAccepted -- RHS are different,
                                       -- so equations are injective.
        Just subst  -- RHS unify under a substitution
         -- If LHSs are equal under the substitution used for RHSs then this pair

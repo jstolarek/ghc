@@ -30,7 +30,7 @@ module TyCoRep (
         KindOrType, Kind,
         PredType, ThetaType,      -- Synonyms
         ArgFlag(..),
-        VisibilityFlag(..), pickVisibles, pickInvisibles,
+        VisibilityFlag(..), pickVisibles, pickInvisibles, partitionByVisibility,
 
         -- * Coercions
         Coercion(..), LeftOrRight(..),
@@ -323,12 +323,20 @@ pickVisibles, pickInvisibles :: [(a,VisibilityFlag)] -> [a]
 pickVisibles   prs = [ x | (x, Visible)   <- prs ]
 pickInvisibles prs = [ x | (x, Invisible) <- prs ]
 
+partitionByVisibility ::  [(a, VisibilityFlag)] -> ([a], [a])
+partitionByVisibility prs = go prs ([],[])
+    where go [] acc = acc
+          go ((x, Invisible):xs) (is, vs) = go xs (x : is,     vs)
+          go ((x,   Visible):xs) (is, vs) = go xs (    is, x : vs)
+
 type KindOrType = Type -- See Note [Arguments to type constructors]
 
 -- | The key type representing kinds in the compiler.
 type Kind = Type
 
-{- Note [Arguments to type constructors]
+{-
+
+Note [Arguments to type constructors]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Because of kind polymorphism, in addition to type application we now
 have kind instantiation. We reuse the same notations to do so.

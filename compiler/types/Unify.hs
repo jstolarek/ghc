@@ -355,7 +355,8 @@ tcUnifyTyWithTFs two_way t1 t2 = tcUnifyTysWithTFs two_way [t1] [t2]
 -- with anything and looking through injective type family applications.
 tcUnifyTysWithTFs :: Bool  -- ^ True <=> do two-way unification;
                            --   False <=> do one-way matching.
-                           --   See end of sec 5.2 from the paper
+                           --   See end of sec 5.2 from the "Injective Type
+                           --   Families for Haskell" paper
                  -> [Type] -> [Type] -> Maybe TCvSubst
 -- This algorithm is an implementation of the "Algorithm U" presented in
 -- the paper "Injective type families for Haskell", Figures 2 and 3.
