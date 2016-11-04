@@ -329,11 +329,6 @@ partitionByVisibility prs = go prs ([],[])
           go ((x, Invisible):xs) (is, vs) = go xs (x : is,     vs)
           go ((x,   Visible):xs) (is, vs) = go xs (    is, x : vs)
 
-type KindOrType = Type -- See Note [Arguments to type constructors]
-
--- | The key type representing kinds in the compiler.
-type Kind = Type
-
 {-
 
 Note [Arguments to type constructors]

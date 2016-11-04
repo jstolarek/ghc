@@ -13,7 +13,7 @@ module TyCon(
         TyCon, AlgTyConRhs(..), HowAbstract(..), visibleDataCons,
         AlgTyConFlav(..), isNoParent,
         FamTyConFlav(..), Role(..),
-        Injectivity(..), InjCondition(..), InjSpec(..),
+        Injectivity, InjCondition(..), InjSpec(..),
         RuntimeRepInfo(..),
 
         -- * TyConBinder

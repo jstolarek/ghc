@@ -572,8 +572,8 @@ injTyVarsOfType (TyVarTy v)
 injTyVarsOfType (TyConApp tc tys)
   | isTypeFamilyTyCon tc
    = case familyTyConInjectivityInfo tc of
-        NotInjective  -> emptyVarSet
-        Injective inj -> injTyVarsOfTypes (filterByList inj tys)
+        []  -> emptyVarSet
+        inj -> injTyVarsOfTypes (filterByList inj tys)
   | otherwise
   = injTyVarsOfTypes tys
 injTyVarsOfType (LitTy {})
